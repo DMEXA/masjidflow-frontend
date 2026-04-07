@@ -1,0 +1,685 @@
+'use client';
+
+import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
+import { useParams } from 'next/navigation';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { ListEmptyState } from '@/components/common/list-empty-state';
+import { Loader2, CheckCircle2, Upload } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
+import { toast } from 'sonner';
+import { donationsService } from '@/services/donations.service';
+import { fundsService } from '@/services/funds.service';
+import { getErrorMessage, isRequestCanceled } from '@/src/utils/error';
+import { isStrictAmountString } from '@/src/utils/numeric-input';
+import { openExternalUrl } from '@/src/utils/open-external-url';
+
+const DEVICE_ID_KEY = 'mld_public_device_id';
+
+function getDeviceId(): string {
+  if (typeof window === 'undefined') return '';
+  const existing = window.localStorage.getItem(DEVICE_ID_KEY);
+  if (existing) return existing;
+
+  const generated =
+    window.crypto?.randomUUID?.() ?? `mld-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  window.localStorage.setItem(DEVICE_ID_KEY, generated);
+  return generated;
+}
+
+function isMobileDevice(): boolean {
+  if (typeof window === 'undefined') return false;
+  const userAgent = window.navigator.userAgent.toLowerCase();
+  const mobileRegex = /android|iphone|ipad|ipod|opera mini|iemobile|mobile/;
+  return mobileRegex.test(userAgent);
+}
+
+async function copyText(value: string, label: string) {
+  if (!value) return;
+  try {
+    await navigator.clipboard.writeText(value);
+    toast.success(`${label} copied`);
+  } catch {
+    toast.error(`Failed to copy ${label.toLowerCase()}`);
+  }
+}
+
+export default function DonateBySlugPage() {
+  const params = useParams<{ mosqueSlug: string }>();
+  const mosqueSlug = params.mosqueSlug;
+
+  const [isLoadingConfig, setIsLoadingConfig] = useState(true);
+  const [isInitiating, setIsInitiating] = useState(false);
+  const [isSubmittingProof, setIsSubmittingProof] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const [config, setConfig] = useState<{
+    mosqueId: string;
+    mosqueName: string;
+    upiId: string;
+    upiName: string;
+    phoneNumber?: string | null;
+    bankAccountName?: string | null;
+    bankAccount?: string | null;
+    ifsc?: string | null;
+    bankName?: string | null;
+    paymentInstructions?: string | null;
+    funds: Array<{ id: string; name: string }>;
+  } | null>(null);
+
+  const [fundId, setFundId] = useState('');
+  const [amount, setAmount] = useState('');
+
+  const [session, setSession] = useState<{
+    donationId: string;
+    intentId: string;
+    upiDeepLink: string;
+    expiresAt: string;
+  } | null>(null);
+  const [minutesLeft, setMinutesLeft] = useState<number | null>(null);
+
+  const [showPaymentQuestion, setShowPaymentQuestion] = useState(false);
+  const [showProofForm, setShowProofForm] = useState(false);
+  const [showDesktopUpiModal, setShowDesktopUpiModal] = useState(false);
+
+  const [donorName, setDonorName] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [upiTransactionId, setUpiTransactionId] = useState('');
+  const [screenshot, setScreenshot] = useState<File | null>(null);
+
+  const trimmedPhoneNumber = phoneNumber.trim();
+  const isPhoneValid = /^\d{10,15}$/.test(trimmedPhoneNumber);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    const loadConfig = async () => {
+      setIsLoadingConfig(true);
+      setLoadError(null);
+      try {
+        const slugConfig = await donationsService.getPublicConfigBySlug(mosqueSlug);
+        const result = await donationsService.getPublicConfig(slugConfig.mosqueId);
+        const fundList = await fundsService.getPublicByMosqueId(result.mosqueId, {
+          signal: controller.signal,
+        });
+        if (fundList.length > 0) {
+          setFundId(fundList[0].id);
+        }
+        setConfig({
+          ...result,
+          funds: fundList.map((fund) => ({ id: fund.id, name: fund.name })),
+        });
+      } catch (error) {
+        if (isRequestCanceled(error)) {
+          return;
+        }
+        const message = getErrorMessage(error, 'Failed to load donation page');
+        setLoadError(message);
+        toast.error(getErrorMessage(error, 'Failed to load donation page'));
+      } finally {
+        setIsLoadingConfig(false);
+      }
+    };
+
+    if (mosqueSlug) {
+      loadConfig();
+    }
+
+    return () => controller.abort();
+  }, [mosqueSlug]);
+
+  const normalizedAmount = useMemo(() => amount.trim(), [amount]);
+  const hasValidAmount = useMemo(() => {
+    if (!isStrictAmountString(normalizedAmount)) return false;
+    return normalizedAmount !== '0' && normalizedAmount !== '0.0' && normalizedAmount !== '0.00';
+  }, [normalizedAmount]);
+
+  const hasUpiOption = Boolean(config?.upiId?.trim());
+  const hasBankOption = Boolean(
+    config?.bankAccount?.trim() ||
+      config?.bankAccountName?.trim() ||
+      config?.ifsc?.trim() ||
+      config?.bankName?.trim(),
+  );
+  const hasPhoneOption = Boolean(config?.phoneNumber?.trim());
+  const hasAnyPaymentOption = hasUpiOption || hasBankOption || hasPhoneOption;
+
+  useEffect(() => {
+    if (!session?.expiresAt) {
+      setMinutesLeft(null);
+      return;
+    }
+
+    const tick = () => {
+      const expiresAtMs = new Date(session.expiresAt).getTime();
+      const diffMs = expiresAtMs - Date.now();
+      const nextMinutes = Math.max(0, Math.ceil(diffMs / 60000));
+      setMinutesLeft(nextMinutes);
+    };
+
+    tick();
+    const timer = window.setInterval(tick, 1000);
+    return () => window.clearInterval(timer);
+  }, [session?.expiresAt]);
+
+  const handlePayWithUpi = async () => {
+    if (!config) {
+      toast.error('Donation configuration is unavailable');
+      return;
+    }
+
+    if (!fundId) {
+      toast.error('Please select a fund');
+      return;
+    }
+
+    if (!hasValidAmount) {
+      toast.error('Please enter a valid amount');
+      return;
+    }
+
+    if (!trimmedPhoneNumber) {
+      toast.error('Phone number is required to continue.');
+      return;
+    }
+
+    if (!isPhoneValid) {
+      toast.error('Phone number must be 10 to 15 digits.');
+      return;
+    }
+
+    setIsInitiating(true);
+    try {
+      const initiated = await donationsService.initiatePublicDonation({
+        mosqueId: config.mosqueId,
+        fundId,
+        amount: normalizedAmount,
+        deviceId: getDeviceId(),
+        donorPhone: trimmedPhoneNumber,
+      });
+
+      setSession(initiated);
+      setShowPaymentQuestion(true);
+
+      if (initiated.upiDeepLink && isMobileDevice()) {
+        toast.info('Opening your UPI app...');
+        window.location.href = initiated.upiDeepLink;
+      } else if (initiated.upiDeepLink) {
+        setShowDesktopUpiModal(true);
+        toast.info('Open this page on your mobile device to complete the payment.');
+      } else {
+        toast.info('Proceed with bank transfer and upload your payment proof.');
+      }
+    } catch (error) {
+      const message = getErrorMessage(error, 'Failed to start payment');
+      toast.error(message);
+    } finally {
+      setIsInitiating(false);
+    }
+  };
+
+  const handlePaidClick = () => {
+    setShowProofForm(true);
+    toast.success('Payment recorded. Please upload proof.');
+  };
+
+  const handleCancelledClick = () => {
+    setShowProofForm(false);
+    toast.info('No problem. You can retry payment anytime using this page.');
+  };
+
+  const handleProofSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!session) {
+      toast.error('Payment session not found');
+      return;
+    }
+
+    if (!trimmedPhoneNumber) {
+      toast.error('Phone number is required');
+      return;
+    }
+
+    if (!isPhoneValid) {
+      toast.error('Phone number must be 10 to 15 digits.');
+      return;
+    }
+
+    const trimmedUtr = upiTransactionId.trim();
+    if (!trimmedUtr && !screenshot) {
+      toast.error('Provide UTR or payment screenshot');
+      return;
+    }
+
+    let screenshotUrl: string | undefined;
+    if (screenshot) {
+      const allowedTypes = ['image/jpeg', 'image/png'];
+      if (!allowedTypes.includes(screenshot.type)) {
+        toast.error('Unsupported file type');
+        return;
+      }
+      if (screenshot.size > 2 * 1024 * 1024) {
+        toast.error('Screenshot too large');
+        return;
+      }
+    }
+
+    setIsSubmittingProof(true);
+    try {
+      if (screenshot && config) {
+        setIsUploading(true);
+        const upload = await donationsService.uploadDonationScreenshot(
+          screenshot,
+          config.mosqueId,
+        );
+        screenshotUrl = upload.url;
+        setIsUploading(false);
+      }
+
+      await donationsService.updatePublicDonationProof(session.donationId, {
+        donorName: donorName.trim() || undefined,
+        phoneNumber: trimmedPhoneNumber,
+        upiTransactionId: trimmedUtr || undefined,
+        screenshotUrl,
+      });
+
+      toast.success('Proof uploaded successfully');
+      setShowProofForm(false);
+    } catch (error) {
+      setIsUploading(false);
+      toast.error(getErrorMessage(error, 'Failed to submit proof'));
+    } finally {
+      setIsSubmittingProof(false);
+    }
+  };
+
+  if (isLoadingConfig) {
+    return (
+      <div className="mx-auto w-full max-w-xl animate-pulse space-y-4 px-4 py-10">
+        <div className="h-14 rounded-xl bg-muted" />
+        <div className="h-24 rounded-xl bg-muted" />
+        <div className="h-24 rounded-xl bg-muted" />
+        <div className="h-12 rounded-xl bg-muted" />
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="mx-auto flex min-h-screen max-w-xl items-center justify-center px-4">
+        <Card className="w-full text-center">
+          <CardHeader>
+            <CardTitle>Unable to Load Donate Page</CardTitle>
+            <CardDescription>{loadError}</CardDescription>
+          </CardHeader>
+        </Card>
+      </div>
+    );
+  }
+
+  if (!config) {
+    return (
+      <div className="mx-auto flex min-h-screen max-w-xl items-center justify-center px-4">
+        <Card className="w-full text-center">
+          <CardHeader>
+            <CardTitle>Donate Link Not Found</CardTitle>
+            <CardDescription>
+              This QR link is invalid or the mosque is not active.
+            </CardDescription>
+          </CardHeader>
+        </Card>
+      </div>
+    );
+  }
+
+  const hasFunds = config.funds.length > 0;
+  const isDonationFormDisabled = !hasFunds;
+
+  return (
+    <div className="min-h-screen bg-linear-to-b from-emerald-50 via-white to-amber-50 px-4 py-8">
+      <div className="mx-auto max-w-2xl space-y-6">
+        <div className="text-center">
+          <h1 className="text-3xl font-bold text-foreground">Donate to {config.mosqueName}</h1>
+          <p className="mt-2 text-muted-foreground">
+            Select fund and amount, then choose your preferred payment method.
+          </p>
+        </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Donation Details</CardTitle>
+            <CardDescription>This page is tied to a permanent mosque QR link.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="fundId">Fund</Label>
+              <Select value={fundId} onValueChange={setFundId} disabled={isDonationFormDisabled}>
+                <SelectTrigger id="fundId">
+                  <SelectValue placeholder="Select fund" />
+                </SelectTrigger>
+                <SelectContent>
+                  {config.funds.map((fund) => (
+                    <SelectItem key={fund.id} value={fund.id}>
+                      {fund.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="amount">Amount (INR)</Label>
+              <Input
+                id="amount"
+                type="text"
+                inputMode="decimal"
+                pattern="^\\d+(?:\\.\\d{1,2})?$"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                placeholder="e.g. 500"
+                disabled={isDonationFormDisabled}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="donate-phone-number">Phone Number</Label>
+              <Input
+                id="donate-phone-number"
+                value={phoneNumber}
+                onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, '').slice(0, 15))}
+                placeholder="Enter 10 to 15 digit phone number"
+                inputMode="numeric"
+                minLength={10}
+                maxLength={15}
+                required
+                disabled={isDonationFormDisabled}
+              />
+              <p className="text-xs text-muted-foreground">Required. Use 10 to 15 digits.</p>
+            </div>
+
+            {!hasAnyPaymentOption ? (
+              <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+                Payment is currently unavailable. Please contact mosque admin.
+              </div>
+            ) : null}
+
+            {hasUpiOption ? (
+              <div className="space-y-2 rounded-lg border border-dashed border-emerald-300 bg-white p-4 text-sm">
+                <p className="font-semibold text-foreground">Pay via UPI</p>
+                <p className="text-xs text-emerald-700">Recommended: Use UPI for faster verification</p>
+                <p className="text-muted-foreground">
+                  UPI ID: <span className="font-medium text-foreground">{config.upiId}</span>
+                </p>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void copyText(config.upiId, 'UPI ID')}
+                  >
+                    Copy UPI ID
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+
+            {hasBankOption ? (
+              <div className="space-y-2 rounded-lg border border-dashed border-blue-300 bg-white p-4 text-sm">
+                <p className="font-semibold text-foreground">Pay via Bank Transfer</p>
+                {config.bankAccountName ? (
+                  <p className="text-muted-foreground">
+                    Account Holder: <span className="font-medium text-foreground">{config.bankAccountName}</span>
+                  </p>
+                ) : null}
+                {config.bankAccount ? (
+                  <p className="text-muted-foreground">
+                    Account Number: <span className="font-medium text-foreground">{config.bankAccount}</span>
+                  </p>
+                ) : null}
+                {config.ifsc ? (
+                  <p className="text-muted-foreground">
+                    IFSC: <span className="font-medium text-foreground">{config.ifsc}</span>
+                  </p>
+                ) : null}
+                {config.bankName ? (
+                  <p className="text-muted-foreground">
+                    Bank: <span className="font-medium text-foreground">{config.bankName}</span>
+                  </p>
+                ) : null}
+                <div className="flex flex-wrap gap-2">
+                  {config.bankAccount ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void copyText(config.bankAccount ?? '', 'Account number')}
+                    >
+                      Copy Account Number
+                    </Button>
+                  ) : null}
+                  {config.ifsc ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void copyText(config.ifsc ?? '', 'IFSC')}
+                    >
+                      Copy IFSC
+                    </Button>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
+
+            {hasPhoneOption ? (
+              <div className="space-y-2 rounded-lg border border-dashed border-violet-300 bg-white p-4 text-sm">
+                <p className="font-semibold text-foreground">Pay via Phone Number</p>
+                <p className="text-muted-foreground">
+                  Phone: <span className="font-medium text-foreground">{config.phoneNumber}</span>
+                </p>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void copyText(config.phoneNumber ?? '', 'Phone number')}
+                  >
+                    Copy Phone Number
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+
+            {config.paymentInstructions ? (
+              <div className="rounded-lg border bg-muted/30 p-3 text-sm text-muted-foreground">
+                {config.paymentInstructions}
+              </div>
+            ) : null}
+
+            <Button
+              onClick={handlePayWithUpi}
+              disabled={
+                isDonationFormDisabled ||
+                isInitiating ||
+                !hasValidAmount ||
+                !fundId ||
+                !hasAnyPaymentOption
+              }
+            >
+              {isInitiating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Start Payment
+            </Button>
+
+            {!hasFunds ? (
+              <ListEmptyState
+                title="No donation funds configured"
+                description="Please contact the mosque admin to enable donations."
+                actionLabel="Back to Donations"
+                actionHref="/donate"
+                className="min-h-36 border-amber-200 bg-amber-50/60"
+              />
+            ) : null}
+          </CardContent>
+        </Card>
+
+        {showPaymentQuestion && session ? (
+          <Card>
+            <CardHeader>
+              <CardTitle>Did you complete the payment?</CardTitle>
+              <CardDescription>
+                Donation reference: {session.intentId}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-wrap gap-3">
+              {minutesLeft !== null ? (
+                <p className="w-full text-sm text-muted-foreground">
+                  Session expires in {minutesLeft} minute{minutesLeft === 1 ? '' : 's'}
+                </p>
+              ) : null}
+              <Button onClick={handlePaidClick}>I HAVE PAID</Button>
+              <Button variant="outline" onClick={handleCancelledClick}>I CANCELLED</Button>
+              <Button variant="secondary" asChild>
+                <Link href={`/donate/status/${session.donationId}`}>Open Status Page</Link>
+              </Button>
+            </CardContent>
+          </Card>
+        ) : null}
+
+        {showProofForm && session ? (
+          <Card>
+            <CardHeader>
+              <CardTitle>Upload Payment Proof</CardTitle>
+              <CardDescription>
+                Phone number is required. Screenshot is optional for apps that block screenshots.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleProofSubmit} className="space-y-4">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="donorName">Donor Name (Optional)</Label>
+                    <Input
+                      id="donorName"
+                      value={donorName}
+                      onChange={(e) => setDonorName(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="phoneNumber">Phone Number</Label>
+                    <Input
+                      id="phoneNumber"
+                      value={phoneNumber}
+                      onChange={(e) => setPhoneNumber(e.target.value)}
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="transactionId">UTR (Optional)</Label>
+                  <Input
+                    id="transactionId"
+                    value={upiTransactionId}
+                    onChange={(e) => setUpiTransactionId(e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    GPay / PhonePe: check transaction details for Transaction ID (UTR)
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="screenshot">Screenshot (Optional, JPG/PNG, max 2MB)</Label>
+                  <Input
+                    id="screenshot"
+                    type="file"
+                    accept="image/jpeg,image/png"
+                    onChange={(e) => setScreenshot(e.target.files?.[0] ?? null)}
+                  />
+                </div>
+
+                <Button type="submit" disabled={isSubmittingProof}>
+                  {isSubmittingProof ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      {isUploading ? 'Uploading...' : 'Submitting...'}
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="mr-2 h-4 w-4" />
+                      Submit Proof
+                    </>
+                  )}
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+        ) : null}
+
+        {session ? (
+          <Card className="border-emerald-200 bg-emerald-50">
+            <CardContent className="pt-6">
+              <div className="flex items-start gap-2 text-emerald-800">
+                <CheckCircle2 className="mt-0.5 h-5 w-5" />
+                <div className="space-y-1 text-sm">
+                  <p className="font-medium">Donation session created successfully.</p>
+                  <p>Reference: {session.intentId}</p>
+                  <Link className="text-primary underline" href={`/donate/status/${session.donationId}`}>
+                    Track donation status
+                  </Link>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ) : null}
+
+        <Dialog open={showDesktopUpiModal} onOpenChange={setShowDesktopUpiModal}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Complete Payment on Mobile</DialogTitle>
+              <DialogDescription>
+                Open this page on your mobile device to complete the payment.
+              </DialogDescription>
+            </DialogHeader>
+
+            {session ? (
+              <div className="space-y-4">
+                <div className="rounded-md border border-dashed border-border p-4 text-center">
+                  <p className="text-xs text-muted-foreground">QR Fallback</p>
+                  <div className="mt-3 flex justify-center">
+                    <QRCodeSVG value={session.upiDeepLink} size={180} />
+                  </div>
+                  <p className="mt-3 text-xs text-muted-foreground">
+                    Scan this QR from your UPI app on phone.
+                  </p>
+                </div>
+
+                <Button
+                  type="button"
+                  className="w-full"
+                  onClick={() => {
+                    openExternalUrl(session.upiDeepLink, { requireHttp: false });
+                  }}
+                >
+                  Try Opening UPI Link
+                </Button>
+              </div>
+            ) : null}
+          </DialogContent>
+        </Dialog>
+      </div>
+    </div>
+  );
+}
