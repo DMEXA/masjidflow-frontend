@@ -1,6 +1,7 @@
 import api from './api';
 import type { AuditLog, PaginatedResponse } from '@/types';
 import { EXPORT_MAX_ROWS } from '@/src/utils/export';
+import { API_BASE_URL } from '@/src/constants';
 
 export interface AuditLogFilters {
   page?: number;
@@ -64,12 +65,12 @@ export const auditService = {
   },
 
   exportCsvUrl(filters?: AuditLogFilters): string {
-    const base = (process.env.NEXT_PUBLIC_API_URL ?? '/api').replace(/\/$/, '');
+    const base = (API_BASE_URL ?? '').replace(/\/$/, '');
     return `${base}/audit/export/csv${buildParams(filters)}`;
   },
 
   exportPdfUrl(filters?: AuditLogFilters): string {
-    const base = (process.env.NEXT_PUBLIC_API_URL ?? '/api').replace(/\/$/, '');
+    const base = (API_BASE_URL ?? '').replace(/\/$/, '');
     return `${base}/audit/export/pdf${buildParams(filters)}`;
   },
 

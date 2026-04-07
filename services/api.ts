@@ -80,7 +80,7 @@ function decodeJwtExpiryMs(token: string): number | null {
   }
 }
 
-const api = axios.create({
+export const api = axios.create({
   baseURL: API_BASE_URL,
   timeout: 30000,
   withCredentials: true, // Send cookies (refresh_token) with requests

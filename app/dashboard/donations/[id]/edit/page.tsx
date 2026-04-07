@@ -26,6 +26,7 @@ import { getErrorMessage } from '@/src/utils/error';
 import { donationsService } from '@/services/donations.service';
 import { type Fund } from '@/services/funds.service';
 import { PAYMENT_TYPES } from '@/src/constants';
+import { API_BASE_URL } from '@/src/constants';
 import { formatPaymentType } from '@/src/utils/format';
 import type { PaymentType } from '@/src/constants';
 import type { Donation } from '@/types';
@@ -82,7 +83,7 @@ export default function EditDonationPage() {
   const [existingReceipt, setExistingReceipt] = useState<string | undefined>();
   const handleViewExistingReceipt = () => {
     if (!existingReceipt) return;
-    const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL?.replace('/api/v1', '') || '';
+    const baseUrl = (API_BASE_URL ?? '').replace('/api/v1', '');
     const receiptUrl = resolveReceiptUrl(existingReceipt, baseUrl);
     if (!receiptUrl) {
       toast.error('Receipt URL is invalid');
