@@ -313,9 +313,10 @@ export default function AddDonationPage() {
               </label>
               <Input
                 id="amount"
-                type="text"
-                inputMode="decimal"
-                pattern="^\\d+(?:\\.\\d{1,2})?$"
+                type="number"
+                inputMode="numeric"
+                min="1"
+                step="1"
                 placeholder="0"
                 value={formData.amount}
                 onChange={(e) =>

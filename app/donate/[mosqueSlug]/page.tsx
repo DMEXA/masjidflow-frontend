@@ -380,13 +380,15 @@ export default function DonateBySlugPage() {
               <Label htmlFor="amount">Amount (INR)</Label>
               <Input
                 id="amount"
-                type="text"
-                inputMode="decimal"
-                pattern="^\\d+(?:\\.\\d{1,2})?$"
+                type="number"
+                inputMode="numeric"
+                min="1"
+                step="1"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 placeholder="e.g. 500"
                 disabled={isDonationFormDisabled}
+                required
               />
             </div>
 
