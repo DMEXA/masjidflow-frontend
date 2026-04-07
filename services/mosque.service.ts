@@ -1,5 +1,6 @@
 import api from './api';
 import type { Mosque } from '@/types';
+import { compressImage } from '@/utils/compressImage';
 
 export interface MosqueWithSettings extends Mosque {
   settings?: Record<string, unknown> | null;
@@ -75,8 +76,9 @@ export const mosqueService = {
   },
 
   async uploadLogo(file: File): Promise<{ url: string }> {
+    const compressedFile = await compressImage(file);
     const formData = new FormData();
-    formData.append('logo', file);
+    formData.append('logo', compressedFile, compressedFile.name);
     const response = await api.post<{ url: string }>('/mosques/upload-logo', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
@@ -16,6 +16,9 @@ import { markTwoFactorPending } from '@/services/auth-session';
 export default function LoginPage() {
   const router = useRouter();
   const setAuth = useAuthStore((state) => state.setAuth);
+  const authStatus = useAuthStore((state) => state.authStatus);
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const currentUser = useAuthStore((state) => state.user);
   const [isLoading, setIsLoading] = useState(false);
   const [verificationStep, setVerificationStep] = useState<'none' | 'email-otp' | 'totp'>('none');
   const [challengeToken, setChallengeToken] = useState('');
@@ -34,6 +37,12 @@ export default function LoginPage() {
     if (user?.isPlatformAdmin && !user?.mosqueId) return '/platform';
     return '/dashboard';
   };
+
+  useEffect(() => {
+    if (authStatus === 'authenticated' && isAuthenticated) {
+      router.replace(resolvePostLoginPath(currentUser ?? undefined));
+    }
+  }, [authStatus, isAuthenticated, currentUser, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

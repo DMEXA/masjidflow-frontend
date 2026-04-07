@@ -4,14 +4,12 @@ import { toast } from 'sonner';
 import {
   clearRefreshTokenAvailable,
   clearTwoFactorPending,
-  hasRefreshToken,
   isTwoFactorFlowActive,
   markRefreshTokenAvailable,
 } from '@/services/auth-session';
 import { clearAccessToken, getAccessToken, setAccessToken } from './access-token';
 
-const MAX_REFRESH_RETRIES = 2;
-const REFRESH_RETRY_DELAY_MS = 400;
+const MAX_REFRESH_RETRIES = 1;
 const PREEMPTIVE_REFRESH_WINDOW_MS = 60 * 1000;
 
 const PUBLIC_ENDPOINT_PREFIXES = [
@@ -50,18 +48,24 @@ function resolveRequestPath(url: string): string {
   }
 }
 
-function handleUnauthorized(): void {
-  if (typeof window === 'undefined') return;
-  clearAccessToken();
-  clearRefreshTokenAvailable();
-  clearTwoFactorPending();
-  window.location.href = '/login';
-}
+let isLoggingOut = false;
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
+async function performControlledLogout(): Promise<void> {
+  if (isLoggingOut) {
+    return;
+  }
+
+  isLoggingOut = true;
+  try {
+    const { useAuthStore } = await import('@/src/store/auth.store');
+    await useAuthStore.getState().logout();
+  } catch {
+    clearAccessToken();
+    clearRefreshTokenAvailable();
+    clearTwoFactorPending();
+  } finally {
+    isLoggingOut = false;
+  }
 }
 
 function decodeJwtExpiryMs(token: string): number | null {
@@ -136,8 +140,6 @@ async function refreshAccessTokenWithRetry(): Promise<string> {
       if (attempt > MAX_REFRESH_RETRIES) {
         throw refreshError;
       }
-
-      await sleep(REFRESH_RETRY_DELAY_MS);
     }
   }
 
@@ -146,7 +148,7 @@ async function refreshAccessTokenWithRetry(): Promise<string> {
 
 function maybePreemptiveRefresh(token: string, requestPath: string): void {
   if (isRefreshing) return;
-  if (!hasRefreshToken() || isTwoFactorFlowActive()) return;
+  if (isTwoFactorFlowActive()) return;
   if (!requestPath || isPublicEndpoint(requestPath) || requestPath.startsWith('/auth/refresh')) return;
 
   const expiryMs = decodeJwtExpiryMs(token);
@@ -175,11 +177,6 @@ api.interceptors.request.use(
     if (typeof window !== 'undefined') {
       const token = getAccessToken();
       const requestPath = resolveRequestPath(typeof config.url === 'string' ? config.url : '');
-      const requiresAuth = Boolean(requestPath) && !isPublicEndpoint(requestPath);
-
-      if (!token && requiresAuth && (!hasRefreshToken() || isTwoFactorFlowActive())) {
-        return Promise.reject(new Error('No active session'));
-      }
 
       if (token && config.headers) {
         config.headers.Authorization = `Bearer ${token}`;
@@ -216,7 +213,8 @@ api.interceptors.response.use(
     const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
     const requestPath = resolveRequestPath(originalRequest?.url || '');
 
-    if (originalRequest?._retry) {
+    if (error.response?.status === 401 && requestPath.startsWith('/auth/refresh')) {
+      await performControlledLogout();
       return Promise.reject(error);
     }
 
@@ -228,11 +226,6 @@ api.interceptors.response.use(
       !isTwoFactorFlowActive();
 
     if (shouldAttemptRefresh) {
-      if (!hasRefreshToken()) {
-        handleUnauthorized();
-        return Promise.reject(error);
-      }
-
       if (isRefreshing) {
         // Wait for the ongoing refresh, then retry with new token
         return new Promise((resolve, reject) => {
@@ -258,26 +251,13 @@ api.interceptors.response.use(
         onRefreshed(newToken);
         return api(originalRequest);
       } catch (refreshError) {
-        // Refresh failed — clear auth and redirect
+        // Refresh failed — logout user in a controlled way.
         onRefreshFailed(refreshError);
-        handleUnauthorized();
+        await performControlledLogout();
         return Promise.reject(error);
       } finally {
         isRefreshing = false;
       }
-    }
-
-    // For auth endpoints or non-401, just reject
-    if (
-      error.response?.status === 401 &&
-      (requestPath.startsWith('/auth/me') || requestPath.startsWith('/auth/refresh'))
-    ) {
-      // Don't redirect on /auth/me checks
-      return Promise.reject(error);
-    }
-
-    if (error.response?.status === 401 && !isPublicEndpoint(requestPath)) {
-      handleUnauthorized();
     }
 
     const message = getApiErrorMessage(error);

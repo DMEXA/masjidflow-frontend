@@ -2,6 +2,7 @@ import api from './api';
 import type { Expense, PaginatedResponse } from '@/types';
 import type { ExpenseCategory } from '@/src/constants';
 import { DEFAULT_PAGE_LIMIT, getSafeLimit } from '@/src/utils/pagination';
+import { compressImage } from '@/utils/compressImage';
 
 export interface CreateExpenseData {
   category: ExpenseCategory | string;
@@ -132,8 +133,9 @@ export const expensesService = {
   },
 
   async uploadReceipt(file: File): Promise<{ url: string }> {
+    const compressedFile = await compressImage(file);
     const formData = new FormData();
-    formData.append('receipt', file);
+    formData.append('receipt', compressedFile, compressedFile.name);
     const response = await api.post<{ url: string }>('/expenses/upload-receipt', formData);
     return response.data;
   },

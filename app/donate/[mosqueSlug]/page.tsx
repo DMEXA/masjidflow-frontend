@@ -271,10 +271,6 @@ export default function DonateBySlugPage() {
         toast.error('Unsupported file type');
         return;
       }
-      if (screenshot.size > 2 * 1024 * 1024) {
-        toast.error('Screenshot too large');
-        return;
-      }
     }
 
     setIsSubmittingProof(true);
@@ -601,7 +597,7 @@ export default function DonateBySlugPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="screenshot">Screenshot (Optional, JPG/PNG, max 2MB)</Label>
+                  <Label htmlFor="screenshot">Screenshot (Optional, JPG/PNG)</Label>
                   <Input
                     id="screenshot"
                     type="file"
@@ -614,7 +610,7 @@ export default function DonateBySlugPage() {
                   {isSubmittingProof ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      {isUploading ? 'Uploading...' : 'Submitting...'}
+                      {isUploading ? 'Processing image...' : 'Submitting...'}
                     </>
                   ) : (
                     <>

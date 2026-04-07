@@ -1,4 +1,5 @@
 import api from './api';
+import { compressImage } from '@/utils/compressImage';
 
 export interface Subscription {
   id: string;
@@ -84,8 +85,9 @@ export const subscriptionsService = {
   },
 
   async uploadProofScreenshot(file: File): Promise<{ url: string }> {
+    const compressedFile = await compressImage(file);
     const formData = new FormData();
-    formData.append('screenshot', file);
+    formData.append('screenshot', compressedFile, compressedFile.name);
     const response = await api.post<{ url: string }>('/subscriptions/payments/upload-screenshot', formData);
     return response.data;
   },

@@ -138,12 +138,9 @@ export const authService = {
     } catch {
       // Ignore errors — we clear local state regardless
     }
-    if (typeof window !== 'undefined') {
-      clearAccessToken();
-      clearRefreshTokenAvailable();
-      clearTwoFactorPending();
-      window.location.href = '/login';
-    }
+    clearAccessToken();
+    clearRefreshTokenAvailable();
+    clearTwoFactorPending();
   },
 
   async getCurrentUser(): Promise<{ user: User; mosque: Mosque }> {

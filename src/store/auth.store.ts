@@ -77,9 +77,6 @@ export const useAuthStore = create<AuthState>()(
         }
 
         bootstrapPromise = (async () => {
-        let token = authService.getToken();
-
-        if (!token) {
           if (isTwoFactorFlowActive()) {
             authService.removeToken();
             set({
@@ -93,6 +90,7 @@ export const useAuthStore = create<AuthState>()(
             return;
           }
 
+          let token: string;
           try {
             const refreshed = await authService.refreshToken();
             token = refreshed.accessToken;
@@ -108,29 +106,28 @@ export const useAuthStore = create<AuthState>()(
             });
             return;
           }
-        }
 
-        try {
-          const { user, mosque } = await authService.getCurrentUser();
-          set({
-            user,
-            mosque,
-            token,
-            isAuthenticated: true,
-            isLoading: false,
-            authStatus: 'authenticated',
-          });
-        } catch {
-          authService.removeToken();
-          set({
-            user: null,
-            mosque: null,
-            token: null,
-            isAuthenticated: false,
-            isLoading: false,
-            authStatus: 'unauthenticated',
-          });
-        }
+          try {
+            const { user, mosque } = await authService.getCurrentUser();
+            set({
+              user,
+              mosque,
+              token,
+              isAuthenticated: true,
+              isLoading: false,
+              authStatus: 'authenticated',
+            });
+          } catch {
+            authService.removeToken();
+            set({
+              user: null,
+              mosque: null,
+              token: null,
+              isAuthenticated: false,
+              isLoading: false,
+              authStatus: 'unauthenticated',
+            });
+          }
         })();
 
         try {

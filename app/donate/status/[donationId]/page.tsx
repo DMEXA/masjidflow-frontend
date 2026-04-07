@@ -89,10 +89,6 @@ export default function DonationStatusPage() {
         toast.error('Unsupported file type');
         return;
       }
-      if (screenshot.size > 2 * 1024 * 1024) {
-        toast.error('Screenshot too large');
-        return;
-      }
     }
 
     setIsUpdating(true);

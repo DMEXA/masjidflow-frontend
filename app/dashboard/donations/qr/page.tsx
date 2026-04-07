@@ -38,10 +38,6 @@ export default function DonationQrPage() {
 
   const donationLink = useMemo(() => {
     if (!qrConfig) return '';
-    const base = (process.env.NEXT_PUBLIC_APP_URL || '').trim();
-    if (base) {
-      return `${base.replace(/\/$/, '')}${qrConfig.donationPath}`;
-    }
     if (typeof window !== 'undefined') {
       return `${window.location.origin}${qrConfig.donationPath}`;
     }

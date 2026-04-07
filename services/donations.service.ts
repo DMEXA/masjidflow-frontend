@@ -2,6 +2,7 @@ import api from './api';
 import type { Donation, PaginatedResponse } from '@/types';
 import type { PaymentType } from '@/src/constants';
 import { DEFAULT_PAGE_LIMIT, getSafeLimit } from '@/src/utils/pagination';
+import { compressImage } from '@/utils/compressImage';
 
 export type DonationStatus = 'INITIATED' | 'PENDING' | 'VERIFIED' | 'REJECTED';
 
@@ -198,8 +199,9 @@ export const donationsService = {
   },
 
   async uploadReceipt(file: File): Promise<{ url: string }> {
+    const compressedFile = await compressImage(file);
     const formData = new FormData();
-    formData.append('receipt', file);
+    formData.append('receipt', compressedFile, compressedFile.name);
     const response = await api.post<{ url: string }>(
       '/donations/upload-receipt',
       formData,
@@ -244,8 +246,10 @@ export const donationsService = {
   },
 
   async uploadDonationScreenshot(file: File, mosqueId?: string): Promise<{ url: string }> {
+    const compressedFile = await compressImage(file);
+
     const formData = new FormData();
-    formData.append('screenshot', file);
+    formData.append('screenshot', compressedFile, compressedFile.name);
     const params = mosqueId ? `?mosqueId=${encodeURIComponent(mosqueId)}` : '';
     const response = await api.post<{ url: string }>(
       `/donations/public/upload-screenshot${params}`,
