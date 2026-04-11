@@ -19,10 +19,12 @@ export default function MuqtadiCard({
   handleVerifyMuqtadi,
   handleRejectMuqtadi,
 }) {
+  const isDeleted = Boolean(item.isDeleted || item.isDisabled || item.status === 'DISABLED');
+
   return (
     <div
-      className={`ds-stack rounded-xl border p-4 ${
-        item.userId ? 'bg-white border-border' : 'bg-gray-50 border-gray-200'
+      className={`space-y-3 rounded-xl border p-4 shadow-sm ${
+        item.userId ? 'border-border bg-background' : 'border-amber-200 bg-amber-50/40'
       }`}
     >
       <div className="flex items-start justify-between gap-3">
@@ -33,10 +35,11 @@ export default function MuqtadiCard({
             ) : (
               <User className="h-4 w-4 text-gray-500" />
             )}
-            <p className="text-base font-semibold text-foreground truncate">{item.name}</p>
+            <p className="truncate text-base font-semibold text-foreground">{item.name}</p>
           </div>
+          <p className="mt-1 text-xs text-muted-foreground">{item.householdMembers || 0} members</p>
         </div>
-        <div className="flex flex-col items-end gap-1">
+        <div className="flex flex-wrap items-center justify-end gap-1">
           <Badge className={`whitespace-nowrap ${
             item.userId ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
           }`}>
@@ -49,7 +52,7 @@ export default function MuqtadiCard({
             paymentStatus === 'PAID'
               ? 'bg-green-100 text-green-700'
               : paymentStatus === 'PARTIAL'
-                ? 'bg-yellow-100 text-yellow-700'
+                ? 'bg-yellow-100 text-yellow-800'
                 : 'bg-red-100 text-red-700'
           }`}>
             {paymentStatus}
@@ -59,17 +62,19 @@ export default function MuqtadiCard({
           }`}>
             {item.isVerified ? 'Verified' : 'Pending'}
           </Badge>
+          {item.proofPending ? (
+            <Badge className="whitespace-nowrap bg-amber-100 text-amber-800">Proof Pending</Badge>
+          ) : null}
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
-        <p>{item.householdMembers || 0} members</p>
-        <p>{formatDate(item.createdAt)}</p>
+      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 pt-3 text-xs text-muted-foreground">
+        <p>Joined {formatDate(item.createdAt)}</p>
       </div>
 
-      <div className="flex flex-col gap-2 pt-1 sm:flex-row sm:items-center">
+      <div className="flex flex-wrap items-center gap-2 pt-1">
         {!item.isVerified ? (
-          <div className="hidden items-center gap-2 md:flex">
+          <div className="flex items-center gap-2">
             <Button
               size="sm"
               variant="outline"
@@ -108,7 +113,7 @@ export default function MuqtadiCard({
             {createAccountLoadingId === item.id ? 'Creating...' : 'Create Account'}
           </Button>
         ) : (
-          <div className="flex items-center gap-1 text-xs text-green-700">
+          <div className="flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-1 text-xs text-green-700">
             <UserCheck className="h-3.5 w-3.5" />
             <span>Active</span>
           </div>
@@ -117,7 +122,11 @@ export default function MuqtadiCard({
         <ActionOverflowMenu
           items={[
             { label: 'Edit', onSelect: () => openEdit(item) },
-            { label: 'Record Payment', onSelect: () => openPayment(item) },
+            {
+              label: 'Record Payment',
+              onSelect: () => openPayment(item),
+              disabled: isDeleted,
+            },
             item.isDisabled
               ? {
                   label: actionLoadingId === item.id ? 'Enabling...' : 'Enable',

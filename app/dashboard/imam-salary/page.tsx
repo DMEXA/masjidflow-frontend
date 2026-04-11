@@ -16,11 +16,15 @@ export default function ImamSalaryPage() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(true);
   const [summary, setSummary] = useState<{
+    contributionMode: 'HOUSEHOLD' | 'PERSON';
+    contributionAmount: number;
     totalSalary: number;
     totalMuqtadies: number;
     registeredMuqtadies: number;
     perHead: number;
   }>({
+    contributionMode: 'HOUSEHOLD',
+    contributionAmount: 0,
     totalSalary: 0,
     totalMuqtadies: 0,
     registeredMuqtadies: 0,
@@ -62,20 +66,20 @@ export default function ImamSalaryPage() {
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Card>
-            <CardHeader><CardTitle className="text-sm">Total Salary</CardTitle></CardHeader>
-            <CardContent><p className="text-2xl font-semibold">{formatCurrency(summary.totalSalary)}</p></CardContent>
+            <CardHeader><CardTitle className="text-sm">Contribution Mode</CardTitle></CardHeader>
+            <CardContent><p className="text-2xl font-semibold">{summary.contributionMode}</p></CardContent>
           </Card>
           <Card>
-            <CardHeader><CardTitle className="text-sm">Total Muqtadis</CardTitle></CardHeader>
-            <CardContent><p className="text-2xl font-semibold">{summary.totalMuqtadies}</p></CardContent>
+            <CardHeader><CardTitle className="text-sm">Fixed Contribution</CardTitle></CardHeader>
+            <CardContent><p className="text-2xl font-semibold">{formatCurrency(summary.contributionAmount)}</p></CardContent>
           </Card>
           <Card>
             <CardHeader><CardTitle className="text-sm">Registered Muqtadis</CardTitle></CardHeader>
             <CardContent><p className="text-2xl font-semibold">{summary.registeredMuqtadies}</p></CardContent>
           </Card>
           <Card>
-            <CardHeader><CardTitle className="text-sm">Per Person</CardTitle></CardHeader>
-            <CardContent><p className="text-2xl font-semibold">{formatCurrency(summary.perHead)}</p></CardContent>
+            <CardHeader><CardTitle className="text-sm">Legacy Total Salary</CardTitle></CardHeader>
+            <CardContent><p className="text-2xl font-semibold">{formatCurrency(summary.totalSalary)}</p></CardContent>
           </Card>
         </div>
       )}
@@ -90,7 +94,7 @@ export default function ImamSalaryPage() {
           </CardHeader>
           <CardContent className="space-y-3">
             <p className="text-sm text-muted-foreground">
-              Update total salary and total muqtadis in one place.
+              Update contribution mode and fixed contribution in one place.
             </p>
             <Button asChild className="w-full ">
               <Link href="/dashboard/settings">
@@ -110,7 +114,7 @@ export default function ImamSalaryPage() {
           </CardHeader>
           <CardContent className="space-y-3">
             <p className="text-sm text-muted-foreground">
-              Create monthly records from settings. Per person is fixed at creation.
+              Create monthly records from settings. Contribution snapshot is fixed at creation.
             </p>
             <Button asChild className="w-full ">
               <Link href="/dashboard/imam-salary/cycles">

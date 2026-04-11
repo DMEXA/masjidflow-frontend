@@ -64,7 +64,7 @@ export default function ImamSalaryCyclesPage() {
         month: currentPeriod.month,
         year: currentPeriod.year,
       });
-      toast.success(`Month created at ${formatCurrency(created.perHead)} per person`);
+      toast.success(`Month created with ${formatCurrency(created.contributionAmount ?? created.perHead)} fixed contribution`);
       await load();
     } catch (error) {
       toast.error(getErrorMessage(error, 'Failed to create salary month'));
@@ -144,10 +144,10 @@ export default function ImamSalaryCyclesPage() {
                   <div>
                     <p className="font-medium">{formatCycleLabel(cycle.month, cycle.year)}</p>
                     <p className="text-muted-foreground">Total Salary: {formatCurrency(cycle.salaryAmount)}</p>
-                    <p className="text-muted-foreground">Muqtadis: {cycle.totalMuqtadies}</p>
+                    <p className="text-muted-foreground">Mode: {cycle.contributionMode ?? cycle.contributionType ?? 'HOUSEHOLD'}</p>
                   </div>
                   <div className="text-right">
-                    <p>Per Person: {formatCurrency(cycle.perHead)}</p>
+                    <p>Contribution: {formatCurrency(cycle.contributionAmount ?? cycle.perHead)}</p>
                     <p className="text-xs text-muted-foreground">{new Date(cycle.createdAt).toLocaleDateString()}</p>
                   </div>
                 </div>

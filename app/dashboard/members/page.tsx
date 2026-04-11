@@ -35,6 +35,7 @@ import { useDebounce } from '@/hooks/useDebounce';
 import { ActionOverflowMenu } from '@/components/common/action-overflow-menu';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { ListEmptyState } from '@/components/common/list-empty-state';
+import { keepPreviousData } from '@tanstack/react-query';
 
 type MemberRow = {
   id: string;
@@ -130,12 +131,19 @@ export default function MembersPage() {
     queryKey: membersQueryKey,
     queryFn: () => membersService.getAll({ page, pageSize: pageLimit }),
     enabled: canManageMembers,
+    placeholderData: keepPreviousData,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    retry: false,
   });
 
   const invitesQuery = useQuery({
     queryKey: invitesQueryKey,
     queryFn: () => membersService.getInvites(),
     enabled: canManageMembers,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    retry: false,
   });
 
   useEffect(() => {

@@ -3,12 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  Link as LinkIcon,
   Loader2,
-  Pencil,
   Plus,
-  Receipt,
-  Search,
   Copy,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -65,7 +61,6 @@ import MuqtadiFilters from '@/components/muqtadis/MuqtadiFilters';
 import MuqtadiList from '@/components/muqtadis/MuqtadiList';
 import {
   useMuqtadis,
-  type SortOrder,
 } from '@/hooks/useMuqtadis';
 import { parseStrictAmountInput, parseStrictIntegerInput } from '@/src/utils/numeric-input';
 
@@ -73,6 +68,7 @@ const EMPTY_FORM = {
   name: '',
   fatherName: '',
   householdMembers: '1',
+  dependents: [] as string[],
   whatsappNumber: '',
   notes: '',
 };
@@ -83,11 +79,15 @@ export default function MuqtadisPage() {
   const { canManageMembers } = usePermission();
 
   const [isAddOpen, setIsAddOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<'active' | 'trash'>('active');
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isPaymentOpen, setIsPaymentOpen] = useState(false);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
-  const [isFiltersOpen, setIsFiltersOpen] = useState(false);
   const [isCreateAccountOpen, setIsCreateAccountOpen] = useState(false);
+  const [trashItems, setTrashItems] = useState<Muqtadi[]>([]);
+  const [trashPage, setTrashPage] = useState(1);
+  const [trashTotalPages, setTrashTotalPages] = useState(1);
+  const [isTrashLoading, setIsTrashLoading] = useState(false);
 
   const [selectedMuqtadi, setSelectedMuqtadi] = useState<Muqtadi | null>(null);
   const [selectedDetails, setSelectedDetails] = useState<MuqtadiDetails | null>(null);
@@ -102,6 +102,8 @@ export default function MuqtadisPage() {
   const [cycles, setCycles] = useState<ImamSalaryCycle[]>([]);
   const [paymentMode, setPaymentMode] = useState<'new' | 'adjustment'>('new');
   const [pendingPaymentVerificationId, setPendingPaymentVerificationId] = useState<string | null>(null);
+  const [editingPaymentId, setEditingPaymentId] = useState<string | null>(null);
+  const [pendingPaymentDeleteId, setPendingPaymentDeleteId] = useState<string | null>(null);
   const [inviteLink, setInviteLink] = useState('');
   const [inviteUsageMeta, setInviteUsageMeta] = useState<{ maxUses?: number | null; usedCount?: number }>({});
   const [isInviteLinkDialogOpen, setIsInviteLinkDialogOpen] = useState(false);
@@ -114,8 +116,13 @@ export default function MuqtadisPage() {
   const [paymentUtr, setPaymentUtr] = useState('');
   const [paymentReference, setPaymentReference] = useState('');
   const [paymentNotes, setPaymentNotes] = useState('');
-  const buildDefaultMemberNames = (headName: string, count: number) =>
-    Array.from({ length: count }, (_, index) => (index === 0 ? headName : `Member ${index + 1}`));
+  const [imamFundSummary, setImamFundSummary] = useState({ totalIncome: 0, totalExpense: 0, balance: 0 });
+  const resizeDependents = (householdMembersValue: string, currentDependents: string[]) => {
+    const parsed = parseStrictIntegerInput(householdMembersValue);
+    const householdCount = parsed !== null && parsed > 0 ? Math.min(parsed, 50) : 1;
+    const dependentsCount = Math.max(householdCount - 1, 0);
+    return Array.from({ length: dependentsCount }, (_, index) => currentDependents[index] ?? '');
+  };
 
   useEffect(() => {
     if (!canManageMembers) {
@@ -140,6 +147,23 @@ export default function MuqtadisPage() {
     fetchCycles();
   }, [fetchCycles]);
 
+  const fetchImamFundSummary = useCallback(async () => {
+    try {
+      const summary = await muqtadisService.getImamFundSummary();
+      setImamFundSummary({
+        totalIncome: summary.totalIncome,
+        totalExpense: summary.totalExpense,
+        balance: summary.balance,
+      });
+    } catch {
+      setImamFundSummary({ totalIncome: 0, totalExpense: 0, balance: 0 });
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchImamFundSummary();
+  }, [fetchImamFundSummary]);
+
   const refreshDetails = useCallback(async (id: string) => {
     try {
       const detail = await muqtadisService.getById(id);
@@ -150,7 +174,6 @@ export default function MuqtadisPage() {
   }, []);
 
   const {
-    items,
     setItems,
     filteredItems,
     stats,
@@ -164,12 +187,35 @@ export default function MuqtadisPage() {
     refreshDetails,
   });
 
-  const openView = async (item: Muqtadi) => {
-    setSelectedMuqtadi(item);
-    setSelectedDetails(null);
-    setIsDrawerOpen(true);
-    await refreshDetails(item.id);
-  };
+  const isDeletedMuqtadi = useCallback((item: Muqtadi) => {
+    return Boolean((item as Muqtadi & { isDeleted?: boolean }).isDeleted || item.isDisabled || item.status === 'DISABLED');
+  }, []);
+
+  const activeItems = useMemo(() => filteredItems.filter((item) => !isDeletedMuqtadi(item)), [filteredItems, isDeletedMuqtadi]);
+
+  const fetchTrashItems = useCallback(async (page: number) => {
+    setIsTrashLoading(true);
+    try {
+      const result = await muqtadisService.getTrash({ page, limit: 20 });
+      setTrashItems(result.data);
+      setTrashTotalPages(Math.max(result.totalPages || 1, 1));
+    } catch (error) {
+      toast.error(getErrorMessage(error, 'Failed to load deleted households'));
+    } finally {
+      setIsTrashLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!canManageMembers || activeTab !== 'trash') return;
+    void fetchTrashItems(trashPage);
+  }, [activeTab, canManageMembers, fetchTrashItems, trashPage]);
+
+  useEffect(() => {
+    if (activeTab === 'trash') {
+      setTrashPage(1);
+    }
+  }, [activeTab]);
 
   const openEdit = (item: Muqtadi) => {
     setSelectedMuqtadi(item);
@@ -177,6 +223,7 @@ export default function MuqtadisPage() {
       name: item.name,
       fatherName: item.fatherName,
       householdMembers: String(item.householdMembers ?? 1),
+      dependents: resizeDependents(String(item.householdMembers ?? 1), []),
       whatsappNumber: item.whatsappNumber || '',
       notes: item.notes || '',
     });
@@ -192,6 +239,7 @@ export default function MuqtadisPage() {
   const openPayment = (item: Muqtadi) => {
     setSelectedMuqtadi(item);
     setPaymentMode('new');
+    setEditingPaymentId(null);
     setSelectedCycleId(sortedCycles[0]?.id || '');
     setPaymentAmount('');
     setPaymentMethod('CASH');
@@ -204,6 +252,7 @@ export default function MuqtadisPage() {
   const openPaymentAdjustment = (item: Muqtadi, payment: MuqtadiDetails['payments'][number]) => {
     setSelectedMuqtadi(item);
     setPaymentMode('adjustment');
+    setEditingPaymentId(payment.id);
     setSelectedCycleId(String(payment.details?.cycleId || ''));
     setPaymentAmount(String(Number(payment.details?.amount || 0) || ''));
     setPaymentMethod((String(payment.details?.method || 'CASH') as 'CASH' | 'UPI' | 'BANK'));
@@ -230,13 +279,20 @@ export default function MuqtadisPage() {
       return;
     }
 
+    const dependents = resizeDependents(form.householdMembers, form.dependents).map((name) => name.trim());
+    if (dependents.some((name) => !name)) {
+      toast.error('All dependents names are required');
+      return;
+    }
+
     setSubmitting(true);
     try {
       await muqtadisService.create({
         name: form.name.trim(),
         fatherName: form.fatherName.trim(),
         householdMembers,
-        memberNames: buildDefaultMemberNames(form.name.trim(), householdMembers),
+        memberNames: [form.name.trim(), ...dependents],
+        dependents: dependents.map((name) => ({ name })),
         whatsappNumber: form.whatsappNumber.trim() || undefined,
         phone: form.whatsappNumber.trim() || undefined,
         notes: form.notes.trim() || undefined,
@@ -246,7 +302,16 @@ export default function MuqtadisPage() {
       setForm(EMPTY_FORM);
       await actions.fetchItems();
     } catch (error) {
-      toast.error(getErrorMessage(error, 'Failed to add household'));
+      const message = getErrorMessage(error, 'Failed to add household');
+      const normalized = message.toLowerCase();
+      if (
+        normalized.includes('muqtadi already exists')
+        || (normalized.includes('unique constraint') && normalized.includes('phone'))
+      ) {
+        toast.error('Muqtadi with this phone already exists');
+      } else {
+        toast.error(message);
+      }
     } finally {
       setSubmitting(false);
     }
@@ -345,19 +410,32 @@ export default function MuqtadisPage() {
 
     setSubmitting(true);
     try {
-      await muqtadisService.recordPayment({
-        muqtadiId: selectedMuqtadi.id,
-        cycleId: selectedCycleId,
-        amount,
-        method: paymentMethod,
-        utr: paymentUtr.trim() || undefined,
-        reference: paymentReference.trim() || undefined,
-        notes: paymentNotes.trim() || undefined,
-      });
+      if (paymentMode === 'adjustment' && editingPaymentId) {
+        await muqtadisService.updatePayment(editingPaymentId, {
+          muqtadiId: selectedMuqtadi.id,
+          cycleId: selectedCycleId,
+          amount,
+          method: paymentMethod,
+          utr: paymentUtr.trim() || undefined,
+          reference: paymentReference.trim() || undefined,
+        });
+      } else {
+        await muqtadisService.recordPayment({
+          muqtadiId: selectedMuqtadi.id,
+          cycleId: selectedCycleId,
+          amount,
+          method: paymentMethod,
+          utr: paymentUtr.trim() || undefined,
+          reference: paymentReference.trim() || undefined,
+          notes: paymentNotes.trim() || undefined,
+        });
+      }
       await invalidateMoneyQueries(queryClient);
       toast.success(paymentMode === 'adjustment' ? 'Payment adjustment recorded' : 'Payment recorded');
       setIsPaymentOpen(false);
+      setEditingPaymentId(null);
       await actions.fetchItems();
+      await fetchImamFundSummary();
       if (selectedDetails) {
         await refreshDetails(selectedMuqtadi.id);
       }
@@ -377,11 +455,31 @@ export default function MuqtadisPage() {
       toast.success('Payment marked as verified');
       await invalidateMoneyQueries(queryClient);
       await actions.fetchItems();
+      await fetchImamFundSummary();
       await refreshDetails(selectedMuqtadi.id);
     } catch (error) {
       toast.error(getErrorMessage(error, 'Failed to verify payment'));
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleDeletePayment = async (transactionId: string) => {
+    if (!selectedMuqtadi) return;
+
+    setSubmitting(true);
+    try {
+      await muqtadisService.deletePayment(transactionId);
+      toast.success('Payment deleted');
+      await invalidateMoneyQueries(queryClient);
+      await actions.fetchItems();
+      await fetchImamFundSummary();
+      await refreshDetails(selectedMuqtadi.id);
+    } catch (error) {
+      toast.error(getErrorMessage(error, 'Failed to delete payment'));
+    } finally {
+      setSubmitting(false);
+      setPendingPaymentDeleteId(null);
     }
   };
 
@@ -418,16 +516,53 @@ export default function MuqtadisPage() {
   };
 
   const toggleStatus = async (item: Muqtadi, status: MuqtadiStatus) => {
+    if (actionLoadingId === item.id) return;
     setActionLoadingId(item.id);
     try {
       if (status === 'DISABLED') {
         await muqtadisService.disable(item.id);
         toast.success('Household disabled');
+        setItems((prev) =>
+          prev.map((entry) =>
+            entry.id === item.id
+              ? {
+                  ...entry,
+                  isDisabled: true,
+                  status: 'DISABLED',
+                }
+              : entry,
+          ),
+        );
+        if (activeTab === 'trash') {
+          await fetchTrashItems(trashPage);
+        }
       } else {
         await muqtadisService.enable(item.id);
-        toast.success('Household enabled');
+        toast.success('Household restored');
+        const restoredItem = {
+          ...item,
+          isDisabled: false,
+          status: 'ACTIVE' as const,
+        };
+        if (item.isVerified) {
+          setItems((prev) =>
+            prev.some((entry) => entry.id === item.id)
+              ? prev.map((entry) =>
+                  entry.id === item.id
+                    ? {
+                        ...entry,
+                        isDisabled: false,
+                        status: 'ACTIVE',
+                      }
+                    : entry,
+                )
+              : [restoredItem, ...prev],
+          );
+        }
+        setTrashItems((prev) => prev.filter((entry) => entry.id !== item.id));
+        await actions.fetchItems();
+        await queryClient.invalidateQueries({ queryKey: ['muqtadis'], exact: false });
       }
-      await actions.fetchItems();
     } catch (error) {
       toast.error(getErrorMessage(error, 'Failed to update status'));
     } finally {
@@ -443,9 +578,55 @@ export default function MuqtadisPage() {
     });
   }, [cycles, filters.sortOrder]);
 
+  const primaryFilter = useMemo(() => {
+    if (filters.statusFilter === 'disabled') return 'disabled';
+    if (filters.verificationFilter === 'verified') return 'verified';
+    if (filters.verificationFilter === 'pending') return 'pending';
+    return 'all';
+  }, [filters.statusFilter, filters.verificationFilter]);
+
+  const applyPrimaryFilter = useCallback((value: 'all' | 'verified' | 'pending' | 'disabled') => {
+    if (value === 'disabled') {
+      setActiveTab('trash');
+      setFilters.setStatusFilter('active');
+      setFilters.setVerificationFilter('all');
+      return;
+    }
+
+    if (activeTab === 'trash') {
+      setActiveTab('active');
+    }
+
+    setFilters.setStatusFilter('active');
+    if (value === 'verified') {
+      setFilters.setVerificationFilter('verified');
+      return;
+    }
+    if (value === 'pending') {
+      setFilters.setVerificationFilter('pending');
+      return;
+    }
+    setFilters.setVerificationFilter('all');
+  }, [activeTab, setFilters]);
+
+  const clearAllMuqtadiFilters = useCallback(() => {
+    if (activeTab === 'trash') {
+      setActiveTab('active');
+    }
+    setFilters.setSearch('');
+    setFilters.setStatusFilter('active');
+    setFilters.setVerificationFilter('all');
+    setFilters.setAccountFilter('all');
+    setFilters.setCycleFilter('all');
+    setFilters.setPaymentFilter('all');
+    setFilters.setSortOrder('newest');
+    setFilters.setPage(1);
+  }, [activeTab, setFilters]);
+
   return (
     <div className="ds-stack">
-      <PageHeader title="Households" description="Manage imam salary households and dues">
+      <div className='mx-2'>
+        <PageHeader title="Households" description="Manage imam salary households and dues">
         <div className="space-y-2">
           <div className="flex flex-wrap gap-2">
             <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
@@ -463,7 +644,28 @@ export default function MuqtadisPage() {
                 <div className="space-y-3">
                   <div className="space-y-2"><Label>Name</Label><Input value={form.name} onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))} /></div>
                   <div className="space-y-2"><Label>Father Name</Label><Input value={form.fatherName} onChange={(e) => setForm((prev) => ({ ...prev, fatherName: e.target.value }))} /></div>
-                  <div className="space-y-2"><Label>Household Members</Label><Input type="text" inputMode="numeric" pattern="^\d+$" value={form.householdMembers} onChange={(e) => setForm((prev) => ({ ...prev, householdMembers: e.target.value }))} /></div>
+                  <div className="space-y-2"><Label>Household Members</Label><Input type="text" inputMode="numeric" pattern="^\d+$" value={form.householdMembers} onChange={(e) => setForm((prev) => ({ ...prev, householdMembers: e.target.value, dependents: resizeDependents(e.target.value, prev.dependents) }))} /></div>
+                  {form.dependents.length > 0 ? (
+                    <div className="space-y-2">
+                      <Label>Dependents</Label>
+                      <div className="space-y-2">
+                        {form.dependents.map((dependentName, index) => (
+                          <Input
+                            key={`dependent-${index + 1}`}
+                            placeholder={`Dependent ${index + 1} Name`}
+                            value={dependentName}
+                            onChange={(e) =>
+                              setForm((prev) => {
+                                const nextDependents = [...prev.dependents];
+                                nextDependents[index] = e.target.value;
+                                return { ...prev, dependents: nextDependents };
+                              })
+                            }
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
                   <div className="space-y-2"><Label>WhatsApp Number</Label><Input value={form.whatsappNumber} onChange={(e) => setForm((prev) => ({ ...prev, whatsappNumber: e.target.value }))} /></div>
                   <div className="space-y-2"><Label>Notes</Label><Textarea rows={3} value={form.notes} onChange={(e) => setForm((prev) => ({ ...prev, notes: e.target.value }))} /></div>
                 </div>
@@ -491,86 +693,136 @@ export default function MuqtadisPage() {
         </div>
 
       </PageHeader>
-      <MuqtadiStats stats={stats} />
-
-      <div className="hidden grid-cols-2 gap-3 px-4 md:grid">
-        <div className="rounded-xl border p-3">
-          <p className="text-sm text-gray-500">Members</p>
-          <p className="text-xl font-bold">{filters.salarySummary.totalMuqtadies}</p>
-        </div>
-
-        <div className="rounded-xl border p-3">
-          <p className="text-sm text-gray-500">Registered Muqtadis</p>
-          <p className="text-xl font-bold">{filters.salarySummary.registeredMuqtadies}</p>
-        </div>
       </div>
 
-      <Card className="mx-4">
+      <MuqtadiStats stats={stats} imamFundSummary={imamFundSummary} isLoading={loading.isLoading} />
+
+      <Card className="mx-2">
         <CardContent className="space-y-4 pt-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="relative flex-1">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                className="pl-9"
-                placeholder="Search by name, WhatsApp, email"
-                value={filters.search}
-                onChange={(e) => {
-                  setFilters.setSearch(e.target.value);
-                  setFilters.setPage(1);
-                }}
+          {activeTab === 'active' ? (
+            <MuqtadiFilters
+              primaryFilter={primaryFilter}
+              setPrimaryFilter={applyPrimaryFilter}
+              search={filters.search}
+              setSearch={(value: string) => {
+                setFilters.setSearch(value);
+                setFilters.setPage(1);
+              }}
+              accountFilter={filters.accountFilter}
+              setAccountFilter={setFilters.setAccountFilter}
+              cycleFilter={filters.cycleFilter}
+              setCycleFilter={setFilters.setCycleFilter}
+              paymentFilter={filters.paymentFilter}
+              setPaymentFilter={setFilters.setPaymentFilter}
+              sortOrder={filters.sortOrder}
+              setSortOrder={setFilters.setSortOrder}
+              clearFilters={clearAllMuqtadiFilters}
+            />
+          ) : null}
+
+          <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'active' | 'trash')}>
+            <TabsList>
+              <TabsTrigger value="active">Active</TabsTrigger>
+              <TabsTrigger value="trash">Trash</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="active" className="mt-4">
+              <MuqtadiList
+                isLoading={loading.isLoading}
+                items={activeItems}
+                accountFilter={filters.accountFilter}
+                onAdd={() => setIsAddOpen(true)}
+                resolvePaymentStatus={actions.resolvePaymentStatus}
+                formatDate={formatDate}
+                openEdit={openEdit}
+                openPayment={openPayment}
+                openCreateAccount={openCreateAccount}
+                toggleStatus={toggleStatus}
+                actionLoadingId={actionLoadingId}
+                createAccountLoadingId={createAccountLoadingId}
+                submitting={submitting}
+                pendingVerificationId={loading.pendingVerificationId}
+                handleVerifyMuqtadi={actions.verifyMuqtadi}
+                handleRejectMuqtadi={actions.rejectMuqtadi}
               />
-            </div>
-            <Button type="button" variant="secondary" onClick={() => setIsFiltersOpen(true)}>
-              Filters
-            </Button>
-          </div>
+            </TabsContent>
 
-          <MuqtadiFilters
-            accountFilter={filters.accountFilter}
-            setAccountFilter={setFilters.setAccountFilter}
-            statusFilter={filters.statusFilter}
-            setStatusFilter={setFilters.setStatusFilter}
-            paymentFilter={filters.paymentFilter}
-            setPaymentFilter={setFilters.setPaymentFilter}
-          />
-
-          <MuqtadiList
-            isLoading={loading.isLoading}
-            items={filteredItems}
-            accountFilter={filters.accountFilter}
-            onAdd={() => setIsAddOpen(true)}
-            resolvePaymentStatus={actions.resolvePaymentStatus}
-            formatDate={formatDate}
-            openEdit={openEdit}
-            openPayment={openPayment}
-            openCreateAccount={openCreateAccount}
-            toggleStatus={toggleStatus}
-            actionLoadingId={actionLoadingId}
-            createAccountLoadingId={createAccountLoadingId}
-            submitting={submitting}
-            pendingVerificationId={loading.pendingVerificationId}
-            handleVerifyMuqtadi={actions.verifyMuqtadi}
-            handleRejectMuqtadi={actions.rejectMuqtadi}
-          />
+            <TabsContent value="trash" className="mt-4 space-y-3">
+              {isTrashLoading ? (
+                <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Loading trash...
+                </div>
+              ) : trashItems.length === 0 ? (
+                <ListEmptyState
+                  title="Trash is empty"
+                  description="Deleted households will appear here."
+                  className="min-h-36"
+                />
+              ) : (
+                trashItems.map((item) => (
+                  <Card key={`trash-${item.id}`}>
+                    <CardContent className="flex items-center justify-between gap-3 pt-4">
+                      <div>
+                        <p className="text-sm font-medium">{item.name}</p>
+                        <p className="text-xs text-muted-foreground">{item.whatsappNumber || item.email || '-'}</p>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => toggleStatus(item, 'ACTIVE')}
+                        disabled={submitting || actionLoadingId === item.id}
+                      >
+                        {actionLoadingId === item.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                        Restore
+                      </Button>
+                    </CardContent>
+                  </Card>
+                ))
+              )}
+            </TabsContent>
+          </Tabs>
 
           <div className="flex items-center justify-between gap-3">
             <p className="text-xs text-muted-foreground">
-              Page {filters.page} of {filters.totalPages || 1}
+              {activeTab === 'active'
+                ? `Page ${filters.page} of ${filters.totalPages || 1}`
+                : `Page ${trashPage} of ${trashTotalPages || 1}`}
             </p>
             <div className="flex items-center gap-2">
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setFilters.setPage((current) => Math.max(current - 1, 1))}
-                disabled={filters.page <= 1 || loading.isLoading}
+                onClick={() => {
+                  if (activeTab === 'active') {
+                    setFilters.setPage((current) => Math.max(current - 1, 1));
+                    return;
+                  }
+                  setTrashPage((current) => Math.max(current - 1, 1));
+                }}
+                disabled={
+                  activeTab === 'active'
+                    ? filters.page <= 1 || loading.isLoading
+                    : trashPage <= 1 || isTrashLoading
+                }
               >
                 Previous
               </Button>
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setFilters.setPage((current) => Math.min(current + 1, filters.totalPages || 1))}
-                disabled={filters.page >= (filters.totalPages || 1) || loading.isLoading}
+                onClick={() => {
+                  if (activeTab === 'active') {
+                    setFilters.setPage((current) => Math.min(current + 1, filters.totalPages || 1));
+                    return;
+                  }
+                  setTrashPage((current) => Math.min(current + 1, trashTotalPages || 1));
+                }}
+                disabled={
+                  activeTab === 'active'
+                    ? filters.page >= (filters.totalPages || 1) || loading.isLoading
+                    : trashPage >= (trashTotalPages || 1) || isTrashLoading
+                }
               >
                 Next
               </Button>
@@ -578,61 +830,6 @@ export default function MuqtadisPage() {
           </div>
         </CardContent>
       </Card>
-
-      <Sheet
-        open={isFiltersOpen}
-        onOpenChange={(open) => {
-          setIsFiltersOpen(open);
-          if (open) {
-            setFilters.setPendingSortOrder(filters.sortOrder);
-          }
-        }}
-      >
-        <SheetContent side="bottom" className="rounded-t-2xl">
-          <SheetHeader>
-            <SheetTitle>Filters</SheetTitle>
-            <SheetDescription>Choose how this list is ordered.</SheetDescription>
-          </SheetHeader>
-          <div className="mt-4 ds-stack">
-            <div className="space-y-2">
-              <Label htmlFor="muqtadi-sort-order">Sort by</Label>
-              <select
-                id="muqtadi-sort-order"
-                className="w-full rounded-xl border bg-background px-3 py-2 text-sm"
-                value={filters.pendingSortOrder}
-                onChange={(e) => setFilters.setPendingSortOrder(e.target.value as SortOrder)}
-              >
-                <option value="newest">Newest</option>
-                <option value="oldest">Oldest</option>
-              </select>
-            </div>
-            <div className="flex gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                className="flex-1"
-                onClick={() => {
-                  setFilters.setPendingSortOrder('newest');
-                  setFilters.setSortOrder('newest');
-                  setIsFiltersOpen(false);
-                }}
-              >
-                Clear Filters
-              </Button>
-              <Button
-                type="button"
-                className="flex-1"
-                onClick={() => {
-                  setFilters.setSortOrder(filters.pendingSortOrder);
-                  setIsFiltersOpen(false);
-                }}
-              >
-                Apply
-              </Button>
-            </div>
-          </div>
-        </SheetContent>
-      </Sheet>
 
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
         <DialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-lg">
@@ -867,6 +1064,14 @@ export default function MuqtadisPage() {
                           <Button size="sm" variant="outline" disabled={submitting} onClick={() => selectedMuqtadi && openPaymentAdjustment(selectedMuqtadi, entry)}>
                             Edit Payment
                           </Button>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            disabled={submitting}
+                            onClick={() => setPendingPaymentDeleteId(entry.id)}
+                          >
+                            Delete Payment
+                          </Button>
                         </div>
                       </CardContent>
                     </Card>
@@ -979,6 +1184,32 @@ export default function MuqtadisPage() {
               }}
             >
               Confirm
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={Boolean(pendingPaymentDeleteId)}
+        onOpenChange={(open) => !open && setPendingPaymentDeleteId(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete payment?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will remove the payment and its linked imam fund income entry.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={submitting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={submitting}
+              onClick={() => {
+                if (!pendingPaymentDeleteId) return;
+                handleDeletePayment(pendingPaymentDeleteId);
+              }}
+            >
+              Delete
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -1,5 +1,6 @@
 const REFRESH_TOKEN_HINT_KEY = 'ml_refresh_token_present';
 const TWO_FACTOR_PENDING_KEY = 'ml_2fa_pending';
+const LOGOUT_IN_PROGRESS_KEY = 'ml_logout_in_progress';
 
 const TWO_FACTOR_PATH_PREFIXES = ['/2fa-login', '/2fa-setup'];
 
@@ -44,4 +45,19 @@ export function isTwoFactorFlowActive(): boolean {
 
   const currentPath = window.location.pathname;
   return TWO_FACTOR_PATH_PREFIXES.some((prefix) => currentPath.startsWith(prefix));
+}
+
+export function markLogoutInProgress(): void {
+  if (!isBrowser()) return;
+  sessionStorage.setItem(LOGOUT_IN_PROGRESS_KEY, '1');
+}
+
+export function clearLogoutInProgress(): void {
+  if (!isBrowser()) return;
+  sessionStorage.removeItem(LOGOUT_IN_PROGRESS_KEY);
+}
+
+export function isLogoutInProgress(): boolean {
+  if (!isBrowser()) return false;
+  return sessionStorage.getItem(LOGOUT_IN_PROGRESS_KEY) === '1';
 }

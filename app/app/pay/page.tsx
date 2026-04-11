@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import { Check, ChevronDown, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -8,22 +9,55 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { MuqtadiBackButton } from '@/components/muqtadi/back-button';
-import { muqtadisService, type MyDuesResponse } from '@/services/muqtadis.service';
+import { muqtadisService, type MuqtadiDashboardApiResponse, type MyDuesResponse } from '@/services/muqtadis.service';
 import { donationsService } from '@/services/donations.service';
 import { paymentSettingsService } from '@/services/payment-settings.service';
 import { useAuthStore } from '@/src/store/auth.store';
 import { formatCurrency, formatCycleLabel, getCycleStatus } from '@/src/utils/format';
 import { getErrorMessage } from '@/src/utils/error';
 import { parseStrictAmountInput } from '@/src/utils/numeric-input';
+import { openExternalUrl } from '@/src/utils/open-external-url';
 import { useQuery } from '@tanstack/react-query';
 import { queryKeys } from '@/lib/query-keys';
+import { QRCodeSVG } from 'qrcode.react';
 
 type SortOrder = 'newest' | 'oldest';
 type PaymentMethod = 'UPI' | 'BANK' | 'PHONE';
 
+function isMobileDevice(): boolean {
+  if (typeof window === 'undefined') return false;
+  const userAgent = window.navigator.userAgent.toLowerCase();
+  const mobileRegex = /android|iphone|ipad|ipod|opera mini|iemobile|mobile/;
+  return mobileRegex.test(userAgent);
+}
+
+function buildUpiDeepLink(input: { upiId: string; payeeName: string; amount: number; note: string }): string {
+  const pa = encodeURIComponent(input.upiId);
+  const pn = encodeURIComponent(input.payeeName);
+  const am = encodeURIComponent(input.amount.toFixed(2));
+  const cu = encodeURIComponent('INR');
+  const tn = encodeURIComponent(input.note);
+  return `upi://pay?pa=${pa}&pn=${pn}&am=${am}&cu=${cu}&tn=${tn}`;
+}
+
 export default function PayPage() {
   const { user, mosque } = useAuthStore();
+  const searchParams = useSearchParams();
+  const resumeProofMode = searchParams.get('resumeProof') === '1';
+  const requestedPaymentId = searchParams.get('paymentId')?.trim() ?? '';
+  const requestedCycleId = searchParams.get('cycleId')?.trim() ?? '';
+  const requestedDueId = searchParams.get('dueId')?.trim() ?? '';
+  const requestedAmountRaw = searchParams.get('amount')?.trim() ?? '';
+  const requestedMethod = searchParams.get('method')?.trim().toUpperCase() ?? '';
+
   const [submitting, setSubmitting] = useState(false);
   const [uploadingScreenshot, setUploadingScreenshot] = useState(false);
   const [sortOrder, setSortOrder] = useState<SortOrder>('newest');
@@ -34,13 +68,19 @@ export default function PayPage() {
   const [reference, setReference] = useState('');
   const [screenshot, setScreenshot] = useState<File | null>(null);
   const [showProofStep, setShowProofStep] = useState(false);
+  const [showDesktopUpiModal, setShowDesktopUpiModal] = useState(false);
   const [selectedMethod, setSelectedMethod] = useState<PaymentMethod | null>(null);
+  const [selectedDueId, setSelectedDueId] = useState('');
+  const [existingScreenshotUrl, setExistingScreenshotUrl] = useState('');
   const [paymentConfig, setPaymentConfig] = useState<{
     upiId?: string | null;
     bankAccount?: string | null;
     ifsc?: string | null;
     phoneNumber?: string | null;
   } | null>(null);
+  const [appliedResumeDefaults, setAppliedResumeDefaults] = useState(false);
+  const [resumeBlocked, setResumeBlocked] = useState(false);
+  const [exactResumeMatched, setExactResumeMatched] = useState(false);
 
   useEffect(() => {
     const loadPaymentConfig = async () => {
@@ -69,13 +109,28 @@ export default function PayPage() {
     refetchOnWindowFocus: false,
   });
 
-  const dues = duesQuery.data?.data ?? [];
+  const dashboardQuery = useQuery<MuqtadiDashboardApiResponse>({
+    queryKey: queryKeys.muqtadiDashboard(mosque?.id),
+    queryFn: () => muqtadisService.getDashboard(),
+    enabled: Boolean(user?.id && mosque?.id && resumeProofMode),
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+  });
+
+  const dues = useMemo(() => duesQuery.data?.data ?? [], [duesQuery.data?.data]);
+  const historyRows = useMemo(() => dashboardQuery.data?.history ?? [], [dashboardQuery.data?.history]);
 
   useEffect(() => {
     if (duesQuery.error) {
       toast.error(getErrorMessage(duesQuery.error, 'Failed to load dues'));
     }
   }, [duesQuery.error]);
+
+  useEffect(() => {
+    if (dashboardQuery.error && resumeProofMode) {
+      toast.error(getErrorMessage(dashboardQuery.error, 'Failed to load payment history for retry'));
+    }
+  }, [dashboardQuery.error, resumeProofMode]);
 
   const selectedDue = useMemo(
     () => dues.find((due) => due.cycleId === selectedCycleId) ?? null,
@@ -105,6 +160,41 @@ export default function PayPage() {
     return Number(duesQuery.data?.summary?.outstandingAmount ?? 0);
   }, [duesQuery.data?.summary?.outstandingAmount]);
 
+  const remainingDue = useMemo(() => {
+    if (!selectedDue) return 0;
+    return Number(Math.max(selectedDue.expectedAmount - selectedDue.paidAmount, 0).toFixed(2));
+  }, [selectedDue]);
+
+  const parsedAmount = useMemo(() => parseStrictAmountInput(amount), [amount]);
+  const amountIsValid = parsedAmount !== null && parsedAmount > 0;
+  const amountExceedsRemaining = amountIsValid && selectedDue ? (parsedAmount as number) > remainingDue : false;
+
+  const upiDeepLink = useMemo(() => {
+    if (!paymentConfig?.upiId?.trim()) return '';
+    if (!amountIsValid || !parsedAmount) return '';
+    const payeeName = (mosque?.name || 'MasjidLedger').trim();
+    return buildUpiDeepLink({
+      upiId: paymentConfig.upiId.trim(),
+      payeeName,
+      amount: parsedAmount,
+      note: 'Muqtadi monthly contribution',
+    });
+  }, [amountIsValid, mosque?.name, parsedAmount, paymentConfig?.upiId]);
+
+  useEffect(() => {
+    if (!selectedDue) {
+      if (!(resumeProofMode && exactResumeMatched)) {
+        setAmount('');
+      }
+      return;
+    }
+    if (selectedDue.status === 'PAID' || remainingDue <= 0) {
+      setAmount('0');
+      return;
+    }
+    setAmount(String(remainingDue));
+  }, [exactResumeMatched, remainingDue, resumeProofMode, selectedDue]);
+
   const availableMethods = useMemo<PaymentMethod[]>(() => {
     if (!paymentConfig) return [];
     const methods: PaymentMethod[] = [];
@@ -131,6 +221,125 @@ export default function PayPage() {
     return paymentConfig.phoneNumber ? `Phone: ${paymentConfig.phoneNumber}` : null;
   }, [paymentConfig, selectedMethod]);
 
+  useEffect(() => {
+    if (appliedResumeDefaults) return;
+    if (!dues.length && !(resumeProofMode && requestedPaymentId)) return;
+    if (resumeProofMode && requestedPaymentId && dashboardQuery.isLoading) return;
+
+    const parsedRequestedAmount = parseStrictAmountInput(requestedAmountRaw);
+    const requestedPayment = requestedPaymentId
+      ? (historyRows.find((row) => row.id === requestedPaymentId) ?? null)
+      : null;
+
+    if (resumeProofMode && requestedPaymentId && !requestedPayment) {
+      toast.error('Payment not found for retry. Select month and continue.');
+    }
+
+    if (requestedPayment?.status === 'VERIFIED') {
+      toast.error('This payment is already verified. Retry is blocked.');
+      setResumeBlocked(true);
+      setShowProofStep(false);
+      setAppliedResumeDefaults(true);
+      return;
+    }
+
+    const requestedPaymentStatus = (requestedPayment?.status ?? '').toUpperCase();
+    const isRetryableResumePayment = requestedPaymentStatus === 'PENDING' || requestedPaymentStatus === 'REJECTED';
+    if (resumeProofMode && requestedPayment && isRetryableResumePayment) {
+      if (requestedPayment.cycleId) {
+        setSelectedCycleId(requestedPayment.cycleId);
+        if (requestedPayment.dueId) {
+          setSelectedDueId(requestedPayment.dueId);
+        }
+        setExactResumeMatched(true);
+        setShowProofStep(true);
+
+        const methodFromPayment = (requestedPayment.method ?? '').toUpperCase();
+        const preferredMethod = requestedMethod || methodFromPayment;
+        if (preferredMethod && ['UPI', 'BANK', 'PHONE'].includes(preferredMethod)) {
+          setSelectedMethod(preferredMethod as PaymentMethod);
+        }
+
+        if (parsedRequestedAmount !== null && parsedRequestedAmount > 0) {
+          setAmount(String(parsedRequestedAmount));
+        } else if (requestedPayment.amount && requestedPayment.amount > 0) {
+          setAmount(String(requestedPayment.amount));
+        }
+
+        if (requestedPayment.utr) {
+          setUtr(String(requestedPayment.utr));
+        }
+        if (requestedPayment.screenshotUrl) {
+          setExistingScreenshotUrl(String(requestedPayment.screenshotUrl));
+        }
+
+        setAppliedResumeDefaults(true);
+        return;
+      }
+
+      toast.error('Payment context is incomplete. Please select a month and continue.');
+    }
+
+    const cycleIdCandidate = requestedCycleId || requestedPayment?.cycleId || '';
+    let matchedDue = requestedDueId
+      ? dues.find((due) => due.id === requestedDueId) ?? null
+      : null;
+
+    if (!matchedDue && cycleIdCandidate) {
+      matchedDue = dues.find((due) => due.cycleId === cycleIdCandidate) ?? null;
+    }
+
+    if (
+      matchedDue
+      && matchedDue.status !== 'PAID'
+      && Math.max(matchedDue.expectedAmount - matchedDue.paidAmount, 0) > 0
+    ) {
+      setSelectedCycleId(matchedDue.cycleId);
+      setSelectedDueId(matchedDue.id);
+      setExactResumeMatched(Boolean(requestedPaymentId || requestedDueId || requestedCycleId));
+    } else if (resumeProofMode && (requestedPaymentId || requestedDueId || requestedCycleId)) {
+      toast.error('Selected due is no longer payable. Please choose another month.');
+    } else if (resumeProofMode) {
+      const firstPendingDue = dues.find(
+        (due) => due.status !== 'PAID' && Math.max(due.expectedAmount - due.paidAmount, 0) > 0,
+      );
+      if (firstPendingDue) {
+        setSelectedCycleId(firstPendingDue.cycleId);
+        setSelectedDueId(firstPendingDue.id);
+      }
+    }
+
+    if (resumeProofMode && !resumeBlocked) {
+      setShowProofStep(true);
+    }
+
+    const methodFromPayment = (requestedPayment?.method ?? '').toUpperCase();
+    const preferredMethod = requestedMethod || methodFromPayment;
+    if (preferredMethod && ['UPI', 'BANK', 'PHONE'].includes(preferredMethod)) {
+      setSelectedMethod(preferredMethod as PaymentMethod);
+    }
+
+    if (parsedRequestedAmount !== null && parsedRequestedAmount > 0) {
+      setAmount(String(parsedRequestedAmount));
+    } else if (requestedPayment?.amount && requestedPayment.amount > 0) {
+      setAmount(String(requestedPayment.amount));
+    }
+
+    setAppliedResumeDefaults(true);
+  }, [
+    appliedResumeDefaults,
+    dashboardQuery.isLoading,
+    dues,
+    historyRows,
+    requestedAmountRaw,
+    requestedCycleId,
+    requestedDueId,
+    requestedMethod,
+    requestedPaymentId,
+    resumeBlocked,
+    resumeProofMode,
+  ]);
+
   const onHavePaid = () => {
     const numericAmount = parseStrictAmountInput(amount);
 
@@ -144,12 +353,55 @@ export default function PayPage() {
       return;
     }
 
+    if (selectedDue && numericAmount > remainingDue) {
+      toast.error(`Amount cannot exceed remaining due (${formatCurrency(remainingDue)})`);
+      return;
+    }
+
     if (!selectedMethod) {
       toast.error('Select a payment method');
       return;
     }
 
     setShowProofStep(true);
+  };
+
+  const onOpenUpi = () => {
+    const numericAmount = parseStrictAmountInput(amount);
+
+    if (!selectedCycleId || numericAmount === null || numericAmount <= 0) {
+      toast.error('Select a month and enter a valid amount');
+      return;
+    }
+
+    if (selectedDue?.status === 'PAID' || remainingDue <= 0) {
+      toast.error('This month is already fully paid');
+      return;
+    }
+
+    if (selectedDue && numericAmount > remainingDue) {
+      toast.error(`Amount cannot exceed remaining due (${formatCurrency(remainingDue)})`);
+      return;
+    }
+
+    if (!paymentConfig?.upiId?.trim()) {
+      toast.error('UPI payment is not configured');
+      return;
+    }
+
+    if (!upiDeepLink) {
+      toast.error('Unable to generate UPI link');
+      return;
+    }
+
+    if (isMobileDevice()) {
+      toast.info('Opening your UPI app...');
+      window.location.href = upiDeepLink;
+      return;
+    }
+
+    setShowDesktopUpiModal(true);
+    toast.info('Open this page on your mobile device to complete the payment.');
   };
 
   const onSubmitProof = async () => {
@@ -165,40 +417,58 @@ export default function PayPage() {
       return;
     }
 
-    if (!screenshot) {
+    if (!utr.trim()) {
+      toast.error('Enter UTR/transaction ID before submitting proof');
+      return;
+    }
+
+    if (selectedDue && numericAmount > remainingDue) {
+      toast.error(`Amount cannot exceed remaining due (${formatCurrency(remainingDue)})`);
+      return;
+    }
+
+    if (!screenshot && !existingScreenshotUrl) {
       toast.error('Upload payment screenshot to submit payment');
       return;
     }
 
-    const allowedTypes = ['image/jpeg', 'image/png'];
-    if (!allowedTypes.includes(screenshot.type)) {
-      toast.error('Screenshot must be JPG or PNG');
-      return;
-    }
+    const fileToUpload = screenshot;
+    if (fileToUpload) {
+      const allowedTypes = ['image/jpeg', 'image/png'];
+      if (!allowedTypes.includes(fileToUpload.type)) {
+        toast.error('Screenshot must be JPG or PNG');
+        return;
+      }
 
-    if (screenshot.size > 2 * 1024 * 1024) {
-      toast.error('Screenshot must be up to 2MB');
-      return;
+      if (fileToUpload.size > 2 * 1024 * 1024) {
+        toast.error('Screenshot must be up to 2MB');
+        return;
+      }
     }
 
     setSubmitting(true);
     try {
-      setUploadingScreenshot(true);
-      const uploaded = await donationsService.uploadDonationScreenshot(screenshot, mosque?.id);
-      setUploadingScreenshot(false);
+      let screenshotUrl = existingScreenshotUrl || undefined;
+      if (fileToUpload) {
+        setUploadingScreenshot(true);
+        const uploaded = await donationsService.uploadDonationScreenshot(fileToUpload, mosque?.id);
+        setUploadingScreenshot(false);
+        screenshotUrl = uploaded.url;
+      }
 
       await muqtadisService.initiateMyPayment({
         cycleId: selectedCycleId,
         amount: numericAmount,
         utr: utr.trim() || undefined,
         reference: reference.trim() || selectedMethod,
-        screenshotUrl: uploaded.url,
+        screenshotUrl,
       });
 
       toast.success('Payment submitted for verification');
       setScreenshot(null);
       setUtr('');
       setReference('');
+      setExistingScreenshotUrl('');
       setShowProofStep(false);
       await duesQuery.refetch();
     } catch (error) {
@@ -232,6 +502,12 @@ export default function PayPage() {
           <CardDescription>Choose payment method, pay externally, then upload screenshot for admin verification.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
+          {resumeBlocked ? (
+            <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              Retry blocked because this payment is already verified.
+            </p>
+          ) : null}
+
           <div className="rounded-xl border p-4">
             <p className="text-xs text-muted-foreground">Current Due</p>
             <p className="mt-1 text-3xl font-bold">{formatCurrency(currentDue)}</p>
@@ -239,80 +515,92 @@ export default function PayPage() {
 
           <div className="space-y-2">
             <Label>Month</Label>
-            <div className="mb-2 w-full max-w-full">
-              <div className="grid w-full grid-cols-2 gap-2">
-                <Button
-                  type="button"
-                  variant={sortOrder === 'newest' ? 'default' : 'outline'}
-                  className="h-11 w-full"
-                  onClick={() => setSortOrder('newest')}
-                >
-                  Newest
-                </Button>
-                <Button
-                  type="button"
-                  variant={sortOrder === 'oldest' ? 'default' : 'outline'}
-                  className="h-11 w-full"
-                  onClick={() => setSortOrder('oldest')}
-                >
-                  Oldest
-                </Button>
-              </div>
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full justify-between text-left"
-              onClick={() => setIsMonthSheetOpen(true)}
-            >
-              <span className="w-full whitespace-normal wrap-break-word">{selectedMonthLabel}</span>
-              <ChevronDown className="h-4 w-4 shrink-0" />
-            </Button>
-
-            <Sheet open={isMonthSheetOpen} onOpenChange={setIsMonthSheetOpen}>
-              <SheetContent side="bottom" className="inset-x-0 w-full max-w-full rounded-t-2xl p-0">
-                <SheetHeader className="border-b ds-section">
-                  <SheetTitle>Select Month</SheetTitle>
-                </SheetHeader>
-
-                <div className="w-full max-w-full px-3 py-3">
-                  <div className="max-h-62.5 w-full overflow-y-auto">
-                    <div className="space-y-2">
-                      {sortedDues.map((due) => {
-                        const isPaid = due.status === 'PAID';
-                        const dueAmount = Math.max(due.expectedAmount - due.paidAmount, 0);
-                        const optionLabel = isPaid
-                          ? `${formatCycleLabel(due.month, due.year)} (Paid)`
-                          : `${formatCycleLabel(due.month, due.year)} (${getCycleStatus(due.month, due.year)}) - due ${formatCurrency(dueAmount)}`;
-                        const isSelected = selectedCycleId === due.cycleId;
-
-                        return (
-                          <Button
-                            key={due.id}
-                            type="button"
-                            variant={isSelected ? 'default' : 'outline'}
-                            disabled={isPaid}
-                            onClick={() => {
-                              setSelectedCycleId(due.cycleId);
-                              setIsMonthSheetOpen(false);
-                            }}
-                            className="h-auto w-full items-start justify-between gap-3 text-left"
-                          >
-                            <span className="whitespace-normal wrap-break-word">{optionLabel}</span>
-                            {isSelected ? <Check className="mt-0.5 h-4 w-4 shrink-0" /> : null}
-                          </Button>
-                        );
-                      })}
-                    </div>
+            {exactResumeMatched ? (
+              <p className="rounded-xl border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+                Exact pending payment found{selectedDueId ? ' with linked due context' : ''}. Month selection skipped.
+              </p>
+            ) : (
+              <>
+                <div className="mb-2 w-full max-w-full">
+                  <div className="grid w-full grid-cols-2 gap-2">
+                    <Button
+                      type="button"
+                      variant={sortOrder === 'newest' ? 'default' : 'outline'}
+                      className="h-11 w-full"
+                      onClick={() => setSortOrder('newest')}
+                    >
+                      Newest
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={sortOrder === 'oldest' ? 'default' : 'outline'}
+                      className="h-11 w-full"
+                      onClick={() => setSortOrder('oldest')}
+                    >
+                      Oldest
+                    </Button>
                   </div>
                 </div>
-              </SheetContent>
-            </Sheet>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full justify-between text-left"
+                  onClick={() => setIsMonthSheetOpen(true)}
+                >
+                  <span className="w-full whitespace-normal wrap-break-word">{selectedMonthLabel}</span>
+                  <ChevronDown className="h-4 w-4 shrink-0" />
+                </Button>
+
+                <Sheet open={isMonthSheetOpen} onOpenChange={setIsMonthSheetOpen}>
+                  <SheetContent side="bottom" className="inset-x-0 w-full max-w-full rounded-t-2xl p-0">
+                    <SheetHeader className="border-b ds-section">
+                      <SheetTitle>Select Month</SheetTitle>
+                    </SheetHeader>
+
+                    <div className="w-full max-w-full px-3 py-3">
+                      <div className="max-h-62.5 w-full overflow-y-auto">
+                        <div className="space-y-2">
+                          {sortedDues.map((due) => {
+                            const isPaid = due.status === 'PAID';
+                            const dueAmount = Math.max(due.expectedAmount - due.paidAmount, 0);
+                            const optionLabel = isPaid
+                              ? `${formatCycleLabel(due.month, due.year)} (Paid)`
+                              : `${formatCycleLabel(due.month, due.year)} (${getCycleStatus(due.month, due.year)}) - due ${formatCurrency(dueAmount)}`;
+                            const isSelected = selectedCycleId === due.cycleId;
+
+                            return (
+                              <Button
+                                key={due.id}
+                                type="button"
+                                variant={isSelected ? 'default' : 'outline'}
+                                disabled={isPaid}
+                                onClick={() => {
+                                  setSelectedCycleId(due.cycleId);
+                                  setSelectedDueId(due.id);
+                                  setIsMonthSheetOpen(false);
+                                }}
+                                className="h-auto w-full items-start justify-between gap-3 text-left"
+                              >
+                                <span className="whitespace-normal wrap-break-word">{optionLabel}</span>
+                                {isSelected ? <Check className="mt-0.5 h-4 w-4 shrink-0" /> : null}
+                              </Button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  </SheetContent>
+                </Sheet>
+              </>
+            )}
           </div>
 
           <div className="space-y-2">
             <Label>Amount</Label>
-            <Input type="text" inputMode="decimal" pattern="^\d+(?:\.\d{1,2})?$" value={amount} onChange={(e) => setAmount(e.target.value)} />
+            <Input type="text" inputMode="decimal" pattern="^\\d+(?:\\.\\d{1,2})?$" value={amount} onChange={(e) => setAmount(e.target.value)} />
+            {amountExceedsRemaining ? (
+              <p className="text-xs text-red-600">Amount exceeds remaining due ({formatCurrency(remainingDue)}).</p>
+            ) : null}
           </div>
 
           <div className="space-y-2">
@@ -341,8 +629,38 @@ export default function PayPage() {
             </div>
           ) : null}
 
+          {selectedMethod === 'UPI' ? (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onOpenUpi}
+              disabled={
+                submitting
+                || selectedDue?.status === 'PAID'
+                || remainingDue <= 0
+                || !amountIsValid
+                || amountExceedsRemaining
+                || !paymentConfig?.upiId?.trim()
+              }
+              className="h-11 w-full text-base font-semibold"
+            >
+              Pay with UPI
+            </Button>
+          ) : null}
+
           {!showProofStep ? (
-            <Button onClick={onHavePaid} disabled={submitting || !availableMethods.length} className="h-11 w-full text-base font-semibold">
+            <Button
+              onClick={onHavePaid}
+              disabled={
+                submitting
+                || !availableMethods.length
+                || selectedDue?.status === 'PAID'
+                || remainingDue <= 0
+                || !amountIsValid
+                || amountExceedsRemaining
+              }
+              className="h-11 w-full text-base font-semibold"
+            >
               I HAVE PAID
             </Button>
           ) : (
@@ -354,6 +672,11 @@ export default function PayPage() {
                   accept="image/jpeg,image/png"
                   onChange={(e) => setScreenshot(e.target.files?.[0] ?? null)}
                 />
+                {existingScreenshotUrl ? (
+                  <a href={existingScreenshotUrl} target="_blank" rel="noreferrer" className="text-xs text-primary underline">
+                    View currently attached screenshot
+                  </a>
+                ) : null}
               </div>
 
               <div className="space-y-2">
@@ -374,6 +697,39 @@ export default function PayPage() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={showDesktopUpiModal} onOpenChange={setShowDesktopUpiModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Complete Payment on Mobile</DialogTitle>
+            <DialogDescription>
+              Open this page on your mobile device to complete the payment.
+            </DialogDescription>
+          </DialogHeader>
+
+          {upiDeepLink ? (
+            <div className="space-y-4">
+              <div className="rounded-md border border-dashed border-border p-4 text-center">
+                <p className="text-xs text-muted-foreground">QR Fallback</p>
+                <div className="mt-3 flex justify-center">
+                  <QRCodeSVG value={upiDeepLink} size={180} />
+                </div>
+                <p className="mt-3 text-xs text-muted-foreground">Scan this QR from your UPI app on phone.</p>
+              </div>
+
+              <Button
+                type="button"
+                className="w-full"
+                onClick={() => {
+                  openExternalUrl(upiDeepLink, { requireHttp: false });
+                }}
+              >
+                Try Opening UPI Link
+              </Button>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

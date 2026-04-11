@@ -133,7 +133,8 @@ export default function DonationsPage() {
   const pendingCountQuery = useQuery({
     queryKey: ['pending-count', mosqueId],
     queryFn: () => donationsService.getPendingCount(),
-    enabled: Boolean(mosqueId) && Boolean(token) && canViewPendingCount,
+    enabled: false,
+    initialData: () => queryClient.getQueryData<{ count: number }>(['pending-count', mosqueId]),
   });
 
   const deleteMutation = useMutation({

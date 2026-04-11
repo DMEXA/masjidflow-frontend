@@ -66,6 +66,34 @@ export function getSidebarNavGroups(input: SidebarConfigInput): SidebarNavGroup[
   const isMuqtadi = Boolean(input.isMuqtadi);
   const mosqueSlug = input.mosqueSlug;
 
+  if (role === 'muqtadi') {
+    return filterEmptyGroups([
+      {
+        title: 'Overview',
+        items: [{ href: '/app/dashboard', label: 'Dashboard', icon: LayoutDashboard }],
+      },
+      {
+        title: 'Payments',
+        items: [
+          { href: '/app/my-dues', label: 'My Dues', icon: ScrollText },
+          { href: '/app/pay', label: 'Pay', icon: HandCoins },
+        ],
+      },
+      {
+        title: 'Community',
+        items: [
+          { href: '/app/meekaat', label: 'Prayer Times', icon: LayoutDashboard },
+          { href: '/app/announcements', label: 'Announcements', icon: FileText },
+          { href: '/app/notifications', label: 'Notifications', icon: ShieldCheck },
+        ],
+      },
+      {
+        title: 'Account',
+        items: [{ href: '/app/profile', label: 'Profile', icon: UserPlus }],
+      },
+    ]);
+  }
+
   if (role === 'super_admin' || role === 'admin') {
     return filterEmptyGroups([
       {
@@ -91,7 +119,10 @@ export function getSidebarNavGroups(input: SidebarConfigInput): SidebarNavGroup[
       },
       {
         title: 'Imam Salary',
-        items: [{ href: '/dashboard/imam-salary/cycles', label: 'Cycles', icon: ScrollText }],
+        items: [
+          { href: '/dashboard/imam-salary/cycles', label: 'Cycles', icon: ScrollText },
+          { href: '/dashboard/imamfund', label: 'Imam Fund', icon: CircleDollarSign },
+        ],
       },
       {
         title: 'Communication',
@@ -162,6 +193,41 @@ export function getSidebarNavGroups(input: SidebarConfigInput): SidebarNavGroup[
 }
 
 export function getMobileSidebarNavItems(role?: UserRole): MobileSidebarNavItem[] {
+  if (role === 'muqtadi') {
+    return [
+      {
+        href: '/app/dashboard',
+        label: 'Dashboard',
+        icon: LayoutDashboard,
+        active: (pathname) => pathname === '/app/dashboard' || pathname === '/app',
+      },
+      {
+        href: '/app/my-dues',
+        label: 'Dues',
+        icon: ScrollText,
+        active: (pathname) => pathname.startsWith('/app/my-dues') || pathname.startsWith('/app/contributions'),
+      },
+      {
+        href: '/app/pay',
+        label: 'Pay',
+        icon: HandCoins,
+        active: (pathname) => pathname.startsWith('/app/pay'),
+      },
+      {
+        href: '/app/announcements',
+        label: 'Announcements',
+        icon: FileText,
+        active: (pathname) => pathname.startsWith('/app/announcements'),
+      },
+      {
+        href: '/app/profile',
+        label: 'Profile',
+        icon: UserPlus,
+        active: (pathname) => pathname.startsWith('/app/profile'),
+      },
+    ];
+  }
+
   if (role === 'treasurer') {
     return [
       {

@@ -45,6 +45,15 @@ function isMobileDevice(): boolean {
   return mobileRegex.test(userAgent);
 }
 
+function buildPublicUpiDeepLink(input: { upiId: string; upiName: string; amount: string; intentId: string }): string {
+  const pa = encodeURIComponent(input.upiId);
+  const pn = encodeURIComponent(input.upiName);
+  const am = encodeURIComponent(input.amount);
+  const cu = encodeURIComponent('INR');
+  const tn = encodeURIComponent(input.intentId);
+  return `upi://pay?pa=${pa}&pn=${pn}&am=${am}&cu=${cu}&tn=${tn}`;
+}
+
 async function copyText(value: string, label: string) {
   if (!value) return;
   try {
@@ -98,9 +107,50 @@ export default function DonateBySlugPage() {
   const [phoneNumber, setPhoneNumber] = useState('');
   const [upiTransactionId, setUpiTransactionId] = useState('');
   const [screenshot, setScreenshot] = useState<File | null>(null);
+  const [publicDraft, setPublicDraft] = useState<{
+    id: string;
+    intentId: string;
+    amount: number;
+    donationStatus: 'INITIATED' | 'PENDING' | 'VERIFIED' | 'REJECTED';
+    donorName?: string | null;
+    donorPhone?: string | null;
+    upiTransactionId?: string | null;
+    screenshotUrl?: string | null;
+    expiresAt?: string | null;
+  } | null>(null);
 
   const trimmedPhoneNumber = phoneNumber.trim();
   const isPhoneValid = /^\d{10,15}$/.test(trimmedPhoneNumber);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    const loadDraft = async () => {
+      if (!config?.mosqueId || !fundId || !isPhoneValid) {
+        setPublicDraft(null);
+        return;
+      }
+
+      try {
+        const draft = await donationsService.getPublicDonationDraft({
+          mosqueId: config.mosqueId,
+          fundId,
+          donorPhone: trimmedPhoneNumber,
+        });
+        if (isCancelled) return;
+        setPublicDraft(draft);
+      } catch {
+        if (isCancelled) return;
+        setPublicDraft(null);
+      }
+    };
+
+    void loadDraft();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [config?.mosqueId, fundId, isPhoneValid, trimmedPhoneNumber]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -155,6 +205,10 @@ export default function DonateBySlugPage() {
   );
   const hasPhoneOption = Boolean(config?.phoneNumber?.trim());
   const hasAnyPaymentOption = hasUpiOption || hasBankOption || hasPhoneOption;
+  const hasEditableDraft =
+    publicDraft?.donationStatus === 'INITIATED'
+    || publicDraft?.donationStatus === 'PENDING'
+    || publicDraft?.donationStatus === 'REJECTED';
 
   useEffect(() => {
     if (!session?.expiresAt) {
@@ -197,6 +251,34 @@ export default function DonateBySlugPage() {
 
     if (!isPhoneValid) {
       toast.error('Phone number must be 10 to 15 digits.');
+      return;
+    }
+
+    if (config && publicDraft && hasEditableDraft) {
+      const draftAmount = Number(publicDraft.amount);
+      const safeAmount = Number.isFinite(draftAmount) && draftAmount > 0
+        ? draftAmount
+        : Number(normalizedAmount || '0');
+      const upiDeepLink = config.upiId
+        ? buildPublicUpiDeepLink({
+            upiId: config.upiId,
+            upiName: config.upiName,
+            amount: safeAmount.toFixed(2),
+            intentId: publicDraft.intentId,
+          })
+        : '';
+
+      setSession({
+        donationId: publicDraft.id,
+        intentId: publicDraft.intentId,
+        upiDeepLink,
+        expiresAt: publicDraft.expiresAt || new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+      });
+      setDonorName(publicDraft.donorName ?? donorName);
+      setUpiTransactionId(publicDraft.upiTransactionId ?? '');
+      setShowPaymentQuestion(false);
+      setShowProofForm(true);
+      toast.success('Continuing your existing donation draft.');
       return;
     }
 
@@ -518,8 +600,14 @@ export default function DonateBySlugPage() {
               }
             >
               {isInitiating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Start Payment
+              {hasEditableDraft ? 'Continue Donation' : 'Start Payment'}
             </Button>
+
+            {hasEditableDraft ? (
+              <p className="text-xs text-amber-700">
+                Existing {publicDraft?.donationStatus?.toLowerCase()} draft found for this phone and fund. Continuing will update the same donation.
+              </p>
+            ) : null}
 
             {!hasFunds ? (
               <ListEmptyState
@@ -606,6 +694,11 @@ export default function DonateBySlugPage() {
                     accept="image/jpeg,image/png"
                     onChange={(e) => setScreenshot(e.target.files?.[0] ?? null)}
                   />
+                  {publicDraft?.screenshotUrl ? (
+                    <Link href={publicDraft.screenshotUrl} className="text-xs text-primary underline">
+                      View currently attached screenshot
+                    </Link>
+                  ) : null}
                 </div>
 
                 <Button type="submit" disabled={isSubmittingProof}>

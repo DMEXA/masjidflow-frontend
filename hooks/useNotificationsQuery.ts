@@ -32,4 +32,21 @@ export function useNotificationsQuery() {
   });
 }
 
+export function useConditionalNotificationsQuery(enabled = true) {
+  const { user, isAuthenticated } = useAuthStore();
+
+  return useQuery<AppNotification[]>({
+    queryKey: ['notifications'],
+    queryFn: async () => {
+      const allNotifications = await notificationsService.getMyNotifications();
+      return allNotifications
+        .filter(isImportantNotification)
+        .slice(0, MAX_NOTIFICATIONS);
+    },
+    enabled: enabled && !!isAuthenticated && !!user,
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+  });
+}
+
 

@@ -149,9 +149,31 @@ export const authService = {
   },
 
   async refreshToken(): Promise<{ accessToken: string }> {
-    const response = await api.post<{ accessToken: string }>('/auth/refresh');
-    this.setToken(response.data.accessToken);
-    return response.data;
+    let lastError: unknown;
+
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        const response = await api.post<{ accessToken: string }>('/auth/refresh');
+        this.setToken(response.data.accessToken);
+        return response.data;
+      } catch (error) {
+        lastError = error;
+        const hasHttpStatus =
+          typeof error === 'object' &&
+          error !== null &&
+          'response' in error &&
+          Boolean((error as { response?: unknown }).response);
+
+        // Retry once only for transient failures without an HTTP response.
+        if (attempt === 0 && !hasHttpStatus) {
+          continue;
+        }
+
+        throw error;
+      }
+    }
+
+    throw lastError instanceof Error ? lastError : new Error('Refresh failed');
   },
 
   async forgotPassword(email: string): Promise<{ message: string }> {

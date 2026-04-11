@@ -274,7 +274,7 @@ export function getCurrentPrayerKey(prayerTimes: PrayerTimesSetting | null, now:
     const current = entries[i];
     const next = entries[(i + 1) % entries.length];
 
-    let nextDate = new Date(next.date);
+    const nextDate = new Date(next.date);
     if (i === entries.length - 1) {
       nextDate.setDate(nextDate.getDate() + 1);
     }

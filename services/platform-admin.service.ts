@@ -158,7 +158,7 @@ export interface PlatformSubscriptionPaymentRow {
   verifiedAt?: string;
 }
 
-export interface PlatformSubscriptionPaymentDetails extends PlatformSubscriptionPaymentRow {}
+export type PlatformSubscriptionPaymentDetails = PlatformSubscriptionPaymentRow;
 
 export interface PlatformAnalytics {
   mosquesPerMonth: Array<{ month: string; count: number }>;

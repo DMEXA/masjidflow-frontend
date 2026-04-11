@@ -44,6 +44,15 @@ export interface UpdateMosqueData {
   description?: string;
 }
 
+function extractDataPayload(input: unknown): unknown {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    return input;
+  }
+
+  const source = input as Record<string, unknown>;
+  return 'data' in source ? source.data : source;
+}
+
 export async function updateMosqueProfile(mosqueId: string, data: UpdateMosqueData): Promise<Mosque> {
   const response = await api.patch<Mosque>(`/mosques/${mosqueId}`, data);
   return response.data;
@@ -62,7 +71,9 @@ export const mosqueService = {
 
   async getPrayerTimes(mosqueId: string): Promise<PrayerTimesSetting | null> {
     const response = await api.get<{ prayerTimes: PrayerTimesSetting | null }>(`/mosques/${mosqueId}/prayer-times`);
-    return response.data.prayerTimes;
+    const payload = (extractDataPayload(response.data) as { prayerTimes?: PrayerTimesSetting | null } | null)
+      ?? (response.data as { prayerTimes?: PrayerTimesSetting | null } | null);
+    return payload?.prayerTimes ?? null;
   },
 
   async updatePrayerTimes(mosqueId: string, prayerTimes: PrayerTimesUpdateInput): Promise<PrayerTimesSetting> {

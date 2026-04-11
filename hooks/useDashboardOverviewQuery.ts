@@ -65,10 +65,9 @@ export function useDashboardOverviewQuery(options: {
     queryKey: [...queryKeys.dashboardOverview(mosqueId), { chartsLimit }],
     enabled,
     queryFn: async () => {
-      const [yearlyResponse, membersResponse, recentDonationsRes, donationsRes, expensesRes] = await Promise.all([
+      const [yearlyResponse, membersResponse, donationsRes, expensesRes] = await Promise.all([
         api.get<YearlyReportResponse>('/reports/yearly').then((r) => r.data),
         membersService.getAll({ page: 1, pageSize: 1 }),
-        api.get('/donations?limit=5').then((r) => r.data),
         api.get(`/donations?limit=${chartsLimit}`).then((r) => r.data),
         api.get(`/expenses?limit=${chartsLimit}`).then((r) => r.data),
       ]);
@@ -86,8 +85,11 @@ export function useDashboardOverviewQuery(options: {
         amount: number;
         paymentType: string;
         createdAt: string;
+        id: string;
+        donorName?: string;
         fundId?: string;
         fund?: { id?: string; name?: string };
+        donationStatus?: string;
       }> = donationsRes.data ?? [];
       const expenseList: Array<{
         amount: number;
@@ -216,7 +218,13 @@ export function useDashboardOverviewQuery(options: {
 
       return {
         stats,
-        recentDonations: recentDonationsRes.data ?? [],
+        recentDonations: donationList.slice(0, 5).map((donation) => ({
+          id: donation.id,
+          donorName: donation.donorName ?? 'Anonymous',
+          amount: Number(donation.amount ?? 0),
+          paymentType: donation.paymentType,
+          createdAt: donation.createdAt,
+        })),
         charts: {
           chartData,
           donationsByType,

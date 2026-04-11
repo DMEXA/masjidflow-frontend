@@ -135,7 +135,6 @@ export default function EditExpensePage() {
         receiptUrl = url;
       }
 
-      console.log('FRONTEND SEND:', parsedAmount);
       await expensesService.update(params.id, {
         category: formData.category,
         amount: parsedAmount,

@@ -8,8 +8,10 @@ export interface AnnouncementItem {
 }
 
 export const announcementsService = {
-  async getAll(): Promise<AnnouncementItem[]> {
-    const response = await api.get<AnnouncementItem[]>('/announcements');
+  async getAll(mosqueId?: string): Promise<AnnouncementItem[]> {
+    const response = await api.get<AnnouncementItem[]>('/announcements', {
+      params: mosqueId ? { mosqueId } : undefined,
+    });
     return response.data;
   },
 

@@ -252,7 +252,7 @@ export default function DonationStatusPage() {
           </CardContent>
         </Card>
 
-        {donation.donationStatus === 'INITIATED' ? (
+        {donation.donationStatus === 'INITIATED' || donation.donationStatus === 'PENDING' || donation.donationStatus === 'REJECTED' ? (
           <Card>
             <CardHeader>
               <CardTitle>Upload Proof</CardTitle>

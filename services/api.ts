@@ -2,11 +2,13 @@ import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios';
 import { API_BASE_URL } from '@/src/constants';
 import { toast } from 'sonner';
 import {
+  isLogoutInProgress,
   clearRefreshTokenAvailable,
   clearTwoFactorPending,
   isTwoFactorFlowActive,
   markRefreshTokenAvailable,
 } from '@/services/auth-session';
+import { useAuthStore } from '@/src/store/auth.store';
 import { clearAccessToken, getAccessToken, setAccessToken } from './access-token';
 
 const MAX_REFRESH_RETRIES = 1;
@@ -59,7 +61,7 @@ async function performControlledLogout(): Promise<void> {
   try {
     const { useAuthStore } = await import('@/src/store/auth.store');
     await useAuthStore.getState().logout();
-  } catch {
+  } catch (error) {
     clearAccessToken();
     clearRefreshTokenAvailable();
     clearTwoFactorPending();
@@ -120,7 +122,6 @@ async function refreshAccessTokenWithRetry(): Promise<string> {
 
   while (attempt <= MAX_REFRESH_RETRIES) {
     attempt += 1;
-    console.log('REFRESH_ATTEMPT', attempt);
 
     try {
       const res = await axios.post(
@@ -132,11 +133,8 @@ async function refreshAccessTokenWithRetry(): Promise<string> {
 
       setAccessToken(newToken);
       markRefreshTokenAvailable();
-      console.log('REFRESH_SUCCESS');
       return newToken;
     } catch (refreshError) {
-      console.log('REFRESH_FAILED');
-
       if (attempt > MAX_REFRESH_RETRIES) {
         throw refreshError;
       }
@@ -202,6 +200,19 @@ function handleUnverifiedHousehold(): void {
   window.location.href = '/household-pending';
 }
 
+function shouldForceLogoutAfterRefreshFailure(error: unknown): boolean {
+  if (isLogoutInProgress()) {
+    return false;
+  }
+
+  if (!axios.isAxiosError(error)) {
+    return false;
+  }
+
+  const status = error.response?.status;
+  return status === 401 || status === 403;
+}
+
 // Response interceptor to handle 401 with silent refresh
 api.interceptors.response.use(
   (response) => response,
@@ -214,7 +225,16 @@ api.interceptors.response.use(
     const requestPath = resolveRequestPath(originalRequest?.url || '');
 
     if (error.response?.status === 401 && requestPath.startsWith('/auth/refresh')) {
-      await performControlledLogout();
+      if (isLogoutInProgress()) {
+        return Promise.reject(error);
+      }
+
+      const state = useAuthStore.getState();
+      if (state.authStatus === 'authenticated' && state.isAuthenticated) {
+        await performControlledLogout();
+      } else {
+        console.warn('Refresh failed during bootstrap, ignoring logout');
+      }
       return Promise.reject(error);
     }
 
@@ -251,9 +271,11 @@ api.interceptors.response.use(
         onRefreshed(newToken);
         return api(originalRequest);
       } catch (refreshError) {
-        // Refresh failed — logout user in a controlled way.
+        // Only force logout for explicit auth failures, not transient network issues.
         onRefreshFailed(refreshError);
-        await performControlledLogout();
+        if (shouldForceLogoutAfterRefreshFailure(refreshError)) {
+          await performControlledLogout();
+        }
         return Promise.reject(error);
       } finally {
         isRefreshing = false;

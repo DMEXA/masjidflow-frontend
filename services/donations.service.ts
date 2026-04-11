@@ -121,6 +121,21 @@ export interface PublicDonationDetails {
   screenshotUrl?: string | null;
 }
 
+export interface PublicDonationDraft {
+  id: string;
+  intentId: string;
+  amount: number;
+  donationStatus: DonationStatus;
+  donorName?: string | null;
+  donorPhone?: string | null;
+  upiTransactionId?: string | null;
+  screenshotUrl?: string | null;
+  fundId?: string | null;
+  expiresAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface VerifyDonationPayload {
   upiTransactionId?: string;
   verificationNote?: string;
@@ -229,6 +244,20 @@ export const donationsService = {
     const response = await api.get<PublicDonationConfig>(
       `/donations/public/config/${encodeURIComponent(mosqueSlug)}`,
     );
+    return response.data;
+  },
+
+  async getPublicDonationDraft(params: {
+    mosqueId: string;
+    fundId: string;
+    donorPhone: string;
+  }): Promise<PublicDonationDraft | null> {
+    const query = new URLSearchParams({
+      mosqueId: params.mosqueId,
+      fundId: params.fundId,
+      donorPhone: params.donorPhone,
+    });
+    const response = await api.get<PublicDonationDraft | null>(`/donations/public/draft?${query.toString()}`);
     return response.data;
   },
 

@@ -7,8 +7,10 @@ import { useDebounce } from '@/hooks/useDebounce';
 
 export type SortOrder = 'newest' | 'oldest';
 export type AccountFilter = 'all' | 'account' | 'offline';
-export type VerificationFilter = 'ALL' | 'VERIFIED' | 'PENDING';
-export type PaymentFilter = 'ALL' | 'PAID' | 'PARTIAL' | 'UNPAID';
+export type VerificationFilter = 'all' | 'verified' | 'pending';
+export type StatusFilter = 'all' | 'active' | 'disabled';
+export type CycleFilter = 'all' | 'included' | 'not_included';
+export type PaymentFilter = 'all' | 'paid' | 'partial' | 'unpaid' | 'proof_pending';
 
 type UseMuqtadisOptions = {
   enabled: boolean;
@@ -25,8 +27,10 @@ export function useMuqtadis(options: UseMuqtadisOptions) {
   const [sortOrder, setSortOrder] = useState<SortOrder>('newest');
   const [pendingSortOrder, setPendingSortOrder] = useState<SortOrder>('newest');
   const [accountFilter, setAccountFilter] = useState<AccountFilter>('all');
-  const [statusFilter, setStatusFilter] = useState<VerificationFilter>('ALL');
-  const [paymentFilter, setPaymentFilter] = useState<PaymentFilter>('ALL');
+  const [verificationFilter, setVerificationFilter] = useState<VerificationFilter>('all');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [cycleFilter, setCycleFilter] = useState<CycleFilter>('all');
+  const [paymentFilter, setPaymentFilter] = useState<PaymentFilter>('all');
   const [targetMuqtadies, setTargetMuqtadies] = useState(0);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -38,10 +42,17 @@ export function useMuqtadis(options: UseMuqtadisOptions) {
     pendingHouseholds: 0,
     pendingMuqtadies: 0,
   });
-  const [salarySummary, setSalarySummary] = useState({ totalMuqtadies: 0, registeredMuqtadies: 0 });
+  const [salarySummary, setSalarySummary] = useState({
+    totalMuqtadies: 0,
+    registeredMuqtadies: 0,
+    totalSalary: 0,
+    perHead: 0,
+  });
   const [pendingVerificationId, setPendingVerificationId] = useState<string | null>(null);
 
   const fetchLockRef = useRef(false);
+  const fetchRequestSeqRef = useRef(0);
+  const settingsLoadedRef = useRef(false);
   const listCacheRef = useRef<{
     key: string;
     at: number;
@@ -56,11 +67,25 @@ export function useMuqtadis(options: UseMuqtadisOptions) {
     };
     totalMuqtadies: number;
     registeredMuqtadies: number;
+    totalSalary: number;
+    perHead: number;
   } | null>(null);
 
+  const parseBooleanValue = useCallback((value: unknown): boolean => {
+    if (typeof value === 'boolean') return value;
+    if (typeof value === 'number') return value === 1;
+    if (typeof value === 'string') {
+      const normalized = value.trim().toLowerCase();
+      if (normalized === 'true' || normalized === '1' || normalized === 'yes') return true;
+      if (normalized === 'false' || normalized === '0' || normalized === 'no' || normalized === '') return false;
+    }
+    return false;
+  }, []);
+
   const resolvePaymentStatus = useCallback((item: Muqtadi): 'PAID' | 'PARTIAL' | 'UNPAID' => {
-    if (item.paymentStatus === 'PAID') return 'PAID';
-    if (item.paymentStatus === 'PARTIAL') return 'PARTIAL';
+    const rawStatus = String((item as Muqtadi & { currentCyclePaymentStatus?: string }).currentCyclePaymentStatus || item.paymentStatus || '').trim().toUpperCase();
+    if (rawStatus === 'PAID') return 'PAID';
+    if (rawStatus === 'PARTIAL') return 'PARTIAL';
     return 'UNPAID';
   }, []);
 
@@ -79,26 +104,42 @@ export function useMuqtadis(options: UseMuqtadisOptions) {
       setSalarySummary({
         totalMuqtadies: cache.totalMuqtadies,
         registeredMuqtadies: cache.registeredMuqtadies,
+        totalSalary: cache.totalSalary,
+        perHead: cache.perHead,
       });
       return;
     }
 
     fetchLockRef.current = true;
+    const requestSeq = ++fetchRequestSeqRef.current;
     setIsLoading(true);
     try {
-      const [result, summary] = await Promise.all([
+      const [result, summary, statsResponse] = await Promise.all([
         muqtadisService.getAll({ page, limit: 20, search: debouncedSearch || undefined }),
         muqtadisService.getSalarySummary(),
+        muqtadisService.getStats(),
       ]);
+
+      if (requestSeq !== fetchRequestSeqRef.current) {
+        return;
+      }
 
       const boundedData = result.data.length > 50 ? result.data.slice(0, 50) : result.data;
       setItems(boundedData);
       setPendingItems(result.pending);
       setTotalPages(result.totalPages);
-      setBackendStats(result.stats);
+      const normalizedStats = {
+        verifiedHouseholds: statsResponse.totalHouseholds,
+        verifiedMuqtadies: statsResponse.totalMuqtadies,
+        pendingHouseholds: statsResponse.pending,
+        pendingMuqtadies: 0,
+      };
+      setBackendStats(normalizedStats);
       setSalarySummary({
         totalMuqtadies: summary.totalMuqtadies,
         registeredMuqtadies: summary.registeredMuqtadies,
+        totalSalary: summary.totalSalary,
+        perHead: summary.perHead,
       });
 
       listCacheRef.current = {
@@ -107,9 +148,11 @@ export function useMuqtadis(options: UseMuqtadisOptions) {
         data: boundedData,
         pending: result.pending,
         totalPages: result.totalPages,
-        backendStats: result.stats,
+        backendStats: normalizedStats,
         totalMuqtadies: summary.totalMuqtadies,
         registeredMuqtadies: summary.registeredMuqtadies,
+        totalSalary: summary.totalSalary,
+        perHead: summary.perHead,
       };
     } catch (error) {
       toast.error(getErrorMessage(error, 'Failed to load muqtadis'));
@@ -128,18 +171,66 @@ export function useMuqtadis(options: UseMuqtadisOptions) {
   }, [sortOrder]);
 
   const filteredItems = useMemo(() => {
-    const sourceItems = statusFilter === 'PENDING' ? pendingItems : items;
+    const sourceItems = verificationFilter === 'pending' ? pendingItems : items;
     const sorted = sortByCreatedAt(sourceItems);
 
     return sorted.filter((item) => {
+      const normalizedName = (item.name || '').toLowerCase();
+      const normalizedPhone = (item.whatsappNumber || item.phone || '').toLowerCase();
+      const normalizedSearch = debouncedSearch.trim().toLowerCase();
+
+      if (normalizedSearch) {
+        const matches = normalizedName.includes(normalizedSearch) || normalizedPhone.includes(normalizedSearch);
+        if (!matches) return false;
+      }
+
       if (accountFilter === 'account' && !item.userId) return false;
       if (accountFilter === 'offline' && item.userId) return false;
 
+      const isDisabled = Boolean((item as Muqtadi & { isDeleted?: boolean }).isDeleted || item.isDisabled || item.status === 'DISABLED');
+      if (statusFilter === 'active' && isDisabled) return false;
+      if (statusFilter === 'disabled' && !isDisabled) return false;
+
+      const cycleIncludedRaw = (item as Muqtadi & {
+        isIncludedInCycle?: boolean;
+        includedInCycle?: boolean;
+        cycleIncluded?: boolean;
+        inCurrentCycle?: boolean;
+        currentlyIncludedInCycle?: boolean;
+      }).isIncludedInCycle
+        ?? (item as any).includedInCycle
+        ?? (item as any).cycleIncluded
+        ?? (item as any).inCurrentCycle
+        ?? (item as any).currentlyIncludedInCycle;
+      const cycleIncluded = parseBooleanValue(cycleIncludedRaw);
+      if (cycleFilter === 'included' && !cycleIncluded) return false;
+      if (cycleFilter === 'not_included' && cycleIncluded) return false;
+
       const paymentStatus = resolvePaymentStatus(item);
-      if (paymentFilter !== 'ALL' && paymentStatus !== paymentFilter) return false;
+      const proofPendingRaw = (item as Muqtadi & {
+        proofPending?: boolean | string | number;
+        isProofPending?: boolean | string | number;
+        paymentProofPending?: boolean | string | number;
+        paymentVerificationStatus?: string;
+      }).proofPending
+        ?? (item as any).isProofPending
+        ?? (item as any).paymentProofPending
+        ?? (item as any).paymentVerificationStatus;
+      const proofPending = parseBooleanValue(proofPendingRaw)
+        || String((item as any).paymentVerificationStatus || '').trim().toUpperCase() === 'PENDING';
+
+      if (paymentFilter !== 'all' && !cycleIncluded) return false;
+      if (paymentFilter === 'proof_pending' && !proofPending) return false;
+      if (paymentFilter === 'paid' && paymentStatus !== 'PAID') return false;
+      if (paymentFilter === 'partial' && paymentStatus !== 'PARTIAL') return false;
+      if (paymentFilter === 'unpaid' && paymentStatus !== 'UNPAID') return false;
+
+      if (verificationFilter === 'verified' && !item.isVerified) return false;
+      if (verificationFilter === 'pending' && item.isVerified) return false;
+
       return true;
     });
-  }, [accountFilter, items, paymentFilter, pendingItems, resolvePaymentStatus, sortByCreatedAt, statusFilter]);
+  }, [accountFilter, cycleFilter, debouncedSearch, items, parseBooleanValue, paymentFilter, pendingItems, resolvePaymentStatus, sortByCreatedAt, statusFilter, verificationFilter]);
 
   const stats = useMemo(() => {
     const totalHouseholds = backendStats.verifiedHouseholds;
@@ -200,10 +291,12 @@ export function useMuqtadis(options: UseMuqtadisOptions) {
 
   useEffect(() => {
     setPage(1);
-  }, [accountFilter, paymentFilter, statusFilter]);
+  }, [accountFilter, cycleFilter, paymentFilter, statusFilter, verificationFilter]);
 
   useEffect(() => {
     if (!enabled) return;
+    if (settingsLoadedRef.current) return;
+    settingsLoadedRef.current = true;
     const loadTargetMuqtadies = async () => {
       try {
         const settings = await muqtadisService.getSettings();
@@ -226,7 +319,9 @@ export function useMuqtadis(options: UseMuqtadisOptions) {
       sortOrder,
       pendingSortOrder,
       accountFilter,
+      verificationFilter,
       statusFilter,
+      cycleFilter,
       paymentFilter,
       page,
       totalPages,
@@ -237,7 +332,9 @@ export function useMuqtadis(options: UseMuqtadisOptions) {
       setSortOrder,
       setPendingSortOrder,
       setAccountFilter,
+      setVerificationFilter,
       setStatusFilter,
+      setCycleFilter,
       setPaymentFilter,
       setPage,
     },

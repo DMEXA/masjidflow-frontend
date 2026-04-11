@@ -1,9 +1,11 @@
 ﻿'use client';
 
 import { useMemo, useState } from 'react';
+import Link from 'next/link';
 import { Loader2, Plus } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { MuqtadiBackButton } from '@/components/muqtadi/back-button';
 import { muqtadisService, type MuqtadiDashboardApiResponse } from '@/services/muqtadis.service';
 import { useAuthStore } from '@/src/store/auth.store';
@@ -13,7 +15,7 @@ import { queryKeys } from '@/lib/query-keys';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ListEmptyState } from '@/components/common/list-empty-state';
 
-type PaymentFilter = 'ALL' | 'VERIFIED' | 'PENDING';
+type PaymentFilter = 'ALL' | 'VERIFIED' | 'PENDING' | 'REJECTED';
 
 function getStatusBadgeClass(status: string) {
   if (status === 'VERIFIED') return 'bg-emerald-100 text-emerald-700 border-emerald-200';
@@ -24,7 +26,28 @@ function getStatusBadgeClass(status: string) {
 function getDisplayStatus(status: string) {
   if (status === 'VERIFIED') return 'VERIFIED';
   if (status === 'PENDING') return 'PENDING';
+  if (status === 'REJECTED') return 'REJECTED';
   return 'FAILED';
+}
+
+function needsRetryAction(status: string) {
+  return status === 'PENDING' || status === 'REJECTED';
+}
+
+function getRetryLabel() {
+  return 'Continue Payment';
+}
+
+function buildRetryHref(payment: MuqtadiDashboardApiResponse['history'][number]) {
+  const params = new URLSearchParams({
+    resumeProof: '1',
+    paymentId: String(payment.id),
+    amount: String(payment.amount ?? ''),
+  });
+  if (payment.cycleId) params.set('cycleId', String(payment.cycleId));
+  if (payment.dueId) params.set('dueId', String(payment.dueId));
+  if (payment.method) params.set('method', String(payment.method));
+  return `/app/pay?${params.toString()}`;
 }
 
 export default function MyDuesPage() {
@@ -100,6 +123,7 @@ export default function MyDuesPage() {
               <option value="ALL">All</option>
               <option value="VERIFIED">Verified</option>
               <option value="PENDING">Pending</option>
+              <option value="REJECTED">Rejected</option>
             </select>
           </div>
         </CardHeader>
@@ -123,6 +147,7 @@ export default function MyDuesPage() {
                       <th className="px-3 py-2 font-medium">Amount</th>
                       <th className="px-3 py-2 font-medium">Date</th>
                       <th className="px-3 py-2 font-medium">Status</th>
+                      <th className="px-3 py-2 font-medium text-right">Action</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -143,6 +168,15 @@ export default function MyDuesPage() {
                           <Badge className={getStatusBadgeClass(payment.status)}>
                             {getDisplayStatus(payment.status)}
                           </Badge>
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          {needsRetryAction(payment.status) ? (
+                            <Button asChild size="sm" variant="outline">
+                              <Link href={buildRetryHref(payment)}>{getRetryLabel()}</Link>
+                            </Button>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">-</span>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -172,6 +206,11 @@ export default function MyDuesPage() {
                     {getDisplayStatus(payment.status)}
                   </Badge>
                 </div>
+                {needsRetryAction(payment.status) ? (
+                  <Button asChild size="sm" variant="outline" className="mt-3 w-full">
+                    <Link href={buildRetryHref(payment)}>{getRetryLabel()}</Link>
+                  </Button>
+                ) : null}
               </div>
             ))}
             </div>

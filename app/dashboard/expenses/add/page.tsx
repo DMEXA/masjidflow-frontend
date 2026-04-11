@@ -87,7 +87,6 @@ export default function AddExpensePage() {
         receiptUrl = url;
       }
 
-      console.log('FRONTEND SEND:', parsedAmount);
       const createdExpense = await expensesService.create({
         category: formData.category,
         amount: parsedAmount,

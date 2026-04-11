@@ -185,7 +185,6 @@ export default function EditDonationPage() {
         receiptUrl = url;
       }
 
-      console.log('FRONTEND SEND:', amount);
       await donationsService.update(params.id, {
         donorName: formData.donorName,
         donorEmail: formData.donorEmail || undefined,

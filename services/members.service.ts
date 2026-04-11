@@ -73,6 +73,15 @@ export interface MemberFilters {
   search?: string;
 }
 
+function extractDataPayload<T>(input: unknown): T | unknown {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    return input;
+  }
+
+  const source = input as Record<string, unknown>;
+  return 'data' in source ? source.data : source;
+}
+
 export const membersService = {
   async getAll(filters?: MemberFilters): Promise<PaginatedResponse<Member>> {
     const params = new URLSearchParams();
@@ -95,7 +104,17 @@ export const membersService = {
     }
 
     const response = await api.get(`/members?${params.toString()}`);
-    const { data, meta } = response.data;
+    const payload = extractDataPayload(response.data);
+    const body = (payload as { data?: any[]; meta?: Record<string, unknown> } | null)
+      ?? (response.data as { data?: any[]; meta?: Record<string, unknown> } | null);
+    const data = Array.isArray(body?.data) ? body.data : [];
+    const meta = (body?.meta as Record<string, unknown> | undefined) ?? {};
+
+    const total = Number(meta.total ?? data.length);
+    const currentPage = Number(meta.page ?? page);
+    const currentLimit = Number(meta.limit ?? limit);
+    const totalPages = Number(meta.totalPages ?? 1);
+
     return {
       data: data.map((item: any) => ({
         id: item.id,
@@ -109,10 +128,10 @@ export const membersService = {
         status: 'active' as const,
         joinedAt: item.createdAt,
       })),
-      total: meta.total,
-      page: meta.page,
-      pageSize: meta.limit,
-      totalPages: meta.totalPages,
+      total: Number.isFinite(total) ? total : data.length,
+      page: Number.isFinite(currentPage) ? currentPage : page,
+      pageSize: Number.isFinite(currentLimit) ? currentLimit : limit,
+      totalPages: Number.isFinite(totalPages) ? totalPages : 1,
     };
   },
 
@@ -163,7 +182,7 @@ export const membersService = {
         'Cache-Control': 'no-cache',
       },
     });
-    return response.data;
+    return Array.isArray(response.data) ? response.data : [];
   },
 
   async cancelInvite(id: string): Promise<void> {

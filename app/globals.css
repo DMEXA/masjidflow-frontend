@@ -153,6 +153,6 @@
   }
 
   .ds-section {
-    @apply space-y-4 px-4 py-3;
+    @apply space-y-4 px-2 py-3;
   }
 }

@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Loader2, UserCheck, UserMinus, Trash2, Copy } from 'lucide-react';
+import { Loader2, Copy } from 'lucide-react';
 import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -34,6 +34,7 @@ import { formatCurrency, formatCycleLabel, formatDate, getCycleStatus } from '@/
 import { parseStrictAmountInput, parseStrictIntegerInput } from '@/src/utils/numeric-input';
 import { invalidateMoneyQueries } from '@/lib/money-cache';
 import { useQueryClient } from '@tanstack/react-query';
+import { usePermission } from '@/hooks/usePermission';
 
 type SortOrder = 'newest' | 'oldest';
 
@@ -72,8 +73,11 @@ export default function MuqtadiDetailPage() {
   });
   const [generatedPassword, setGeneratedPassword] = useState<string | null>(null);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+  const [isIncludingInCycle, setIsIncludingInCycle] = useState(false);
+  const [isRemovingFromCycle, setIsRemovingFromCycle] = useState(false);
+  const { isAdmin, isSuperAdmin } = usePermission();
 
-  const load = async () => {
+  const load = useCallback(async () => {
     if (!params.id) return;
 
     setIsLoading(true);
@@ -95,11 +99,11 @@ export default function MuqtadiDetailPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [params.id]);
 
   useEffect(() => {
-    load();
-  }, [params.id]);
+    void load();
+  }, [load]);
 
   const pendingAmount = useMemo(() => {
     if (!details) return 0;
@@ -114,6 +118,47 @@ export default function MuqtadiDetailPage() {
       return sortOrder === 'newest' ? right - left : left - right;
     });
   }, [details, sortOrder]);
+
+  const isAlreadyIncludedInCurrentCycle = useMemo(() => {
+    if (!details || details.dues.length === 0) {
+      return false;
+    }
+
+    const latestDue = [...details.dues].sort((a, b) => {
+      const ay = a.year ?? 0;
+      const by = b.year ?? 0;
+      if (ay !== by) return by - ay;
+      const am = a.month ?? 0;
+      const bm = b.month ?? 0;
+      if (am !== bm) return bm - am;
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    })[0];
+
+    if (!latestDue?.month || !latestDue?.year) {
+      return false;
+    }
+
+    const now = new Date();
+    const currentMonth = now.getMonth() + 1;
+    const currentYear = now.getFullYear();
+
+    return latestDue.month === currentMonth && latestDue.year === currentYear;
+  }, [details]);
+
+  const isDeleted = Boolean(details?.status === 'DISABLED');
+  const isUnverified = Boolean(details?.isVerified === false);
+  const includeBlocked = isDeleted || isUnverified;
+
+  const canShowIncludeButton = (isAdmin || isSuperAdmin) && !isAlreadyIncludedInCurrentCycle;
+  const canShowRemoveButton = (isAdmin || isSuperAdmin) && isAlreadyIncludedInCurrentCycle;
+  const currentCycleDue = useMemo(() => {
+    if (!details) return null;
+    const now = new Date();
+    const currentMonth = now.getMonth() + 1;
+    const currentYear = now.getFullYear();
+    return details.dues.find((due) => due.month === currentMonth && due.year === currentYear) ?? null;
+  }, [details]);
+  const removeBlockedByPayment = Number(currentCycleDue?.paidAmount ?? 0) > 0;
 
   const sortedPayments = useMemo(() => {
     if (!details) return [];
@@ -202,6 +247,44 @@ export default function MuqtadiDetailPage() {
       toast.error(getErrorMessage(error, 'Failed to delete household'));
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const includeInCurrentCycle = async () => {
+    if (!details) return;
+
+    setIsIncludingInCycle(true);
+    try {
+      const result = await muqtadisService.includeInCurrentCycle(details.id);
+      if (result.alreadyIncluded) {
+        toast.success('Muqtadi is already included in current cycle');
+      } else {
+        toast.success('Muqtadi included in current cycle');
+      }
+      await load();
+    } catch (error) {
+      toast.error(getErrorMessage(error, 'Failed to include muqtadi in current cycle'));
+    } finally {
+      setIsIncludingInCycle(false);
+    }
+  };
+
+  const removeFromCurrentCycle = async () => {
+    if (!details) return;
+
+    setIsRemovingFromCycle(true);
+    try {
+      const result = await muqtadisService.removeFromCurrentCycle(details.id);
+      if (result.notFound) {
+        toast.success('Muqtadi is not included in current cycle');
+      } else if (result.removed) {
+        toast.success('Muqtadi removed from current cycle');
+      }
+      await load();
+    } catch (error) {
+      toast.error(getErrorMessage(error, 'Failed to remove muqtadi from current cycle'));
+    } finally {
+      setIsRemovingFromCycle(false);
     }
   };
 
@@ -332,6 +415,33 @@ export default function MuqtadiDetailPage() {
         </Card>
       </div>
 
+      {canShowIncludeButton || canShowRemoveButton ? (
+        <div className="flex justify-end gap-2">
+          {canShowIncludeButton ? (
+            <Button
+              onClick={includeInCurrentCycle}
+              disabled={includeBlocked || isIncludingInCycle || isRemovingFromCycle || submitting}
+              title={isDeleted ? 'Cannot add deleted muqtadi to cycle' : isUnverified ? 'Muqtadi must be verified' : ''}
+            >
+              {isIncludingInCycle ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Include in Current Cycle
+            </Button>
+          ) : null}
+          {canShowRemoveButton ? (
+            <div title={removeBlockedByPayment ? 'Cannot remove: payment already made' : ''}>
+              <Button
+                variant="outline"
+                onClick={removeFromCurrentCycle}
+                disabled={removeBlockedByPayment || isRemovingFromCycle || isIncludingInCycle || submitting}
+              >
+                {isRemovingFromCycle ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Remove from Current Cycle
+              </Button>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
       <div className="space-y-2">
         <h2 className="text-lg font-semibold">Overview</h2>
         <p className="text-sm text-muted-foreground">Basic profile and household details.</p>
@@ -388,12 +498,13 @@ export default function MuqtadiDetailPage() {
           <div><Label>Reference</Label><Input value={adjustForm.reference} onChange={(e) => setAdjustForm((p) => ({ ...p, reference: e.target.value }))} /></div>
           <div className="sm:col-span-2"><Label>Notes</Label><Textarea rows={3} value={adjustForm.notes} onChange={(e) => setAdjustForm((p) => ({ ...p, notes: e.target.value }))} /></div>
           <div className="sm:col-span-2">
-            <Button onClick={adjustPayment} disabled={submitting}>{submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}Adjust Payment</Button>
+            <Button onClick={adjustPayment} disabled={submitting || isDeleted}>{submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}Adjust Payment</Button>
           </div>
         </CardContent>
         ) : (
           <CardContent>
             <p className="text-sm text-muted-foreground">Tap "Adjust Payment" to record an additional transaction without overwriting existing records.</p>
+            {isDeleted ? <p className="mt-2 text-sm text-muted-foreground">Payments are disabled for deleted muqtadi.</p> : null}
           </CardContent>
         )}
       </Card>

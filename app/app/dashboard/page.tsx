@@ -5,13 +5,13 @@ import Link from 'next/link';
 import { ArrowRight, Clock3, Wallet } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { muqtadisService, type MuqtadiDashboardApiResponse } from '@/services/muqtadis.service';
 import { mosqueService, type PrayerTimesSetting } from '@/services/mosque.service';
 import { useAuthStore } from '@/src/store/auth.store';
 import { formatCurrency } from '@/src/utils/format';
 import { getErrorMessage } from '@/src/utils/error';
 import {
-  format12Hour,
   formatTime,
   getCountdownLabel,
   getNextPrayer,
@@ -103,6 +103,20 @@ export default function MuqtadiDashboardPage() {
   const prayerTimes = dashboardQuery.data?.prayerTimes ?? null;
   const latestAnnouncement = dashboardQuery.data?.latestAnnouncement ?? null;
   const lastPayment = dashboard?.history?.[0] ?? null;
+  const lastPaymentStatus = (lastPayment?.status ?? '').toUpperCase();
+  const needsProofResume = lastPaymentStatus === 'PENDING' || lastPaymentStatus === 'REJECTED';
+  const lastPaymentResumeHref = useMemo(() => {
+    if (!needsProofResume || !lastPayment) return '/app/pay?resumeProof=1';
+    const params = new URLSearchParams({
+      resumeProof: '1',
+      paymentId: String(lastPayment.id),
+      amount: String(lastPayment.amount ?? ''),
+    });
+    if (lastPayment.cycleId) params.set('cycleId', String(lastPayment.cycleId));
+    if (lastPayment.dueId) params.set('dueId', String(lastPayment.dueId));
+    if (lastPayment.method) params.set('method', String(lastPayment.method));
+    return `/app/pay?${params.toString()}`;
+  }, [lastPayment, needsProofResume]);
 
   const duesStatus = useMemo<'Paid' | 'Partial' | 'Pending'>(() => {
     const remaining = dashboard?.outstandingAmount ?? dashboard?.remainingAmount ?? 0;
@@ -132,7 +146,7 @@ export default function MuqtadiDashboardPage() {
       time: selected.date,
       countdown: getCountdownLabel(selected.date, nowTime),
     };
-  }, [now, prayerEntries]);
+  }, [prayerEntries]);
 
   const englishDate = useMemo(
     () =>
@@ -245,6 +259,11 @@ export default function MuqtadiDashboardPage() {
             {lastPayment ? (
               <div className="mt-1">
                 <p className="text-base font-semibold text-[#1f4a29]">{formatCurrency(lastPayment.amount)}</p>
+                <div className="mt-1">
+                  <Badge className={lastPaymentStatus === 'VERIFIED' ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : lastPaymentStatus === 'PENDING' ? 'bg-amber-100 text-amber-700 border-amber-200' : 'bg-red-100 text-red-700 border-red-200'}>
+                    {lastPaymentStatus || 'PENDING'}
+                  </Badge>
+                </div>
                 <p className="text-xs text-muted-foreground">
                   {new Intl.DateTimeFormat('en-GB', {
                     day: '2-digit',
@@ -255,6 +274,11 @@ export default function MuqtadiDashboardPage() {
                     hour12: true,
                   }).format(new Date(lastPayment.createdAt))}
                 </p>
+                {needsProofResume ? (
+                  <Button asChild size="sm" className="mt-3">
+                    <Link href={lastPaymentResumeHref}>Continue Payment</Link>
+                  </Button>
+                ) : null}
               </div>
             ) : (
               <div className="mt-2">
@@ -304,7 +328,14 @@ export default function MuqtadiDashboardPage() {
           <Button asChild variant="outline" className="w-full">
             <Link href="/app/my-dues">View Payments</Link>
           </Button>
-          {(dashboard?.outstandingAmount ?? dashboard?.remainingAmount ?? 0) > 0 ? (
+          {needsProofResume ? (
+            <Button asChild className="w-full">
+              <Link href={lastPaymentResumeHref}>
+                Continue Payment
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Link>
+            </Button>
+          ) : (dashboard?.outstandingAmount ?? dashboard?.remainingAmount ?? 0) > 0 ? (
             <Button asChild className="w-full">
               <Link href="/app/pay">
                 Pay Now

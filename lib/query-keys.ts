@@ -33,4 +33,13 @@ export const queryKeys = {
   muqtadiDues: (userId?: string) => ['muqtadi-dues', userId ?? 'none'] as const,
   dashboardOverview: (mosqueId?: string) => ['dashboard-overview', mosqueId ?? 'none'] as const,
   muqtadiDashboard: (mosqueId?: string) => ['muqtadi-dashboard', mosqueId ?? 'none'] as const,
+  imamFundHistory: (
+    mosqueId: string | undefined,
+    filters: {
+      page: number;
+      limit: number;
+      month: string;
+      type: string;
+    },
+  ) => ['imam-fund-history', mosqueId ?? 'none', filters] as const,
 };

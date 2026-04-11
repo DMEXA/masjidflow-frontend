@@ -21,11 +21,16 @@ export default function MuqtadiList({
 }) {
   if (isLoading) {
     return (
-      <div className="animate-pulse space-y-3">
-        <div className="h-16 rounded-xl bg-muted" />
-        <div className="h-16 rounded-xl bg-muted" />
-        <div className="h-16 rounded-xl bg-muted" />
-        <div className="h-16 rounded-xl bg-muted" />
+      <div className="space-y-3">
+        {Array.from({ length: 4 }).map((_, index) => (
+          <div key={index} className="rounded-xl border border-border/60 p-4">
+            <div className="animate-pulse space-y-3">
+              <div className="h-4 w-1/3 rounded bg-muted" />
+              <div className="h-3 w-2/3 rounded bg-muted" />
+              <div className="h-9 w-full rounded bg-muted" />
+            </div>
+          </div>
+        ))}
       </div>
     );
   }
@@ -48,7 +53,7 @@ export default function MuqtadiList({
   }
 
   return (
-    <div className="ds-stack">
+    <div className="space-y-3">
       {items.map((item) => (
         <MuqtadiCard
           key={item.id}

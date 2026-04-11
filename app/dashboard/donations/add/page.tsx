@@ -104,7 +104,6 @@ export default function AddDonationPage() {
       }
 
       // 2. Create the donation record
-      console.log('FRONTEND SEND:', amount);
       const createdDonation = await donationsService.create({
         donorName: formData.donorName,
         donorEmail: formData.donorEmail || undefined,

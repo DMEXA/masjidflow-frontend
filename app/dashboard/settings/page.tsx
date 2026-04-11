@@ -1,6 +1,6 @@
 ﻿'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -38,13 +38,13 @@ import {
   type TimeWithPeriodInput,
   type UpdateMosqueData,
 } from '@/services/mosque.service';
-import { muqtadisService, type ImamSalaryCycle, type NextCycleInfo } from '@/services/muqtadis.service';
+import { muqtadisService, type ContributionMode, type ImamSalaryCycle, type NextCycleInfo } from '@/services/muqtadis.service';
 import { paymentSettingsService } from '@/services/payment-settings.service';
 import { authService } from '@/services/auth.service';
 import { useAuthStore } from '@/src/store/auth.store';
 import { getErrorMessage } from '@/src/utils/error';
 import { formatCurrency, formatCycleLabel } from '@/src/utils/format';
-import { parseStrictAmountInput, parseStrictIntegerInput } from '@/src/utils/numeric-input';
+import { parseStrictAmountInput } from '@/src/utils/numeric-input';
 import { ListEmptyState } from '@/components/common/list-empty-state';
 
 type PrayerName = 'fajr' | 'zawal' | 'zuhr' | 'asr' | 'maghrib' | 'isha' | 'jumuah';
@@ -137,9 +137,11 @@ export default function SettingsPage() {
   });
 
   const [salarySaving, setSalarySaving] = useState(false);
+  const [salarySettingsLockedFallback, setSalarySettingsLockedFallback] = useState(false);
+  const [salarySettingsLockReasonFallback, setSalarySettingsLockReasonFallback] = useState<string | null>(null);
   const [salaryForm, setSalaryForm] = useState({
-    totalMuqtadies: '',
-    totalSalary: '',
+    contributionMode: 'HOUSEHOLD' as ContributionMode,
+    contributionAmount: '',
   });
   const [applyToCurrentMonth, setApplyToCurrentMonth] = useState(false);
   const [applyCurrentMonthBlockedReason, setApplyCurrentMonthBlockedReason] = useState<string | null>(null);
@@ -174,6 +176,8 @@ export default function SettingsPage() {
   const [emailOtpEnabled, setEmailOtpEnabled] = useState(false);
 
   const [prayerRows, setPrayerRows] = useState<PrayerRow[]>(BASE_PRAYER_ROWS);
+  const salarySettingsLoadedRef = useRef(false);
+  const salaryMonthsLoadedRef = useRef(false);
 
   const currentPeriod = getCurrentMonthPeriod();
   const currentMonthExists = cycles.some(
@@ -183,15 +187,17 @@ export default function SettingsPage() {
     (entry) => entry.month === currentPeriod.month && entry.year === currentPeriod.year,
   );
 
-  const totalMuqtadiesNumber = parseStrictIntegerInput(salaryForm.totalMuqtadies) ?? 0;
-  const totalSalaryNumber = parseStrictAmountInput(salaryForm.totalSalary) ?? 0;
-  const calculatedPerHead =
-    totalMuqtadiesNumber > 0
-      ? Number((totalSalaryNumber / totalMuqtadiesNumber).toFixed(2))
-      : 0;
-  const currentRatePerHead = Number(currentCycle?.ratePerPerson ?? currentCycle?.perHead ?? 0);
+  const contributionAmountNumber = parseStrictAmountInput(salaryForm.contributionAmount) ?? 0;
+  const currentCycleContributionAmount = Number(
+    currentCycle?.contributionAmount ?? currentCycle?.ratePerPerson ?? currentCycle?.perHead ?? 0,
+  );
+  const currentCycleContributionMode =
+    ((currentCycle?.contributionMode ?? currentCycle?.contributionType ?? 'HOUSEHOLD') as ContributionMode);
   const hasCurrentMonthRateMismatch =
-    Boolean(currentCycle) && calculatedPerHead > 0 && Math.abs(currentRatePerHead - calculatedPerHead) >= 0.01;
+    Boolean(currentCycle) && contributionAmountNumber > 0 && (
+      currentCycleContributionMode !== salaryForm.contributionMode
+      || Math.abs(currentCycleContributionAmount - contributionAmountNumber) >= 0.01
+    );
   const backendReportedPaymentsStarted = Boolean((currentCycle as any)?.paymentsStarted === true);
   const applyToCurrentMonthDisabled =
     !hasCurrentMonthRateMismatch ||
@@ -233,13 +239,20 @@ export default function SettingsPage() {
   }, [user?.emailOtpEnabled]);
 
   useEffect(() => {
+    if (salarySettingsLoadedRef.current) {
+      return;
+    }
+    salarySettingsLoadedRef.current = true;
+
     const loadSalarySettings = async () => {
       try {
         const settings = await muqtadisService.getSettings();
         setSalaryForm({
-          totalMuqtadies: settings.totalMuqtadies > 0 ? String(settings.totalMuqtadies) : '',
-          totalSalary: settings.totalSalary > 0 ? String(settings.totalSalary) : '',
+          contributionMode: settings.contributionMode,
+          contributionAmount: settings.contributionAmount > 0 ? String(settings.contributionAmount) : '',
         });
+        setSalarySettingsLockedFallback(Boolean(settings.settingsLocked));
+        setSalarySettingsLockReasonFallback(settings.settingsLockReason ?? null);
 
         const settingsAny = settings as any;
         if (settingsAny?.currentMonthPaymentsStarted === true) {
@@ -247,6 +260,7 @@ export default function SettingsPage() {
           setApplyToCurrentMonth(false);
         }
       } catch (error) {
+        setSalaryForm({ contributionMode: 'HOUSEHOLD', contributionAmount: '' });
         toast.error(getErrorMessage(error, 'Failed to load salary settings'));
       }
     };
@@ -267,34 +281,46 @@ export default function SettingsPage() {
   };
 
   useEffect(() => {
+    if (salaryMonthsLoadedRef.current) {
+      return;
+    }
+    salaryMonthsLoadedRef.current = true;
+
     void loadSalaryMonths();
   }, []);
 
+  const paymentSettingsQuery = useQuery({
+    queryKey: ['payment-settings', currentMosque?.id ?? 'none'],
+    queryFn: () => paymentSettingsService.get(),
+    enabled: Boolean(currentMosque?.id),
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    retry: false,
+  });
+
   useEffect(() => {
-    const loadPaymentSettings = async () => {
-      const mosqueId = currentMosque?.id;
-      if (!mosqueId) {
-        return;
-      }
+    if (paymentSettingsQuery.error) {
+      toast.error(getErrorMessage(paymentSettingsQuery.error, 'Failed to load payment settings'));
+    }
+  }, [paymentSettingsQuery.error]);
 
-      try {
-        const saved = await paymentSettingsService.get();
-        setPaymentForm({
-          payment_upi: saved?.upiId ?? '',
-          phone_number: saved?.phoneNumber ?? saved?.adminWhatsappNumber ?? '',
-          bank_account_name: saved?.bankAccountName ?? '',
-          bank_account_number: saved?.bankAccount ?? '',
-          bank_ifsc: saved?.ifsc ?? '',
-          bank_name: saved?.bankName ?? '',
-          payment_instructions: saved?.paymentInstructions ?? '',
-        });
-      } catch (error) {
-        toast.error(getErrorMessage(error, 'Failed to load payment settings'));
-      }
-    };
+  useEffect(() => {
+    const saved = paymentSettingsQuery.data;
+    if (!saved) {
+      return;
+    }
 
-    void loadPaymentSettings();
-  }, [currentMosque?.id]);
+    setPaymentForm({
+      payment_upi: saved.upiId ?? '',
+      phone_number: saved.phoneNumber ?? saved.adminWhatsappNumber ?? '',
+      bank_account_name: saved.bankAccountName ?? '',
+      bank_account_number: saved.bankAccount ?? '',
+      bank_ifsc: saved.ifsc ?? '',
+      bank_name: saved.bankName ?? '',
+      payment_instructions: saved.paymentInstructions ?? '',
+    });
+  }, [paymentSettingsQuery.data]);
 
   const getMosqueDetails = async () => {
     if (!currentMosque?.id) {
@@ -307,6 +333,9 @@ export default function SettingsPage() {
     queryKey: ['mosque'],
     queryFn: getMosqueDetails,
     enabled: Boolean(currentMosque?.id),
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    retry: false,
   });
 
   const prayerTimesQuery = useQuery({
@@ -314,14 +343,25 @@ export default function SettingsPage() {
     queryFn: () => mosqueService.getPrayerTimes(currentMosque!.id),
     enabled: Boolean(currentMosque?.id),
     staleTime: 30_000,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    retry: false,
   });
 
   const nextCycleInfoQuery = useQuery<NextCycleInfo>({
     queryKey: ['muqtadi-next-cycle-info'],
     queryFn: () => muqtadisService.getNextCycleInfo(),
     staleTime: 30_000,
-    refetchInterval: 60_000,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    retry: false,
   });
+  const hasActiveCycle = nextCycleInfoQuery.data?.hasActiveCycle === true;
+  const settingsLocked = Boolean(nextCycleInfoQuery.data?.settingsLocked ?? salarySettingsLockedFallback);
+  const settingsLockReason =
+    nextCycleInfoQuery.data?.settingsLockReason
+    ?? salarySettingsLockReasonFallback
+    ?? 'Settings are locked because payments have already started in this cycle. You can update them for the next cycle.';
 
   useEffect(() => {
     if (nextCycleInfoQuery.error) {
@@ -330,6 +370,11 @@ export default function SettingsPage() {
   }, [nextCycleInfoQuery.error]);
 
   useEffect(() => {
+    if (!hasActiveCycle) {
+      setCountdown({ days: 0, hours: 0, minutes: 0 });
+      return;
+    }
+
     const startsAt = nextCycleInfoQuery.data?.nextCycle?.startsAt;
     if (!startsAt) {
       return;
@@ -339,7 +384,7 @@ export default function SettingsPage() {
     update();
     const timerId = window.setInterval(update, 60_000);
     return () => window.clearInterval(timerId);
-  }, [nextCycleInfoQuery.data?.nextCycle?.startsAt]);
+  }, [hasActiveCycle, nextCycleInfoQuery.data?.nextCycle?.startsAt]);
 
   useEffect(() => {
     const nextInfo = nextCycleInfoQuery.data;
@@ -347,11 +392,20 @@ export default function SettingsPage() {
       return;
     }
 
+    if (!nextInfo.hasActiveCycle) {
+      setNextCycleMode('update-next');
+      setApplyToCurrentMonth(false);
+      setNextCycleLoaded(true);
+      return;
+    }
+
     if (nextInfo.hasPendingSettings) {
       setNextCycleMode('update-next');
       setSalaryForm({
-        totalMuqtadies: String(nextInfo.settings.totalMuqtadies),
-        totalSalary: String(nextInfo.settings.totalSalary),
+        contributionMode: nextInfo.settings.contributionMode,
+        contributionAmount: Number(nextInfo.settings.contributionAmount) > 0
+          ? String(nextInfo.settings.contributionAmount)
+          : '',
       });
     }
 
@@ -460,14 +514,21 @@ export default function SettingsPage() {
   };
 
   const saveSalarySettings = async (applyNow: boolean) => {
-    if (!applyNow && nextCycleMode === 'use-current') {
-      const totalMuqtadiesValue = parseStrictIntegerInput(salaryForm.totalMuqtadies);
-      const totalSalaryValue = parseStrictAmountInput(salaryForm.totalSalary);
-      if (totalMuqtadiesValue === null || totalMuqtadiesValue <= 0) {
-        toast.error('Load current salary settings before saving');
-        return;
-      }
-      if (totalSalaryValue === null || totalSalaryValue <= 0) {
+    if (settingsLocked) {
+      toast.error('Cannot change settings after payments have started. Changes will apply to next cycle.');
+      return;
+    }
+
+    if (hasActiveCycle && !applyNow && nextCycleMode === 'use-current') {
+      const fallbackSettings = nextCycleInfoQuery.data?.settings;
+      const fallbackAmount = Number(fallbackSettings?.contributionAmount ?? fallbackSettings?.totalSalary ?? 0);
+      const contributionAmountValue =
+        parseStrictAmountInput(salaryForm.contributionAmount)
+        ?? (Number.isFinite(fallbackAmount) ? fallbackAmount : 0);
+      const contributionModeValue =
+        (salaryForm.contributionMode || fallbackSettings?.contributionMode || 'HOUSEHOLD') as ContributionMode;
+
+      if (!Number.isFinite(contributionAmountValue) || contributionAmountValue <= 0) {
         toast.error('Load current salary settings before saving');
         return;
       }
@@ -475,9 +536,10 @@ export default function SettingsPage() {
       setSalarySaving(true);
       try {
         await muqtadisService.updateSettings({
+          contributionMode: contributionModeValue,
+          contributionAmount: contributionAmountValue,
           imamSalarySystem: 'EQUAL',
-          totalMuqtadies: totalMuqtadiesValue,
-          totalSalary: totalSalaryValue,
+          totalSalary: contributionAmountValue,
           applyToCurrentMonth: false,
           useCurrentSettingsForNextCycle: true,
         });
@@ -491,16 +553,10 @@ export default function SettingsPage() {
       return;
     }
 
-    const totalMuqtadiesValue = parseStrictIntegerInput(salaryForm.totalMuqtadies);
-    const totalSalaryValue = parseStrictAmountInput(salaryForm.totalSalary);
+    const contributionAmountValue = parseStrictAmountInput(salaryForm.contributionAmount);
 
-    if (totalMuqtadiesValue === null || totalMuqtadiesValue <= 0) {
-      toast.error('Total Muqtadies must be a whole number greater than 0');
-      return;
-    }
-
-    if (totalSalaryValue === null || totalSalaryValue <= 0) {
-      toast.error('Total Salary must be greater than 0');
+    if (contributionAmountValue === null || contributionAmountValue <= 0) {
+      toast.error('Contribution amount must be greater than 0');
       return;
     }
 
@@ -512,18 +568,19 @@ export default function SettingsPage() {
     setSalarySaving(true);
     try {
       const updated = await muqtadisService.updateSettings({
+        contributionMode: salaryForm.contributionMode,
+        contributionAmount: contributionAmountValue,
         imamSalarySystem: 'EQUAL',
-        totalMuqtadies: totalMuqtadiesValue,
-        totalSalary: totalSalaryValue,
+        totalSalary: contributionAmountValue,
         applyToCurrentMonth: applyNow,
-        isNextMonth: !applyNow && nextCycleMode === 'update-next',
-        useCurrentSettingsForNextCycle: !applyNow && nextCycleMode === 'use-current',
+        isNextMonth: hasActiveCycle && !applyNow && nextCycleMode === 'update-next',
+        useCurrentSettingsForNextCycle: hasActiveCycle && !applyNow && nextCycleMode === 'use-current',
       });
 
       if (applyNow) {
         setSalaryForm({
-          totalMuqtadies: String(updated.totalMuqtadies),
-          totalSalary: String(updated.totalSalary),
+          contributionMode: updated.contributionMode,
+          contributionAmount: String(updated.contributionAmount),
         });
       }
 
@@ -572,7 +629,7 @@ export default function SettingsPage() {
         month: currentPeriod.month,
         year: currentPeriod.year,
       });
-      toast.success(`Month created at ${formatCurrency(created.perHead)} per person`);
+      toast.success(`Month created with ${formatCurrency(created.contributionAmount ?? created.perHead)} fixed contribution`);
       await loadSalaryMonths();
     } catch (error) {
       toast.error(getErrorMessage(error, 'Failed to create salary month'));
@@ -1061,119 +1118,133 @@ export default function SettingsPage() {
                   <Settings className="h-5 w-5" />
                   <h2 className="text-lg font-semibold text-foreground">Salary Settings</h2>
                 </div>
-                {nextCycleInfoQuery.data?.hasPendingSettings ? (
+                {hasActiveCycle && nextCycleInfoQuery.data?.hasPendingSettings ? (
                   <Badge variant="secondary">Will apply next month</Badge>
                 ) : null}
               </div>
 
-              <div className="rounded-xl border bg-muted/40 p-4 space-y-2">
-                <p className="text-sm text-muted-foreground">
-                  Next cycle: {nextCycleInfoQuery.data ? formatCycleLabel(nextCycleInfoQuery.data.nextCycle.month, nextCycleInfoQuery.data.nextCycle.year) : 'Loading...'}
-                </p>
-                <p className="text-base font-medium text-foreground">
-                  Next salary cycle starts in {countdown.days} days {countdown.hours} hours {countdown.minutes} minutes
-                </p>
-              </div>
-
-              <div className="space-y-3 rounded-xl border p-3">
-                <div className="flex items-start gap-2">
-                  <Checkbox
-                    id="salary-next-cycle-current"
-                    checked={nextCycleMode === 'use-current'}
-                    onCheckedChange={(checked) => {
-                      if (Boolean(checked)) {
-                        setNextCycleMode('use-current');
-                      }
-                    }}
-                  />
-                  <Label htmlFor="salary-next-cycle-current" className="text-sm leading-6 cursor-pointer">
-                    Use current settings
-                  </Label>
+              {hasActiveCycle && nextCycleInfoQuery.data?.nextCycle ? (
+                <div className="rounded-xl border bg-muted/40 p-4 space-y-2">
+                  <p className="text-sm text-muted-foreground">
+                    Next cycle: {formatCycleLabel(nextCycleInfoQuery.data.nextCycle.month, nextCycleInfoQuery.data.nextCycle.year)}
+                  </p>
+                  <p className="text-base font-medium text-foreground">
+                    Next salary cycle starts in {countdown.days} days {countdown.hours} hours {countdown.minutes} minutes
+                  </p>
                 </div>
+              ) : null}
 
-                <div className="flex items-start gap-2">
-                  <Checkbox
-                    id="salary-next-cycle-update"
-                    checked={nextCycleMode === 'update-next'}
-                    onCheckedChange={(checked) => {
-                      if (Boolean(checked)) {
-                        setNextCycleMode('update-next');
-                      }
-                    }}
-                  />
-                  <Label htmlFor="salary-next-cycle-update" className="text-sm leading-6 cursor-pointer">
-                    Update next month settings
-                  </Label>
+              {hasActiveCycle ? (
+                <div className="space-y-3 rounded-xl border p-3">
+                  <div className="flex items-start gap-2">
+                    <Checkbox
+                      id="salary-next-cycle-current"
+                      checked={nextCycleMode === 'use-current'}
+                      disabled={settingsLocked}
+                      onCheckedChange={(checked) => {
+                        if (Boolean(checked)) {
+                          setNextCycleMode('use-current');
+                        }
+                      }}
+                    />
+                    <Label htmlFor="salary-next-cycle-current" className="text-sm leading-6 cursor-pointer">
+                      Use current settings
+                    </Label>
+                  </div>
+
+                  <div className="flex items-start gap-2">
+                    <Checkbox
+                      id="salary-next-cycle-update"
+                      checked={nextCycleMode === 'update-next'}
+                      disabled={settingsLocked}
+                      onCheckedChange={(checked) => {
+                        if (Boolean(checked)) {
+                          setNextCycleMode('update-next');
+                        }
+                      }}
+                    />
+                    <Label htmlFor="salary-next-cycle-update" className="text-sm leading-6 cursor-pointer">
+                      Update next month settings
+                    </Label>
+                  </div>
                 </div>
-              </div>
+              ) : null}
 
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="salary-total-muqtadies">Total Muqtadies</Label>
-                  <Input
-                    id="salary-total-muqtadies"
-                    type="text"
-                    inputMode="numeric"
-                    pattern="^\d+$"
-                    min={1}
-                    step={1}
-                    className={fieldClass}
-                    value={salaryForm.totalMuqtadies}
-                    disabled={nextCycleMode !== 'update-next'}
-                    onChange={(e) =>
-                      setSalaryForm((prev) => ({ ...prev, totalMuqtadies: e.target.value }))
+                  <Label htmlFor="salary-contribution-mode">Contribution Mode</Label>
+                  <Select
+                    value={salaryForm.contributionMode}
+                    disabled={settingsLocked || (hasActiveCycle && nextCycleMode !== 'update-next')}
+                    onValueChange={(value: ContributionMode) =>
+                      setSalaryForm((prev) => ({ ...prev, contributionMode: value }))
                     }
-                  />
+                  >
+                    <SelectTrigger id="salary-contribution-mode" className={fieldClass}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="HOUSEHOLD">Per Household</SelectItem>
+                      <SelectItem value="PERSON">Per Person</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="salary-total-salary">Total Salary</Label>
+                  <Label htmlFor="salary-contribution-amount">Contribution Amount</Label>
                   <Input
-                    id="salary-total-salary"
+                    id="salary-contribution-amount"
                     type="text"
                     inputMode="decimal"
                     pattern="^\d+(?:\.\d{1,2})?$"
                     min={0}
                     step="0.01"
                     className={fieldClass}
-                    value={salaryForm.totalSalary}
-                    disabled={nextCycleMode !== 'update-next'}
+                    value={salaryForm.contributionAmount}
+                    disabled={settingsLocked || (hasActiveCycle && nextCycleMode !== 'update-next')}
                     onChange={(e) =>
-                      setSalaryForm((prev) => ({ ...prev, totalSalary: e.target.value }))
+                      setSalaryForm((prev) => ({ ...prev, contributionAmount: e.target.value }))
                     }
                   />
                 </div>
               </div>
 
-              {nextCycleMode !== 'update-next' ? (
+              {hasActiveCycle && nextCycleMode !== 'update-next' ? (
                 <p className="text-xs text-muted-foreground">
                   Current salary configuration will continue for the upcoming cycle.
                 </p>
               ) : null}
 
-              <div className="rounded-xl border bg-muted/40 p-4">
-                <p className="text-sm text-muted-foreground">Per Muqtadi Contribution</p>
-                <p className="text-2xl font-semibold">
-                  {formatCurrency(totalMuqtadiesNumber > 0 ? totalSalaryNumber / totalMuqtadiesNumber : 0)}
-                </p>
-              </div>
-
-              {hasCurrentMonthRateMismatch ? (
+              {settingsLocked ? (
                 <Alert>
-                  <AlertTitle>Current Month Rate Mismatch Detected</AlertTitle>
+                  <AlertTitle>Salary Settings Locked</AlertTitle>
                   <AlertDescription>
-                    Current cycle rate is {formatCurrency(currentRatePerHead)} but settings compute {formatCurrency(calculatedPerHead)}. You can apply the new rate to the current month only if no payments have started.
+                    {settingsLockReason}
                   </AlertDescription>
                 </Alert>
               ) : null}
 
-              {hasCurrentMonthRateMismatch ? (
+              <div className="rounded-xl border bg-muted/40 p-4">
+                <p className="text-sm text-muted-foreground">Fixed Contribution Preview</p>
+                <p className="text-2xl font-semibold">{formatCurrency(contributionAmountNumber)}</p>
+              </div>
+
+              {hasActiveCycle && hasCurrentMonthRateMismatch ? (
+                <Alert>
+                  <AlertTitle>Current Month Contribution Mismatch Detected</AlertTitle>
+                  <AlertDescription>
+                    Current cycle is {currentCycleContributionMode} at {formatCurrency(currentCycleContributionAmount)} but settings are {salaryForm.contributionMode} at {formatCurrency(contributionAmountNumber)}. You can apply the new contribution to the current month only if no payments have started.
+                  </AlertDescription>
+                </Alert>
+              ) : null}
+
+              {hasActiveCycle && hasCurrentMonthRateMismatch ? (
                 <div className="space-y-2 rounded-xl border p-3">
                   <div className="flex items-start gap-2">
                     <Checkbox
                       id="salary-apply-current-month"
                       checked={applyToCurrentMonth}
-                      disabled={applyToCurrentMonthDisabled}
+                      disabled={settingsLocked || applyToCurrentMonthDisabled}
                       onCheckedChange={(checked) => setApplyToCurrentMonth(Boolean(checked))}
                     />
                     <Label htmlFor="salary-apply-current-month" className="text-sm leading-6 cursor-pointer">
@@ -1193,7 +1264,14 @@ export default function SettingsPage() {
                 </div>
               ) : null}
 
-              <Button type="button" onClick={handleSaveSalarySettings} disabled={salarySaving}>
+              {!hasActiveCycle ? (
+                <Button type="button" variant="secondary" onClick={handleStartMonth} disabled={monthSaving || currentMonthExists}>
+                  {monthSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  Start First Cycle
+                </Button>
+              ) : null}
+
+              <Button type="button" onClick={handleSaveSalarySettings} disabled={salarySaving || settingsLocked}>
                 {salarySaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                 Save Salary Settings
               </Button>
@@ -1280,10 +1358,10 @@ export default function SettingsPage() {
                           <div>
                             <p className="font-medium">{formatCycleLabel(cycle.month, cycle.year)}</p>
                             <p className="text-muted-foreground">Total Salary: {formatCurrency(cycle.salaryAmount)}</p>
-                            <p className="text-muted-foreground">Muqtadis: {cycle.totalMuqtadies}</p>
+                            <p className="text-muted-foreground">Mode: {cycle.contributionMode ?? cycle.contributionType ?? 'HOUSEHOLD'}</p>
                           </div>
                           <div className="text-right">
-                            <p>Per Person: {formatCurrency(cycle.perHead)}</p>
+                            <p>Contribution: {formatCurrency(cycle.contributionAmount ?? cycle.perHead)}</p>
                             <p className="text-xs text-muted-foreground">{new Date(cycle.createdAt).toLocaleDateString()}</p>
                           </div>
                         </div>
