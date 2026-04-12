@@ -25,6 +25,7 @@ import { formatCurrency, formatCycleLabel, getCycleStatus } from '@/src/utils/fo
 import { getErrorMessage } from '@/src/utils/error';
 import { parseStrictAmountInput } from '@/src/utils/numeric-input';
 import { openExternalUrl } from '@/src/utils/open-external-url';
+import { launchUpiDeepLink } from '@/src/utils/upi-launch';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '@/lib/query-keys';
 import { QRCodeSVG } from 'qrcode.react';
@@ -452,7 +453,7 @@ export default function PayPage() {
 
     if (isMobileDevice()) {
       toast.info('Opening your UPI app...');
-      window.location.href = upiDeepLink;
+      launchUpiDeepLink(upiDeepLink);
       return;
     }
 

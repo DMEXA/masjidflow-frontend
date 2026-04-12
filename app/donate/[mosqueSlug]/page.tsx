@@ -24,6 +24,7 @@ import { fundsService } from '@/services/funds.service';
 import { getErrorMessage, isRequestCanceled } from '@/src/utils/error';
 import { isStrictAmountString } from '@/src/utils/numeric-input';
 import { openExternalUrl } from '@/src/utils/open-external-url';
+import { launchUpiDeepLink } from '@/src/utils/upi-launch';
 
 const DEVICE_ID_KEY = 'mld_public_device_id';
 
@@ -47,7 +48,7 @@ function isMobileDevice(): boolean {
 
 function buildPublicUpiNote(mosqueName: string): string {
   const normalized = mosqueName.trim().replace(/\s+/g, ' ');
-  const note = `Donation | ${normalized || 'Masjid'}`;
+  const note = `Donation ${normalized || 'Masjid'}`;
   return note.length > 80 ? `${note.slice(0, 80).trim()}...` : note;
 }
 
@@ -305,7 +306,7 @@ export default function DonateBySlugPage() {
 
       if (initiated.upiDeepLink && isMobileDevice()) {
         toast.info('Opening your UPI app...');
-        window.location.href = initiated.upiDeepLink;
+        launchUpiDeepLink(initiated.upiDeepLink);
       } else if (initiated.upiDeepLink) {
         setShowDesktopUpiModal(true);
         toast.info('Open this page on your mobile device to complete the payment.');
