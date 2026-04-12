@@ -41,13 +41,22 @@ function isMobileDevice(): boolean {
   return mobileRegex.test(userAgent);
 }
 
-function buildUpiDeepLink(input: { upiId: string; payeeName: string; amount: number; note: string }): string {
+function buildUpiDeepLink(input: {
+  upiId: string;
+  payeeName: string;
+  amount: number;
+  note: string;
+  transactionRef: string;
+}): string {
   const params = new URLSearchParams({
     pa: input.upiId.trim(),
     pn: input.payeeName.trim(),
     am: input.amount.toFixed(2),
     cu: 'INR',
     tn: input.note.trim(),
+    tr: input.transactionRef,
+    mc: '0000',
+    orgid: '000000',
   });
   return `upi://pay?${params.toString()}`;
 }
@@ -115,6 +124,7 @@ export default function PayPage() {
   const [appliedResumeDefaults, setAppliedResumeDefaults] = useState(false);
   const [resumeBlocked, setResumeBlocked] = useState(false);
   const [exactResumeMatched, setExactResumeMatched] = useState(false);
+  const [upiTransactionRef, setUpiTransactionRef] = useState('');
 
   useEffect(() => {
     const loadPaymentConfig = async () => {
@@ -207,6 +217,7 @@ export default function PayPage() {
   const upiDeepLink = useMemo(() => {
     if (!paymentConfig?.upiId?.trim()) return '';
     if (!amountIsValid || !parsedAmount) return '';
+    if (!upiTransactionRef) return '';
     const payeeName = (mosque?.name || 'MasjidLedger').trim();
     const note = buildUpiVerificationNote({
       month: selectedDue?.month,
@@ -219,6 +230,7 @@ export default function PayPage() {
       payeeName,
       amount: parsedAmount,
       note,
+      transactionRef: upiTransactionRef,
     });
   }, [
     amountIsValid,
@@ -229,6 +241,7 @@ export default function PayPage() {
     profileQuery.data?.name,
     selectedDue?.month,
     selectedDue?.year,
+    upiTransactionRef,
     user?.name,
   ]);
 
@@ -446,14 +459,26 @@ export default function PayPage() {
       return;
     }
 
-    if (!upiDeepLink) {
+    const nextTransactionRef = `MLD-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+    setUpiTransactionRef(nextTransactionRef);
+
+    const payeeName = (mosque?.name || 'MasjidLedger').trim();
+    const freshUpiDeepLink = buildUpiDeepLink({
+      upiId: paymentConfig.upiId.trim(),
+      payeeName,
+      amount: numericAmount,
+      note: upiVerificationNote,
+      transactionRef: nextTransactionRef,
+    });
+
+    if (!freshUpiDeepLink) {
       toast.error('Unable to generate UPI link');
       return;
     }
 
     if (isMobileDevice()) {
       toast.info('Opening your UPI app...');
-      launchUpiDeepLink(upiDeepLink);
+      launchUpiDeepLink(freshUpiDeepLink);
       return;
     }
 

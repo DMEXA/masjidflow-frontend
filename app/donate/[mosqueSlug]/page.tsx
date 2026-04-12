@@ -53,12 +53,16 @@ function buildPublicUpiNote(mosqueName: string): string {
 }
 
 function buildPublicUpiDeepLink(input: { upiId: string; upiName: string; amount: string; note: string }): string {
+  const transactionRef = `MLD-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
   const params = new URLSearchParams({
     pa: input.upiId.trim(),
     pn: input.upiName.trim(),
     am: input.amount.trim(),
     cu: 'INR',
     tn: input.note.trim(),
+    tr: transactionRef,
+    mc: '0000',
+    orgid: '000000',
   });
   return `upi://pay?${params.toString()}`;
 }
