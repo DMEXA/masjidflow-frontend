@@ -1,6 +1,7 @@
 import type { LucideIcon } from 'lucide-react';
 import {
   LayoutDashboard,
+  Megaphone,
   HandCoins,
   CircleDollarSign,
   Wallet,
@@ -84,6 +85,7 @@ export function getSidebarNavGroups(input: SidebarConfigInput): SidebarNavGroup[
         items: [
           { href: '/app/meekaat', label: 'Prayer Times', icon: LayoutDashboard },
           { href: '/app/announcements', label: 'Announcements', icon: FileText },
+          { href: mosqueSlug ? `/app/donate/${mosqueSlug}` : '/app/donate', label: 'Donate', icon: HandCoins },
           { href: '/app/notifications', label: 'Notifications', icon: ShieldCheck },
         ],
       },
@@ -192,7 +194,7 @@ export function getSidebarNavGroups(input: SidebarConfigInput): SidebarNavGroup[
   return [];
 }
 
-export function getMobileSidebarNavItems(role?: UserRole): MobileSidebarNavItem[] {
+export function getMobileSidebarNavItems(role?: UserRole, mosqueSlug?: string): MobileSidebarNavItem[] {
   if (role === 'muqtadi') {
     return [
       {
@@ -210,13 +212,19 @@ export function getMobileSidebarNavItems(role?: UserRole): MobileSidebarNavItem[
       {
         href: '/app/pay',
         label: 'Pay',
-        icon: HandCoins,
+        icon: CircleDollarSign,
         active: (pathname) => pathname.startsWith('/app/pay'),
       },
       {
+        href: mosqueSlug ? `/app/donate/${mosqueSlug}` : '/app/donate',
+        label: 'Donate',
+        icon: HandCoins,
+        active: (pathname) => pathname.startsWith('/donate') || pathname.startsWith('/app/donate'),
+      },
+      {
         href: '/app/announcements',
-        label: 'Announcements',
-        icon: FileText,
+        label: 'Announ.',
+        icon: Megaphone,
         active: (pathname) => pathname.startsWith('/app/announcements'),
       },
       {

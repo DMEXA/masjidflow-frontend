@@ -14,6 +14,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { getSafeLimit } from '@/src/utils/pagination';
 import { ListEmptyState } from '@/components/common/list-empty-state';
 import { useDashboardOverviewQuery } from '@/hooks/useDashboardOverviewQuery';
+import { CardSkeleton, ListSkeleton } from '@/components/common/loading-skeletons';
 import {
   Receipt,
   Wallet,
@@ -118,34 +119,45 @@ export default function DashboardPage() {
 
       {/* Stats Grid */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard
-          title="Total Donations"
-          value={dashboardQuery.isLoading ? 'Loading...' : formatCurrency(stats.totalDonations, '₹')}
-          description="All confirmed donation value"
-          icon={Wallet}
-          tone="green"
-        />
-        <StatCard
-          title="Total Expenses"
-          value={dashboardQuery.isLoading ? 'Loading...' : formatCurrency(stats.totalExpenses, '₹')}
-          description="Recorded outgoing payments"
-          icon={Receipt}
-          tone="red"
-        />
-        <StatCard
-          title="Net Balance"
-          value={dashboardQuery.isLoading ? 'Loading...' : formatCurrency(stats.net, '₹')}
-          description="Current remaining balance"
-          icon={CircleDollarSign}
-          tone="blue"
-        />
-        <StatCard
-          title="Members"
-          value={dashboardQuery.isLoading ? 'Loading...' : stats.totalMembers.toString()}
-          description="Active members tracked"
-          icon={Users}
-          tone="purple"
-        />
+        {dashboardQuery.isLoading ? (
+          <>
+            <CardSkeleton className="h-24 w-full" />
+            <CardSkeleton className="h-24 w-full" />
+            <CardSkeleton className="h-24 w-full" />
+            <CardSkeleton className="h-24 w-full" />
+          </>
+        ) : (
+          <>
+            <StatCard
+              title="Total Donations"
+              value={formatCurrency(stats.totalDonations, '₹')}
+              description="All confirmed donation value"
+              icon={Wallet}
+              tone="green"
+            />
+            <StatCard
+              title="Total Expenses"
+              value={formatCurrency(stats.totalExpenses, '₹')}
+              description="Recorded outgoing payments"
+              icon={Receipt}
+              tone="red"
+            />
+            <StatCard
+              title="Net Balance"
+              value={formatCurrency(stats.net, '₹')}
+              description="Current remaining balance"
+              icon={CircleDollarSign}
+              tone="blue"
+            />
+            <StatCard
+              title="Members"
+              value={stats.totalMembers.toString()}
+              description="Active members tracked"
+              icon={Users}
+              tone="purple"
+            />
+          </>
+        )}
       </div>
 
       {/* Charts Row */}
@@ -219,11 +231,7 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             {dashboardQuery.isLoading ? (
-              <div className="animate-pulse space-y-3">
-                <div className="h-16 rounded-xl bg-muted" />
-                <div className="h-16 rounded-xl bg-muted" />
-                <div className="h-16 rounded-xl bg-muted" />
-              </div>
+              <ListSkeleton count={3} className="h-12 w-full" />
             ) : (dashboardQuery.data?.recentDonations.length ?? 0) === 0 ? (
               <ListEmptyState
                 title="No donations yet"

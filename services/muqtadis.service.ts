@@ -381,6 +381,7 @@ export interface UpdateMuqtadiPaymentPayload {
   cycleId?: string;
   amount?: number;
   method?: 'CASH' | 'UPI' | 'BANK';
+  status?: 'PENDING' | 'VERIFIED' | 'REJECTED';
   reference?: string;
   utr?: string;
   screenshotUrl?: string;
@@ -820,10 +821,15 @@ export const muqtadisService = {
   async getMyProfile(): Promise<{
     id: string;
     name: string;
+    fatherName: string;
+    email?: string | null;
+    whatsappNumber?: string | null;
     category?: string | null;
     phone?: string | null;
     notes?: string | null;
     householdMembers: number;
+    memberNames?: string[];
+    dependentNames?: string[];
     isVerified?: boolean;
     status: MuqtadiStatus;
     householdLocked: boolean;
@@ -832,7 +838,14 @@ export const muqtadisService = {
     return response.data;
   },
 
-  async updateMyProfile(payload: { name?: string; phone?: string; notes?: string }) {
+  async updateMyProfile(payload: {
+    name?: string;
+    phone?: string;
+    whatsappNumber?: string;
+    email?: string;
+    dependentNames?: string[];
+    notes?: string;
+  }) {
     const response = await api.post('/muqtadis/my/profile', payload);
     return response.data;
   },

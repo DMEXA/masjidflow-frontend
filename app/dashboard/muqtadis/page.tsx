@@ -1,11 +1,13 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Loader2,
   Plus,
   Copy,
+  ExternalLink,
+  ImageOff,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { PageHeader } from '@/components/dashboard/page-header';
@@ -59,6 +61,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import MuqtadiStats from '@/components/muqtadis/MuqtadiStats';
 import MuqtadiFilters from '@/components/muqtadis/MuqtadiFilters';
 import MuqtadiList from '@/components/muqtadis/MuqtadiList';
+import { DrawerSkeleton } from '@/components/common/loading-skeletons';
 import {
   useMuqtadis,
 } from '@/hooks/useMuqtadis';
@@ -104,6 +107,9 @@ export default function MuqtadisPage() {
   const [pendingPaymentVerificationId, setPendingPaymentVerificationId] = useState<string | null>(null);
   const [editingPaymentId, setEditingPaymentId] = useState<string | null>(null);
   const [pendingPaymentDeleteId, setPendingPaymentDeleteId] = useState<string | null>(null);
+  const [pendingPaymentRejectId, setPendingPaymentRejectId] = useState<string | null>(null);
+  const [selectedPaymentDetailId, setSelectedPaymentDetailId] = useState<string | null>(null);
+  const [paymentDetailImageFailed, setPaymentDetailImageFailed] = useState(false);
   const [inviteLink, setInviteLink] = useState('');
   const [inviteUsageMeta, setInviteUsageMeta] = useState<{ maxUses?: number | null; usedCount?: number }>({});
   const [isInviteLinkDialogOpen, setIsInviteLinkDialogOpen] = useState(false);
@@ -117,6 +123,7 @@ export default function MuqtadisPage() {
   const [paymentReference, setPaymentReference] = useState('');
   const [paymentNotes, setPaymentNotes] = useState('');
   const [imamFundSummary, setImamFundSummary] = useState({ totalIncome: 0, totalExpense: 0, balance: 0 });
+  const detailRequestIdRef = useRef(0);
   const resizeDependents = (householdMembersValue: string, currentDependents: string[]) => {
     const parsed = parseStrictIntegerInput(householdMembersValue);
     const householdCount = parsed !== null && parsed > 0 ? Math.min(parsed, 50) : 1;
@@ -165,10 +172,17 @@ export default function MuqtadisPage() {
   }, [fetchImamFundSummary]);
 
   const refreshDetails = useCallback(async (id: string) => {
+    const requestId = ++detailRequestIdRef.current;
     try {
       const detail = await muqtadisService.getById(id);
+      if (requestId !== detailRequestIdRef.current) {
+        return;
+      }
       setSelectedDetails(detail);
     } catch (error) {
+      if (requestId !== detailRequestIdRef.current) {
+        return;
+      }
       toast.error(getErrorMessage(error, 'Failed to load household details'));
     }
   }, []);
@@ -247,6 +261,15 @@ export default function MuqtadisPage() {
     setPaymentReference('');
     setPaymentNotes('');
     setIsPaymentOpen(true);
+  };
+
+  const openPaymentDetails = (item: Muqtadi) => {
+    setSelectedMuqtadi(item);
+    setSelectedDetails(null);
+    setSelectedPaymentDetailId(null);
+    setPaymentDetailImageFailed(false);
+    setIsDrawerOpen(true);
+    void refreshDetails(item.id);
   };
 
   const openPaymentAdjustment = (item: Muqtadi, payment: MuqtadiDetails['payments'][number]) => {
@@ -464,6 +487,25 @@ export default function MuqtadisPage() {
     }
   };
 
+  const handleRejectPayment = async (transactionId: string) => {
+    if (!selectedMuqtadi) return;
+
+    setSubmitting(true);
+    try {
+      await muqtadisService.updatePayment(transactionId, { status: 'REJECTED' });
+      toast.success('Payment marked as rejected');
+      await invalidateMoneyQueries(queryClient);
+      await actions.fetchItems();
+      await fetchImamFundSummary();
+      await refreshDetails(selectedMuqtadi.id);
+    } catch (error) {
+      toast.error(getErrorMessage(error, 'Failed to reject payment'));
+    } finally {
+      setSubmitting(false);
+      setPendingPaymentRejectId(null);
+    }
+  };
+
   const handleDeletePayment = async (transactionId: string) => {
     if (!selectedMuqtadi) return;
 
@@ -577,6 +619,11 @@ export default function MuqtadisPage() {
       return filters.sortOrder === 'newest' ? right - left : left - right;
     });
   }, [cycles, filters.sortOrder]);
+
+  const selectedPaymentDetail = useMemo(
+    () => selectedDetails?.payments.find((entry) => entry.id === selectedPaymentDetailId) ?? null,
+    [selectedDetails?.payments, selectedPaymentDetailId],
+  );
 
   const primaryFilter = useMemo(() => {
     if (filters.statusFilter === 'disabled') return 'disabled';
@@ -744,6 +791,7 @@ export default function MuqtadisPage() {
                 pendingVerificationId={loading.pendingVerificationId}
                 handleVerifyMuqtadi={actions.verifyMuqtadi}
                 handleRejectMuqtadi={actions.rejectMuqtadi}
+                openPaymentDetails={openPaymentDetails}
               />
             </TabsContent>
 
@@ -944,12 +992,7 @@ export default function MuqtadisPage() {
           </SheetHeader>
 
           {!selectedDetails ? (
-            <div className="animate-pulse space-y-3 pt-4">
-              <div className="h-10 rounded-xl bg-muted" />
-              <div className="h-16 rounded-xl bg-muted" />
-              <div className="h-16 rounded-xl bg-muted" />
-              <div className="h-16 rounded-xl bg-muted" />
-            </div>
+            <DrawerSkeleton />
           ) : (
             <Tabs defaultValue="overview" className="mt-4 ds-stack">
               <TabsList className="grid w-full grid-cols-4">
@@ -1022,55 +1065,31 @@ export default function MuqtadisPage() {
                   selectedDetails.payments.map((entry) => (
                     <Card key={entry.id}>
                       <CardContent className="space-y-2 pt-4 text-sm">
-                        <p className="font-medium">{formatDate(entry.createdAt, 'MMM dd, yyyy hh:mm a')}</p>
-                        <p>Method: {(entry.details?.method as string) || '-'}</p>
-                        <p>Amount: {formatCurrency(Number(entry.details?.amount || 0))}</p>
-                        <p>Status: {(entry.details?.status as string) || '-'}</p>
-                        <div className="flex items-center gap-2">
-                          <p>UTR: {(entry.details?.utr as string) || '-'}</p>
-                          {entry.details?.utr ? (
-                            <Button size="sm" variant="ghost" onClick={() => handleCopyUtr(String(entry.details?.utr))}>
-                              <Copy className="mr-1 h-3.5 w-3.5" />
-                              Copy UTR
-                            </Button>
-                          ) : null}
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="font-medium">{formatDate(entry.createdAt, 'MMM dd, yyyy hh:mm a')}</p>
+                          <Badge
+                            className={
+                              (entry.details?.status as string) === 'VERIFIED'
+                                ? 'bg-emerald-100 text-emerald-700'
+                                : (entry.details?.status as string) === 'REJECTED'
+                                  ? 'bg-red-100 text-red-700'
+                                  : 'bg-amber-100 text-amber-700'
+                            }
+                          >
+                            {(entry.details?.status as string) || '-'}
+                          </Badge>
                         </div>
-                        <p className="text-muted-foreground">Reference: {(entry.details?.reference as string) || '-'}</p>
-                        <div className="flex flex-wrap gap-2 pt-1">
-                          {(entry.details?.status as string) === 'PENDING' ? (
-                            <>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                disabled={!entry.details?.screenshotUrl}
-                                onClick={() => {
-                                  const proofUrl = String(entry.details?.screenshotUrl || '');
-                                  if (!proofUrl) return;
-                                  window.open(proofUrl, '_blank', 'noopener,noreferrer');
-                                }}
-                              >
-                                View Proof
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                disabled={submitting}
-                                onClick={() => setPendingPaymentVerificationId(entry.id)}
-                              >
-                                Verify
-                              </Button>
-                            </>
-                          ) : null}
-                          <Button size="sm" variant="outline" disabled={submitting} onClick={() => selectedMuqtadi && openPaymentAdjustment(selectedMuqtadi, entry)}>
-                            Edit Payment
-                          </Button>
+                        <div className="flex items-center justify-between gap-2">
+                          <p>{formatCurrency(Number(entry.details?.amount || 0))} • {(entry.details?.method as string) || '-'}</p>
                           <Button
                             size="sm"
-                            variant="destructive"
-                            disabled={submitting}
-                            onClick={() => setPendingPaymentDeleteId(entry.id)}
+                            variant="outline"
+                            onClick={() => {
+                              setSelectedPaymentDetailId(entry.id);
+                              setPaymentDetailImageFailed(false);
+                            }}
                           >
-                            Delete Payment
+                            View Payment
                           </Button>
                         </div>
                       </CardContent>
@@ -1214,6 +1233,162 @@ export default function MuqtadisPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <AlertDialog
+        open={Boolean(pendingPaymentRejectId)}
+        onOpenChange={(open) => !open && setPendingPaymentRejectId(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Reject this payment?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This keeps the transaction in history and marks it as rejected.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={submitting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={submitting}
+              onClick={() => {
+                if (!pendingPaymentRejectId) return;
+                handleRejectPayment(pendingPaymentRejectId);
+              }}
+            >
+              Reject
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <Dialog open={Boolean(selectedPaymentDetail)} onOpenChange={(open) => !open && setSelectedPaymentDetailId(null)}>
+        <DialogContent className="h-[92dvh] w-[96vw] max-w-none overflow-y-auto p-0 sm:h-auto sm:max-w-2xl">
+          {selectedPaymentDetail ? (
+            <div className="flex h-full flex-col">
+              <DialogHeader className="border-b px-4 py-3 sm:px-6">
+                <DialogTitle className="flex items-center justify-between gap-2">
+                  <span>Payment Details</span>
+                  <Badge
+                    className={
+                      (selectedPaymentDetail.details?.status as string) === 'VERIFIED'
+                        ? 'bg-emerald-100 text-emerald-700'
+                        : (selectedPaymentDetail.details?.status as string) === 'REJECTED'
+                          ? 'bg-red-100 text-red-700'
+                          : 'bg-amber-100 text-amber-700'
+                    }
+                  >
+                    {(selectedPaymentDetail.details?.status as string) || '-'}
+                  </Badge>
+                </DialogTitle>
+                <DialogDescription>
+                  {selectedDetails?.name || 'Muqtadi'} • {selectedPaymentDetail.details?.month && selectedPaymentDetail.details?.year
+                    ? formatCycleLabel(Number(selectedPaymentDetail.details.month), Number(selectedPaymentDetail.details.year))
+                    : 'Cycle unavailable'}
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="flex-1 space-y-4 px-4 py-4 sm:px-6">
+                <Card>
+                  <CardContent className="grid gap-2 pt-4 text-sm sm:grid-cols-2">
+                    <p><span className="text-muted-foreground">Amount paid:</span> {formatCurrency(Number(selectedPaymentDetail.details?.amount || 0))}</p>
+                    <p><span className="text-muted-foreground">Outstanding:</span> {formatCurrency(selectedDetails?.overview.outstandingAmount ?? 0)}</p>
+                    <p><span className="text-muted-foreground">Submitted at:</span> {formatDate(selectedPaymentDetail.createdAt, 'MMM dd, yyyy hh:mm a')}</p>
+                    <p><span className="text-muted-foreground">Method:</span> {String(selectedPaymentDetail.details?.method || '-')}</p>
+                    <p><span className="text-muted-foreground">Household size:</span> {selectedDetails?.householdMembers ?? '-'}</p>
+                    <p><span className="text-muted-foreground">UTR:</span> {String(selectedPaymentDetail.details?.utr || '-')}</p>
+                    <p className="sm:col-span-2"><span className="text-muted-foreground">Reference:</span> {String(selectedPaymentDetail.details?.reference || '-')}</p>
+                    <p className="sm:col-span-2"><span className="text-muted-foreground">Rejection reason:</span> {(selectedPaymentDetail.details as any)?.rejectionReason || '-'}</p>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardContent className="space-y-2 pt-4">
+                    <p className="text-sm font-medium">Payment Proof</p>
+                    {selectedPaymentDetail.details?.screenshotUrl ? (
+                      <>
+                        {!paymentDetailImageFailed ? (
+                          <img
+                            src={String(selectedPaymentDetail.details.screenshotUrl)}
+                            alt="Payment proof"
+                            className="max-h-96 w-full rounded-lg border object-contain"
+                            onError={() => setPaymentDetailImageFailed(true)}
+                          />
+                        ) : (
+                          <div className="flex min-h-40 items-center justify-center rounded-lg border bg-muted/40 text-sm text-muted-foreground">
+                            <ImageOff className="mr-2 h-4 w-4" />
+                            Failed to load image preview
+                          </div>
+                        )}
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="w-full sm:w-auto"
+                          onClick={() => {
+                            const proofUrl = String(selectedPaymentDetail.details?.screenshotUrl || '');
+                            if (!proofUrl) return;
+                            window.open(proofUrl, '_blank', 'noopener,noreferrer');
+                          }}
+                        >
+                          <ExternalLink className="mr-2 h-4 w-4" />
+                          Open Full Image
+                        </Button>
+                      </>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">No screenshot uploaded for this payment.</p>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+
+              <div className="sticky bottom-0 border-t bg-background px-4 py-3 sm:px-6">
+                <div className="flex flex-wrap gap-2">
+                  {(selectedPaymentDetail.details?.status as string) === 'PENDING' ? (
+                    <>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={submitting}
+                        onClick={() => setPendingPaymentVerificationId(selectedPaymentDetail.id)}
+                      >
+                        Verify
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        disabled={submitting}
+                        onClick={() => setPendingPaymentRejectId(selectedPaymentDetail.id)}
+                      >
+                        Reject
+                      </Button>
+                    </>
+                  ) : null}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={submitting}
+                    onClick={() => selectedMuqtadi && openPaymentAdjustment(selectedMuqtadi, selectedPaymentDetail)}
+                  >
+                    Edit Payment
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={submitting}
+                    onClick={() => setPendingPaymentDeleteId(selectedPaymentDetail.id)}
+                  >
+                    Delete Payment
+                  </Button>
+                  {selectedPaymentDetail.details?.utr ? (
+                    <Button size="sm" variant="ghost" onClick={() => handleCopyUtr(String(selectedPaymentDetail.details?.utr))}>
+                      <Copy className="mr-1 h-3.5 w-3.5" />
+                      Copy UTR
+                    </Button>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

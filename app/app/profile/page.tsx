@@ -11,14 +11,19 @@ import { MuqtadiBackButton } from '@/components/muqtadi/back-button';
 import { muqtadisService } from '@/services/muqtadis.service';
 import { useProfileQuery } from '@/hooks/useProfileQuery';
 import { getErrorMessage } from '@/src/utils/error';
+import { PageSkeleton } from '@/components/common/loading-skeletons';
 
 export default function MuqtadiProfilePage() {
   const profileQuery = useProfileQuery();
   const [submitting, setSubmitting] = useState(false);
   const [profile, setProfile] = useState({
     name: '',
+    fatherName: '',
+    email: '',
     phone: '',
+    whatsappNumber: '',
     householdMembers: 0,
+    dependentNames: [] as string[],
   });
 
   useEffect(() => {
@@ -26,10 +31,20 @@ export default function MuqtadiProfilePage() {
       return;
     }
 
+    const dependents = Array.isArray(profileQuery.data.dependentNames)
+      ? profileQuery.data.dependentNames
+      : Array.isArray(profileQuery.data.memberNames)
+        ? profileQuery.data.memberNames.slice(1)
+        : [];
+
     setProfile({
       name: profileQuery.data.name,
+      fatherName: profileQuery.data.fatherName || '',
+      email: profileQuery.data.email || '',
       phone: profileQuery.data.phone || '',
+      whatsappNumber: profileQuery.data.whatsappNumber || '',
       householdMembers: profileQuery.data.householdMembers,
+      dependentNames: dependents,
     });
   }, [profileQuery.data]);
 
@@ -42,13 +57,46 @@ export default function MuqtadiProfilePage() {
   }, [profileQuery.error]);
 
   const onSave = async () => {
+    const current = profileQuery.data;
+    if (!current) return;
+
+    const payload: {
+      name?: string;
+      phone?: string;
+      whatsappNumber?: string;
+      email?: string;
+      dependentNames?: string[];
+    } = {};
+
+    if (profile.name.trim() !== (current.name || '').trim()) {
+      payload.name = profile.name.trim();
+    }
+    if (profile.phone.trim() !== (current.phone || '').trim()) {
+      payload.phone = profile.phone.trim();
+    }
+    if (profile.whatsappNumber.trim() !== (current.whatsappNumber || '').trim()) {
+      payload.whatsappNumber = profile.whatsappNumber.trim();
+    }
+    if (profile.email.trim() !== (current.email || '').trim()) {
+      payload.email = profile.email.trim();
+    }
+
+    const normalizedDependents = profile.dependentNames.map((name) => name.trim());
+    const currentDependents = (Array.isArray(current.dependentNames) ? current.dependentNames : []).map((name) => (name || '').trim());
+    if (JSON.stringify(normalizedDependents) !== JSON.stringify(currentDependents)) {
+      payload.dependentNames = normalizedDependents;
+    }
+
+    if (!Object.keys(payload).length) {
+      toast.info('No profile changes to save');
+      return;
+    }
+
     setSubmitting(true);
     try {
-      await muqtadisService.updateMyProfile({
-        name: profile.name,
-        phone: profile.phone,
-      });
+      await muqtadisService.updateMyProfile(payload);
       toast.success('Profile updated');
+      await profileQuery.refetch();
     } catch (error) {
       toast.error(getErrorMessage(error, 'Failed to update profile'));
     } finally {
@@ -57,14 +105,7 @@ export default function MuqtadiProfilePage() {
   };
 
   if (profileQuery.isLoading) {
-    return (
-      <div className="animate-pulse space-y-3">
-        <div className="h-12 rounded-xl bg-muted" />
-        <div className="h-16 rounded-xl bg-muted" />
-        <div className="h-16 rounded-xl bg-muted" />
-        <div className="h-16 rounded-xl bg-muted" />
-      </div>
-    );
+    return <PageSkeleton rows={1} cardCount={4} />;
   }
 
   return (
@@ -79,12 +120,22 @@ export default function MuqtadiProfilePage() {
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="rounded-xl border bg-[#f6faf2] p-3 text-xs text-muted-foreground">
-            Household Members are managed by admin.
+            Household size and contribution structure are locked after submission.
           </div>
 
         <div className="space-y-2">
           <Label>Name</Label>
           <Input value={profile.name} onChange={(e) => setProfile((prev) => ({ ...prev, name: e.target.value }))} />
+        </div>
+
+        <div className="space-y-2">
+          <Label>Father Name</Label>
+          <Input value={profile.fatherName} disabled />
+        </div>
+
+        <div className="space-y-2">
+          <Label>Email</Label>
+          <Input value={profile.email} onChange={(e) => setProfile((prev) => ({ ...prev, email: e.target.value }))} />
         </div>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -97,6 +148,36 @@ export default function MuqtadiProfilePage() {
         <div className="space-y-2">
           <Label>Phone</Label>
           <Input value={profile.phone} onChange={(e) => setProfile((prev) => ({ ...prev, phone: e.target.value }))} />
+        </div>
+
+        <div className="space-y-2">
+          <Label>WhatsApp</Label>
+          <Input
+            value={profile.whatsappNumber}
+            onChange={(e) => setProfile((prev) => ({ ...prev, whatsappNumber: e.target.value }))}
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label>Dependent Names</Label>
+          {profile.dependentNames.length ? (
+            <div className="space-y-2">
+              {profile.dependentNames.map((name, index) => (
+                <Input
+                  key={`dependent-${index}`}
+                  value={name}
+                  onChange={(e) => {
+                    const next = [...profile.dependentNames];
+                    next[index] = e.target.value;
+                    setProfile((prev) => ({ ...prev, dependentNames: next }));
+                  }}
+                  placeholder={`Dependent ${index + 1}`}
+                />
+              ))}
+            </div>
+          ) : (
+            <Input value="No dependents" disabled />
+          )}
         </div>
 
           <Button onClick={onSave} disabled={submitting} className="w-full ">

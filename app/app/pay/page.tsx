@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
-import { Check, ChevronDown, Loader2 } from 'lucide-react';
+import { Check, ChevronDown, Copy, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -25,9 +25,10 @@ import { formatCurrency, formatCycleLabel, getCycleStatus } from '@/src/utils/fo
 import { getErrorMessage } from '@/src/utils/error';
 import { parseStrictAmountInput } from '@/src/utils/numeric-input';
 import { openExternalUrl } from '@/src/utils/open-external-url';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '@/lib/query-keys';
 import { QRCodeSVG } from 'qrcode.react';
+import { useProfileQuery } from '@/hooks/useProfileQuery';
 
 type SortOrder = 'newest' | 'oldest';
 type PaymentMethod = 'UPI' | 'BANK' | 'PHONE';
@@ -48,14 +49,43 @@ function buildUpiDeepLink(input: { upiId: string; payeeName: string; amount: num
   return `upi://pay?pa=${pa}&pn=${pn}&am=${am}&cu=${cu}&tn=${tn}`;
 }
 
+function toShortName(name?: string | null): string {
+  const normalized = String(name ?? '').trim().replace(/\s+/g, ' ');
+  if (!normalized) return 'Muqtadi';
+  return normalized.length > 18 ? `${normalized.slice(0, 18).trim()}...` : normalized;
+}
+
+function buildUpiVerificationNote(input: {
+  month?: number | null;
+  year?: number | null;
+  payerName?: string | null;
+  householdMembers?: number | null;
+}): string {
+  const now = new Date();
+  const month = input.month ?? now.getMonth() + 1;
+  const year = input.year ?? now.getFullYear();
+  const monthLabel = new Date(year, Math.max(0, Math.min(11, month - 1)), 1).toLocaleString('en-US', {
+    month: 'short',
+  });
+
+  const parts = [`Due ${monthLabel}-${year}`, toShortName(input.payerName)];
+  if (typeof input.householdMembers === 'number' && Number.isFinite(input.householdMembers) && input.householdMembers > 0) {
+    parts.push(`HH${Math.trunc(input.householdMembers)}`);
+  }
+
+  const note = parts.join(' | ');
+  return note.length > 80 ? `${note.slice(0, 80).trim()}...` : note;
+}
+
 export default function PayPage() {
   const { user, mosque } = useAuthStore();
+  const queryClient = useQueryClient();
+  const profileQuery = useProfileQuery(Boolean(user?.id));
   const searchParams = useSearchParams();
   const resumeProofMode = searchParams.get('resumeProof') === '1';
   const requestedPaymentId = searchParams.get('paymentId')?.trim() ?? '';
   const requestedCycleId = searchParams.get('cycleId')?.trim() ?? '';
   const requestedDueId = searchParams.get('dueId')?.trim() ?? '';
-  const requestedAmountRaw = searchParams.get('amount')?.trim() ?? '';
   const requestedMethod = searchParams.get('method')?.trim().toUpperCase() ?? '';
 
   const [submitting, setSubmitting] = useState(false);
@@ -159,6 +189,7 @@ export default function PayPage() {
   const currentDue = useMemo(() => {
     return Number(duesQuery.data?.summary?.outstandingAmount ?? 0);
   }, [duesQuery.data?.summary?.outstandingAmount]);
+  const allDuesPaid = currentDue <= 0.0001;
 
   const remainingDue = useMemo(() => {
     if (!selectedDue) return 0;
@@ -173,13 +204,39 @@ export default function PayPage() {
     if (!paymentConfig?.upiId?.trim()) return '';
     if (!amountIsValid || !parsedAmount) return '';
     const payeeName = (mosque?.name || 'MasjidLedger').trim();
+    const note = buildUpiVerificationNote({
+      month: selectedDue?.month,
+      year: selectedDue?.year,
+      payerName: profileQuery.data?.name ?? user?.name,
+      householdMembers: profileQuery.data?.householdMembers,
+    });
     return buildUpiDeepLink({
       upiId: paymentConfig.upiId.trim(),
       payeeName,
       amount: parsedAmount,
-      note: 'Muqtadi monthly contribution',
+      note,
     });
-  }, [amountIsValid, mosque?.name, parsedAmount, paymentConfig?.upiId]);
+  }, [
+    amountIsValid,
+    mosque?.name,
+    parsedAmount,
+    paymentConfig?.upiId,
+    profileQuery.data?.householdMembers,
+    profileQuery.data?.name,
+    selectedDue?.month,
+    selectedDue?.year,
+    user?.name,
+  ]);
+
+  const upiVerificationNote = useMemo(
+    () => buildUpiVerificationNote({
+      month: selectedDue?.month,
+      year: selectedDue?.year,
+      payerName: profileQuery.data?.name ?? user?.name,
+      householdMembers: profileQuery.data?.householdMembers,
+    }),
+    [profileQuery.data?.householdMembers, profileQuery.data?.name, selectedDue?.month, selectedDue?.year, user?.name],
+  );
 
   useEffect(() => {
     if (!selectedDue) {
@@ -221,12 +278,21 @@ export default function PayPage() {
     return paymentConfig.phoneNumber ? `Phone: ${paymentConfig.phoneNumber}` : null;
   }, [paymentConfig, selectedMethod]);
 
+  const copyValue = async (value?: string | null) => {
+    if (!value) return;
+    try {
+      await navigator.clipboard.writeText(value);
+      toast.success('Copied');
+    } catch {
+      toast.error('Failed to copy');
+    }
+  };
+
   useEffect(() => {
     if (appliedResumeDefaults) return;
     if (!dues.length && !(resumeProofMode && requestedPaymentId)) return;
     if (resumeProofMode && requestedPaymentId && dashboardQuery.isLoading) return;
 
-    const parsedRequestedAmount = parseStrictAmountInput(requestedAmountRaw);
     const requestedPayment = requestedPaymentId
       ? (historyRows.find((row) => row.id === requestedPaymentId) ?? null)
       : null;
@@ -258,12 +324,6 @@ export default function PayPage() {
         const preferredMethod = requestedMethod || methodFromPayment;
         if (preferredMethod && ['UPI', 'BANK', 'PHONE'].includes(preferredMethod)) {
           setSelectedMethod(preferredMethod as PaymentMethod);
-        }
-
-        if (parsedRequestedAmount !== null && parsedRequestedAmount > 0) {
-          setAmount(String(parsedRequestedAmount));
-        } else if (requestedPayment.amount && requestedPayment.amount > 0) {
-          setAmount(String(requestedPayment.amount));
         }
 
         if (requestedPayment.utr) {
@@ -319,19 +379,12 @@ export default function PayPage() {
       setSelectedMethod(preferredMethod as PaymentMethod);
     }
 
-    if (parsedRequestedAmount !== null && parsedRequestedAmount > 0) {
-      setAmount(String(parsedRequestedAmount));
-    } else if (requestedPayment?.amount && requestedPayment.amount > 0) {
-      setAmount(String(requestedPayment.amount));
-    }
-
     setAppliedResumeDefaults(true);
   }, [
     appliedResumeDefaults,
     dashboardQuery.isLoading,
     dues,
     historyRows,
-    requestedAmountRaw,
     requestedCycleId,
     requestedDueId,
     requestedMethod,
@@ -470,6 +523,10 @@ export default function PayPage() {
       setReference('');
       setExistingScreenshotUrl('');
       setShowProofStep(false);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.muqtadiDues(user?.id) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.muqtadiDashboard(mosque?.id) }),
+      ]);
       await duesQuery.refetch();
     } catch (error) {
       toast.error(getErrorMessage(error, 'Failed to submit payment'));
@@ -512,6 +569,12 @@ export default function PayPage() {
             <p className="text-xs text-muted-foreground">Current Due</p>
             <p className="mt-1 text-3xl font-bold">{formatCurrency(currentDue)}</p>
           </div>
+
+          {allDuesPaid && !resumeProofMode ? (
+            <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+              All dues paid.
+            </p>
+          ) : null}
 
           <div className="space-y-2">
             <Label>Month</Label>
@@ -596,8 +659,8 @@ export default function PayPage() {
           </div>
 
           <div className="space-y-2">
-            <Label>Amount</Label>
-            <Input type="text" inputMode="decimal" pattern="^\\d+(?:\\.\\d{1,2})?$" value={amount} onChange={(e) => setAmount(e.target.value)} />
+            <Label>Amount due</Label>
+            <Input type="text" inputMode="decimal" value={amount} readOnly disabled />
             {amountExceedsRemaining ? (
               <p className="text-xs text-red-600">Amount exceeds remaining due ({formatCurrency(remainingDue)}).</p>
             ) : null}
@@ -626,6 +689,50 @@ export default function PayPage() {
             <div className="rounded-xl border p-3 text-sm">
               <p className="font-medium">Payment Details</p>
               <p className="mt-1">{selectedMethodDetails}</p>
+
+              {selectedMethod === 'UPI' ? (
+                <p className="mt-2 text-xs text-muted-foreground">UPI note: {upiVerificationNote}</p>
+              ) : null}
+
+              {selectedMethod === 'BANK' ? (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void copyValue(paymentConfig?.bankAccount)}
+                    disabled={!paymentConfig?.bankAccount}
+                  >
+                    <Copy className="mr-1 h-3.5 w-3.5" />
+                    Copy Account Number
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void copyValue(paymentConfig?.ifsc)}
+                    disabled={!paymentConfig?.ifsc}
+                  >
+                    <Copy className="mr-1 h-3.5 w-3.5" />
+                    Copy IFSC
+                  </Button>
+                </div>
+              ) : null}
+
+              {selectedMethod === 'PHONE' ? (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void copyValue(paymentConfig?.phoneNumber)}
+                    disabled={!paymentConfig?.phoneNumber}
+                  >
+                    <Copy className="mr-1 h-3.5 w-3.5" />
+                    Copy Phone Number
+                  </Button>
+                </div>
+              ) : null}
             </div>
           ) : null}
 
@@ -636,6 +743,7 @@ export default function PayPage() {
               onClick={onOpenUpi}
               disabled={
                 submitting
+                || (allDuesPaid && !resumeProofMode)
                 || selectedDue?.status === 'PAID'
                 || remainingDue <= 0
                 || !amountIsValid
@@ -653,6 +761,7 @@ export default function PayPage() {
               onClick={onHavePaid}
               disabled={
                 submitting
+                || (allDuesPaid && !resumeProofMode)
                 || !availableMethods.length
                 || selectedDue?.status === 'PAID'
                 || remainingDue <= 0

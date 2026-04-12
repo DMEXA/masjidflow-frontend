@@ -8,7 +8,6 @@ import {
   isTwoFactorFlowActive,
   markRefreshTokenAvailable,
 } from '@/services/auth-session';
-import { useAuthStore } from '@/src/store/auth.store';
 import { clearAccessToken, getAccessToken, setAccessToken } from './access-token';
 
 const MAX_REFRESH_RETRIES = 1;
@@ -61,7 +60,7 @@ async function performControlledLogout(): Promise<void> {
   try {
     const { useAuthStore } = await import('@/src/store/auth.store');
     await useAuthStore.getState().logout();
-  } catch (error) {
+  } catch {
     clearAccessToken();
     clearRefreshTokenAvailable();
     clearTwoFactorPending();
@@ -224,17 +223,14 @@ api.interceptors.response.use(
     const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
     const requestPath = resolveRequestPath(originalRequest?.url || '');
 
-    if (error.response?.status === 401 && requestPath.startsWith('/auth/refresh')) {
+    if ((error.response?.status === 401 || error.response?.status === 403) && requestPath.startsWith('/auth/refresh')) {
       if (isLogoutInProgress()) {
         return Promise.reject(error);
       }
 
-      const state = useAuthStore.getState();
-      if (state.authStatus === 'authenticated' && state.isAuthenticated) {
-        await performControlledLogout();
-      } else {
-        console.warn('Refresh failed during bootstrap, ignoring logout');
-      }
+      // Do not force logout here. Refresh token rotation across tabs can produce
+      // a transient 401/403 for an old refresh token while a newer session is valid.
+      // Let caller-level flows decide whether to unauthenticate.
       return Promise.reject(error);
     }
 

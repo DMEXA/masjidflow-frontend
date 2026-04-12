@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
-import { Loader2, Plus } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -12,8 +12,8 @@ import { useAuthStore } from '@/src/store/auth.store';
 import { formatCurrency } from '@/src/utils/format';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '@/lib/query-keys';
-import { Skeleton } from '@/components/ui/skeleton';
 import { ListEmptyState } from '@/components/common/list-empty-state';
+import { PageSkeleton } from '@/components/common/loading-skeletons';
 
 type PaymentFilter = 'ALL' | 'VERIFIED' | 'PENDING' | 'REJECTED';
 
@@ -61,12 +61,20 @@ export default function MyDuesPage() {
     queryFn: () => muqtadisService.getDashboard(),
     enabled: Boolean(mosque?.id),
     initialData: () => queryClient.getQueryData<MuqtadiDashboardApiResponse>(dashboardKey),
-    staleTime: 30_000,
+    staleTime: 0,
     refetchOnWindowFocus: false,
-    refetchOnMount: false,
+    refetchOnMount: 'always',
   });
 
-  const history = dashboardQuery.data?.history ?? [];
+  const history = useMemo(
+    () => dashboardQuery.data?.history ?? [],
+    [dashboardQuery.data?.history],
+  );
+  const outstandingAmount = Number(dashboardQuery.data?.outstandingAmount ?? dashboardQuery.data?.remainingAmount ?? 0);
+  const allDuesPaid = outstandingAmount <= 0.0001;
+  const firstRetryablePayment = history.find((item) => needsRetryAction(item.status)) ?? null;
+  const hasRetryablePayment = history.some((item) => needsRetryAction(item.status));
+
   const payments = useMemo(() => {
     const sorted = [...history].sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
@@ -77,14 +85,7 @@ export default function MyDuesPage() {
   }, [filter, history]);
 
   if (dashboardQuery.isLoading) {
-    return (
-      <div className="ds-stack">
-        <Skeleton className="h-12 w-full" />
-        <Skeleton className="h-16 w-full" />
-        <Skeleton className="h-24 w-full" />
-        <Skeleton className="h-24 w-full" />
-      </div>
-    );
+    return <PageSkeleton rows={2} cardCount={3} />;
   }
 
   if (dashboardQuery.isError) {
@@ -108,6 +109,19 @@ export default function MyDuesPage() {
           <p className="text-xs uppercase tracking-wide text-muted-foreground">Payment History</p>
           <p className="mt-1 text-3xl font-bold">{payments.length}</p>
           <p className="text-sm text-muted-foreground">Entries</p>
+          <div className="mt-3">
+            {hasRetryablePayment && firstRetryablePayment ? (
+              <Button asChild variant="outline" className="w-full sm:w-auto">
+                <Link href={buildRetryHref(firstRetryablePayment)}>Continue Pending Payment</Link>
+              </Button>
+            ) : allDuesPaid ? (
+              <Button disabled className="w-full sm:w-auto">All dues paid</Button>
+            ) : (
+              <Button asChild className="w-full sm:w-auto">
+                <Link href="/app/pay">Pay Now</Link>
+              </Button>
+            )}
+          </div>
         </CardContent>
       </Card>
 
@@ -129,14 +143,23 @@ export default function MyDuesPage() {
         </CardHeader>
         <CardContent className="max-h-[65vh] overflow-y-auto">
           {payments.length === 0 ? (
-            <ListEmptyState
-              title="No payments yet"
-              description="Make your first contribution to see payment history here."
-              actionLabel="Contribute Now"
-              actionHref="/app/pay"
-              icon={<Plus className="h-5 w-5" />}
-              className="min-h-44"
-            />
+            allDuesPaid && !hasRetryablePayment ? (
+              <ListEmptyState
+                title="All dues paid"
+                description="You have no outstanding dues right now."
+                icon={<Plus className="h-5 w-5" />}
+                className="min-h-44"
+              />
+            ) : (
+              <ListEmptyState
+                title="No payments yet"
+                description="Make your first contribution to see payment history here."
+                actionLabel="Contribute Now"
+                actionHref="/app/pay"
+                icon={<Plus className="h-5 w-5" />}
+                className="min-h-44"
+              />
+            )
           ) : (
             <>
             <div className="hidden md:block">

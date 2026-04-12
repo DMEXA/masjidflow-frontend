@@ -164,8 +164,14 @@ export const authService = {
           'response' in error &&
           Boolean((error as { response?: unknown }).response);
 
-        // Retry once only for transient failures without an HTTP response.
-        if (attempt === 0 && !hasHttpStatus) {
+        const status =
+          hasHttpStatus &&
+          typeof (error as { response?: { status?: unknown } }).response?.status === 'number'
+            ? (error as { response?: { status?: number } }).response?.status
+            : undefined;
+
+        // Retry once for transport failures and refresh-token rotation races.
+        if (attempt === 0 && (!hasHttpStatus || status === 401 || status === 403)) {
           continue;
         }
 

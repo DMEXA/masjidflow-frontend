@@ -18,6 +18,7 @@ export default function MuqtadiCard({
   pendingVerificationId,
   handleVerifyMuqtadi,
   handleRejectMuqtadi,
+  openPaymentDetails,
 }) {
   const isDeleted = Boolean(item.isDeleted || item.isDisabled || item.status === 'DISABLED');
 
@@ -48,15 +49,20 @@ export default function MuqtadiCard({
           <Badge variant={item.isDisabled ? 'secondary' : 'default'} className="whitespace-nowrap">
             {item.isDisabled ? 'Disabled' : 'Active'}
           </Badge>
-          <Badge className={`whitespace-nowrap ${
-            paymentStatus === 'PAID'
-              ? 'bg-green-100 text-green-700'
-              : paymentStatus === 'PARTIAL'
-                ? 'bg-yellow-100 text-yellow-800'
-                : 'bg-red-100 text-red-700'
-          }`}>
+          <Button
+            size="sm"
+            variant="outline"
+            className={`h-6 px-2 text-[10px] ${
+              paymentStatus === 'PAID'
+                ? 'border-green-200 bg-green-100 text-green-700 hover:bg-green-100'
+                : paymentStatus === 'PARTIAL'
+                  ? 'border-yellow-200 bg-yellow-100 text-yellow-800 hover:bg-yellow-100'
+                  : 'border-red-200 bg-red-100 text-red-700 hover:bg-red-100'
+            }`}
+            onClick={() => openPaymentDetails(item)}
+          >
             {paymentStatus}
-          </Badge>
+          </Button>
           <Badge className={`whitespace-nowrap ${
             item.isVerified ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'
           }`}>
@@ -101,6 +107,10 @@ export default function MuqtadiCard({
             <Eye className="mr-2 h-4 w-4" />
             View
           </Link>
+        </Button>
+
+        <Button size="sm" variant="outline" onClick={() => openPaymentDetails(item)}>
+          View Payment
         </Button>
 
         {!item.userId ? (

@@ -15,6 +15,7 @@ import { useAuthStore } from '@/src/store/auth.store';
 import { formatCurrency, formatCycleLabel, formatDate } from '@/src/utils/format';
 import { muqtadisService, type ImamFundLedgerTransactionType } from '@/services/muqtadis.service';
 import { queryKeys } from '@/lib/query-keys';
+import { CardSkeleton, ListSkeleton } from '@/components/common/loading-skeletons';
 
 const PAGE_LIMIT = 20;
 
@@ -101,27 +102,37 @@ export default function ImamFundPage() {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <StatCard
-          title="Total Collected"
-          value={historyQuery.isLoading ? 'Loading...' : formatCurrency(summary.totalCollected, '₹')}
-          description="Verified Muqtadi collections"
-          icon={Wallet}
-          tone="green"
-        />
-        <StatCard
-          title="Total Paid Out"
-          value={historyQuery.isLoading ? 'Loading...' : formatCurrency(summary.totalPaidOut, '₹')}
-          description="Salary and fund outflows"
-          icon={Receipt}
-          tone="red"
-        />
-        <StatCard
-          title="Current Balance"
-          value={historyQuery.isLoading ? 'Loading...' : formatCurrency(summary.currentBalance, '₹')}
-          description="Running Imam Fund balance"
-          icon={CircleDollarSign}
-          tone="blue"
-        />
+        {historyQuery.isLoading ? (
+          <>
+            <CardSkeleton className="h-24 w-full" />
+            <CardSkeleton className="h-24 w-full" />
+            <CardSkeleton className="h-24 w-full" />
+          </>
+        ) : (
+          <>
+            <StatCard
+              title="Total Collected"
+              value={formatCurrency(summary.totalCollected, '₹')}
+              description="Verified Muqtadi collections"
+              icon={Wallet}
+              tone="green"
+            />
+            <StatCard
+              title="Total Paid Out"
+              value={formatCurrency(summary.totalPaidOut, '₹')}
+              description="Salary and fund outflows"
+              icon={Receipt}
+              tone="red"
+            />
+            <StatCard
+              title="Current Balance"
+              value={formatCurrency(summary.currentBalance, '₹')}
+              description="Running Imam Fund balance"
+              icon={CircleDollarSign}
+              tone="blue"
+            />
+          </>
+        )}
       </div>
 
       <Card className="border-border">
@@ -186,15 +197,7 @@ export default function ImamFundPage() {
         </div>
 
         {historyQuery.isLoading ? (
-          <Card className="border">
-            <CardContent className="py-6">
-              <div className="animate-pulse space-y-3">
-                <div className="h-16 rounded-xl bg-muted" />
-                <div className="h-16 rounded-xl bg-muted" />
-                <div className="h-16 rounded-xl bg-muted" />
-              </div>
-            </CardContent>
-          </Card>
+          <ListSkeleton count={3} className="h-16 w-full" />
         ) : historyQuery.error ? (
           <Card className="border">
             <CardContent className="py-6">

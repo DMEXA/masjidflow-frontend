@@ -21,8 +21,8 @@ import {
 import { toast } from 'sonner';
 import { useQuery } from '@tanstack/react-query';
 import { queryKeys } from '@/lib/query-keys';
-import { Skeleton } from '@/components/ui/skeleton';
 import { ListEmptyState } from '@/components/common/list-empty-state';
+import { PageSkeleton } from '@/components/common/loading-skeletons';
 
 interface AnnouncementItem {
   id: string;
@@ -102,9 +102,15 @@ export default function MuqtadiDashboardPage() {
   );
   const prayerTimes = dashboardQuery.data?.prayerTimes ?? null;
   const latestAnnouncement = dashboardQuery.data?.latestAnnouncement ?? null;
-  const lastPayment = dashboard?.history?.[0] ?? null;
+  const paymentHistory = useMemo(
+    () => [...(dashboard?.history ?? [])].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
+    [dashboard?.history],
+  );
+  const lastPayment = paymentHistory[0] ?? null;
   const lastPaymentStatus = (lastPayment?.status ?? '').toUpperCase();
   const needsProofResume = lastPaymentStatus === 'PENDING' || lastPaymentStatus === 'REJECTED';
+  const outstandingAmount = Number(dashboard?.outstandingAmount ?? dashboard?.remainingAmount ?? 0);
+  const allDuesPaid = outstandingAmount <= 0.0001;
   const lastPaymentResumeHref = useMemo(() => {
     if (!needsProofResume || !lastPayment) return '/app/pay?resumeProof=1';
     const params = new URLSearchParams({
@@ -170,15 +176,7 @@ export default function MuqtadiDashboardPage() {
   );
 
   if (dashboardQuery.isLoading) {
-    return (
-      <div className="ds-stack">
-        <Skeleton className="h-20 w-full" />
-        <Skeleton className="h-28 w-full" />
-        <Skeleton className="h-44 w-full" />
-        <Skeleton className="h-28 w-full" />
-        <Skeleton className="h-24 w-full" />
-      </div>
-    );
+    return <PageSkeleton rows={2} cardCount={4} />;
   }
 
   return (
@@ -282,13 +280,20 @@ export default function MuqtadiDashboardPage() {
               </div>
             ) : (
               <div className="mt-2">
-                <ListEmptyState
-                  title="No payments yet"
-                  description="Make your first contribution to see payment history."
-                  actionLabel="Pay Now"
-                  actionHref="/app/pay"
-                  className="min-h-32 bg-white"
-                />
+                {allDuesPaid ? (
+                  <div className="rounded-xl border bg-emerald-50 px-3 py-4 text-center">
+                    <p className="text-sm font-semibold text-emerald-800">All dues paid</p>
+                    <p className="mt-1 text-xs text-emerald-700">No payment required right now.</p>
+                  </div>
+                ) : (
+                  <ListEmptyState
+                    title="No payments yet"
+                    description="Make your first contribution to see payment history."
+                    actionLabel="Pay Now"
+                    actionHref="/app/pay"
+                    className="min-h-32 bg-white"
+                  />
+                )}
               </div>
             )}
           </div>
@@ -301,10 +306,13 @@ export default function MuqtadiDashboardPage() {
         </CardHeader>
         <CardContent>
           {latestAnnouncement ? (
-            <div className="space-y-1">
-              <p className="text-sm font-semibold text-[#22492b]">{latestAnnouncement.title}</p>
-              <p className="line-clamp-2 text-sm text-[#314235]">{latestAnnouncement.message}</p>
-            </div>
+            <Link href="/app/announcements" className="block rounded-xl border border-transparent p-2 transition hover:border-[#d8e5ce] hover:bg-[#f6faf2]">
+              <div className="space-y-1">
+                <p className="text-sm font-semibold text-[#22492b]">{latestAnnouncement.title}</p>
+                <p className="line-clamp-2 text-sm text-[#314235]">{latestAnnouncement.message}</p>
+                <p className="pt-1 text-xs font-medium text-[#2f6f3f]">View all announcements</p>
+              </div>
+            </Link>
           ) : (
             <ListEmptyState
               title="No announcements yet"
@@ -335,7 +343,7 @@ export default function MuqtadiDashboardPage() {
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Link>
             </Button>
-          ) : (dashboard?.outstandingAmount ?? dashboard?.remainingAmount ?? 0) > 0 ? (
+          ) : !allDuesPaid ? (
             <Button asChild className="w-full">
               <Link href="/app/pay">
                 Pay Now
@@ -343,7 +351,7 @@ export default function MuqtadiDashboardPage() {
               </Link>
             </Button>
           ) : (
-            <Button disabled className="w-full">All Paid</Button>
+            <Button disabled className="w-full">All dues paid</Button>
           )}
         </CardContent>
       </Card>
