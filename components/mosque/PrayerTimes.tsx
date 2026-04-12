@@ -1,11 +1,12 @@
 'use client';
 
 import { useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { mosqueService, type PrayerTimesSetting } from '@/services/mosque.service';
 import { queryKeys } from '@/lib/query-keys';
+import { muqtadiQueryPolicy } from '@/lib/muqtadi-query-policy';
 import {
   format12Hour,
   getCurrentPrayerKey,
@@ -71,12 +72,19 @@ function getPrayerAccent(prayerKey: string) {
 }
 
 export function PrayerTimes({ mosqueId, mosqueName }: PrayerTimesProps) {
+  const queryClient = useQueryClient();
+  const prayerTimesKey = queryKeys.prayerTimes(mosqueId);
+
   const prayerTimesQuery = useQuery<PrayerTimesSetting | null>({
-    queryKey: queryKeys.prayerTimes(mosqueId),
+    queryKey: prayerTimesKey,
     enabled: Boolean(mosqueId),
-    staleTime: 30_000,
-    refetchOnWindowFocus: false,
+    staleTime: muqtadiQueryPolicy.prayerTimes.staleTime,
+    gcTime: muqtadiQueryPolicy.prayerTimes.gcTime,
+    refetchOnWindowFocus: muqtadiQueryPolicy.prayerTimes.refetchOnWindowFocus,
+    refetchInterval: muqtadiQueryPolicy.prayerTimes.refetchInterval,
+    refetchIntervalInBackground: true,
     refetchOnMount: false,
+    placeholderData: (previous) => previous ?? queryClient.getQueryData<PrayerTimesSetting | null>(prayerTimesKey),
     queryFn: async () => mosqueService.getPrayerTimes(mosqueId),
   });
 

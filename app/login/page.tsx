@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
@@ -10,6 +10,7 @@ import { Building2, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { getErrorMessage } from '@/src/utils/error';
 import { authService } from '@/services/auth.service';
+import { muqtadisService } from '@/services/muqtadis.service';
 import { useAuthStore } from '@/src/store/auth.store';
 import { markTwoFactorPending } from '@/services/auth-session';
 
@@ -28,21 +29,48 @@ export default function LoginPage() {
     verificationCode: '',
   });
 
-  const resolvePostLoginPath = (user?: {
+  const resolvePostLoginPath = useCallback(async (user?: {
     role?: string;
     isPlatformAdmin?: boolean;
     mosqueId?: string | null;
   }) => {
-    if (user?.role === 'muqtadi') return '/app/dashboard';
+    if (user?.role === 'muqtadi') {
+      try {
+        const profile = await muqtadisService.getMyProfile();
+        if (profile?.isVerified === false) {
+          return '/household-pending';
+        }
+      } catch (error) {
+        const message = getErrorMessage(error, '');
+        if (message === 'Household not verified yet') {
+          return '/household-pending';
+        }
+      }
+      return '/app/dashboard';
+    }
     if (user?.isPlatformAdmin && !user?.mosqueId) return '/platform';
     return '/dashboard';
-  };
+  }, []);
 
   useEffect(() => {
-    if (authStatus === 'authenticated' && isAuthenticated) {
-      router.replace(resolvePostLoginPath(currentUser ?? undefined));
+    if (authStatus !== 'authenticated' || !isAuthenticated) {
+      return;
     }
-  }, [authStatus, isAuthenticated, currentUser, router]);
+
+    let cancelled = false;
+    const redirectAuthenticatedUser = async () => {
+      const destination = await resolvePostLoginPath(currentUser ?? undefined);
+      if (!cancelled) {
+        router.replace(destination);
+      }
+    };
+
+    void redirectAuthenticatedUser();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authStatus, isAuthenticated, currentUser, resolvePostLoginPath, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -72,7 +100,8 @@ export default function LoginPage() {
               });
         setAuth(response.user, response.mosque, response.accessToken);
         toast.success('Login successful!');
-        router.push(resolvePostLoginPath(response.user));
+        const destination = await resolvePostLoginPath(response.user);
+        router.push(destination);
         return;
       }
 
@@ -98,7 +127,8 @@ export default function LoginPage() {
       if ('accessToken' in response) {
         setAuth(response.user, response.mosque, response.accessToken);
         toast.success('Login successful!');
-        router.push(resolvePostLoginPath(response.user));
+        const destination = await resolvePostLoginPath(response.user);
+        router.push(destination);
         return;
       }
 

@@ -155,4 +155,35 @@
   .ds-section {
     @apply space-y-4 px-2 py-3;
   }
+
+  .app-shimmer {
+    background: linear-gradient(90deg, rgb(243 244 246 / 0.9) 25%, rgb(229 231 235 / 0.9) 50%, rgb(243 244 246 / 0.9) 75%);
+    background-size: 240% 100%;
+    animation: app-shimmer 1.4s ease-in-out infinite;
+  }
+
+  .app-shimmer-track {
+    position: relative;
+  }
+
+  .app-shimmer-track::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.55), transparent);
+    animation: app-shimmer 1.6s ease-in-out infinite;
+  }
+
+  .route-fade-enter {
+    @apply animate-in fade-in-0 slide-in-from-bottom-1 duration-300;
+  }
+}
+
+@keyframes app-shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
 }

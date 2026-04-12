@@ -5,6 +5,8 @@ import {
   type AppNotification,
 } from '@/services/notifications.service';
 import { useAuthStore } from '@/src/store/auth.store';
+import { queryKeys } from '@/lib/query-keys';
+import { muqtadiQueryPolicy } from '@/lib/muqtadi-query-policy';
 
 const MAX_NOTIFICATIONS = 30;
 
@@ -17,9 +19,10 @@ function isImportantNotification(notification: AppNotification): boolean {
 
 export function useNotificationsQuery() {
   const { user, isAuthenticated } = useAuthStore();
+  const notificationsKey = queryKeys.notifications(user?.id);
 
   return useQuery<AppNotification[]>({
-    queryKey: ['notifications'],
+    queryKey: notificationsKey,
     queryFn: async () => {
       const allNotifications = await notificationsService.getMyNotifications();
       return allNotifications
@@ -27,16 +30,20 @@ export function useNotificationsQuery() {
         .slice(0, MAX_NOTIFICATIONS);
     },
     enabled: !!isAuthenticated && !!user,
-    staleTime: 30_000,
-    refetchOnWindowFocus: false,
+    staleTime: muqtadiQueryPolicy.notifications.staleTime,
+    gcTime: muqtadiQueryPolicy.notifications.gcTime,
+    refetchInterval: muqtadiQueryPolicy.notifications.refetchInterval,
+    refetchIntervalInBackground: true,
+    refetchOnWindowFocus: muqtadiQueryPolicy.notifications.refetchOnWindowFocus,
   });
 }
 
 export function useConditionalNotificationsQuery(enabled = true) {
   const { user, isAuthenticated } = useAuthStore();
+  const notificationsKey = queryKeys.notifications(user?.id);
 
   return useQuery<AppNotification[]>({
-    queryKey: ['notifications'],
+    queryKey: notificationsKey,
     queryFn: async () => {
       const allNotifications = await notificationsService.getMyNotifications();
       return allNotifications
@@ -44,9 +51,22 @@ export function useConditionalNotificationsQuery(enabled = true) {
         .slice(0, MAX_NOTIFICATIONS);
     },
     enabled: enabled && !!isAuthenticated && !!user,
-    staleTime: 30_000,
-    refetchOnWindowFocus: false,
+    staleTime: muqtadiQueryPolicy.notifications.staleTime,
+    gcTime: muqtadiQueryPolicy.notifications.gcTime,
+    refetchInterval: muqtadiQueryPolicy.notifications.refetchInterval,
+    refetchIntervalInBackground: true,
+    refetchOnWindowFocus: muqtadiQueryPolicy.notifications.refetchOnWindowFocus,
   });
+}
+
+export function useUnreadImportantNotificationCount() {
+  const query = useNotificationsQuery();
+  const unreadCount = (query.data ?? []).filter((item) => !item.isRead).length;
+
+  return {
+    ...query,
+    unreadCount,
+  };
 }
 
 

@@ -1,14 +1,22 @@
-﻿import { useQuery } from '@tanstack/react-query';
+﻿import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { muqtadisService } from '@/services/muqtadis.service';
+import { useAuthStore } from '@/src/store/auth.store';
+import { queryKeys } from '@/lib/query-keys';
+import { muqtadiQueryPolicy } from '@/lib/muqtadi-query-policy';
 
 export function useProfileQuery(enabled = true) {
+  const queryClient = useQueryClient();
+  const { user } = useAuthStore();
+  const profileKey = queryKeys.muqtadiProfile(user?.id);
+
   return useQuery({
-    queryKey: ['profile'],
+    queryKey: profileKey,
     queryFn: () => muqtadisService.getMyProfile(),
     enabled,
-    staleTime: 30_000,
-    gcTime: 60_000,
-    refetchOnWindowFocus: false,
+    staleTime: muqtadiQueryPolicy.profile.staleTime,
+    gcTime: muqtadiQueryPolicy.profile.gcTime,
+    refetchOnWindowFocus: muqtadiQueryPolicy.profile.refetchOnWindowFocus,
+    placeholderData: () => queryClient.getQueryData(profileKey),
     retry: 1,
   });
 }

@@ -30,6 +30,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '@/lib/query-keys';
 import { QRCodeSVG } from 'qrcode.react';
 import { useProfileQuery } from '@/hooks/useProfileQuery';
+import { muqtadiQueryPolicy } from '@/lib/muqtadi-query-policy';
 
 type SortOrder = 'newest' | 'oldest';
 type PaymentMethod = 'UPI' | 'BANK' | 'PHONE';
@@ -149,16 +150,24 @@ export default function PayPage() {
     queryKey: queryKeys.muqtadiDues(user?.id),
     queryFn: () => muqtadisService.getMyDues({ page: 1, limit: 20 }),
     enabled: Boolean(user?.id),
-    staleTime: 30_000,
-    refetchOnWindowFocus: false,
+    staleTime: muqtadiQueryPolicy.dues.staleTime,
+    gcTime: muqtadiQueryPolicy.dues.gcTime,
+    refetchOnWindowFocus: muqtadiQueryPolicy.dues.refetchOnWindowFocus,
+    refetchInterval: muqtadiQueryPolicy.dues.refetchInterval,
+    refetchIntervalInBackground: true,
+    placeholderData: (previous) => previous ?? queryClient.getQueryData<MyDuesResponse>(queryKeys.muqtadiDues(user?.id)),
   });
 
   const dashboardQuery = useQuery<MuqtadiDashboardApiResponse>({
     queryKey: queryKeys.muqtadiDashboard(mosque?.id),
     queryFn: () => muqtadisService.getDashboard(),
     enabled: Boolean(user?.id && mosque?.id && resumeProofMode),
-    staleTime: 30_000,
-    refetchOnWindowFocus: false,
+    staleTime: muqtadiQueryPolicy.dashboard.staleTime,
+    gcTime: muqtadiQueryPolicy.dashboard.gcTime,
+    refetchOnWindowFocus: muqtadiQueryPolicy.dashboard.refetchOnWindowFocus,
+    refetchInterval: muqtadiQueryPolicy.dashboard.refetchInterval,
+    refetchIntervalInBackground: true,
+    placeholderData: (previous) => previous ?? queryClient.getQueryData<MuqtadiDashboardApiResponse>(queryKeys.muqtadiDashboard(mosque?.id)),
   });
 
   const dues = useMemo(() => duesQuery.data?.data ?? [], [duesQuery.data?.data]);
@@ -459,7 +468,7 @@ export default function PayPage() {
       return;
     }
 
-    const nextTransactionRef = `MLD-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+    const nextTransactionRef = `MLD-${Date.now()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
     setUpiTransactionRef(nextTransactionRef);
 
     const payeeName = (mosque?.name || 'MasjidLedger').trim();

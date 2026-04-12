@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -9,6 +9,7 @@ import { ListEmptyState } from '@/components/common/list-empty-state';
 import { announcementsService, type AnnouncementItem } from '@/services/announcements.service';
 import { queryKeys } from '@/lib/query-keys';
 import { getErrorMessage } from '@/src/utils/error';
+import { muqtadiQueryPolicy } from '@/lib/muqtadi-query-policy';
 
 type SortOrder = 'newest' | 'oldest';
 
@@ -18,12 +19,19 @@ type AnnouncementsProps = {
 
 export function Announcements({ mosqueId }: AnnouncementsProps) {
   const [sortOrder, setSortOrder] = useState<SortOrder>('newest');
+  const queryClient = useQueryClient();
+  const announcementsKey = [...queryKeys.announcements, mosqueId] as const;
 
   const announcementsQuery = useQuery<AnnouncementItem[]>({
-    queryKey: [...queryKeys.announcements, mosqueId],
+    queryKey: announcementsKey,
     enabled: Boolean(mosqueId),
     queryFn: () => announcementsService.getAll(mosqueId),
-    staleTime: 30_000,
+    staleTime: muqtadiQueryPolicy.announcements.staleTime,
+    gcTime: muqtadiQueryPolicy.announcements.gcTime,
+    refetchOnWindowFocus: muqtadiQueryPolicy.announcements.refetchOnWindowFocus,
+    refetchInterval: muqtadiQueryPolicy.announcements.refetchInterval,
+    refetchIntervalInBackground: true,
+    placeholderData: (previous) => previous ?? queryClient.getQueryData<AnnouncementItem[]>(announcementsKey),
   });
 
   const announcements = announcementsQuery.data ?? [];

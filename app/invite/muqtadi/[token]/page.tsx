@@ -192,7 +192,7 @@ export default function MuqtadiInvitePage() {
                 <>
                   {Array.from({ length: householdMembersCount }).map((_, index) => {
                     const isFirst = index === 0;
-                    const placeholder = isFirst ? 'Member 1 (auto-filled)' : `Son ${index}`;
+                    const placeholder = isFirst ? 'Member 1 (auto-filled)' : `Dependent ${index}`;
                     return (
                       <Input
                         key={`member-${index + 1}`}

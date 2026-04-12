@@ -11,7 +11,7 @@ import { MuqtadiBackButton } from '@/components/muqtadi/back-button';
 import { muqtadisService } from '@/services/muqtadis.service';
 import { useProfileQuery } from '@/hooks/useProfileQuery';
 import { getErrorMessage } from '@/src/utils/error';
-import { PageSkeleton } from '@/components/common/loading-skeletons';
+import { MuqtadiProfileSkeleton } from '@/components/common/loading-skeletons';
 
 export default function MuqtadiProfilePage() {
   const profileQuery = useProfileQuery();
@@ -62,6 +62,7 @@ export default function MuqtadiProfilePage() {
 
     const payload: {
       name?: string;
+      fatherName?: string;
       phone?: string;
       whatsappNumber?: string;
       email?: string;
@@ -70,6 +71,9 @@ export default function MuqtadiProfilePage() {
 
     if (profile.name.trim() !== (current.name || '').trim()) {
       payload.name = profile.name.trim();
+    }
+    if (profile.fatherName.trim() !== (current.fatherName || '').trim()) {
+      payload.fatherName = profile.fatherName.trim();
     }
     if (profile.phone.trim() !== (current.phone || '').trim()) {
       payload.phone = profile.phone.trim();
@@ -105,7 +109,7 @@ export default function MuqtadiProfilePage() {
   };
 
   if (profileQuery.isLoading) {
-    return <PageSkeleton rows={1} cardCount={4} />;
+    return <MuqtadiProfileSkeleton />;
   }
 
   return (
@@ -130,7 +134,10 @@ export default function MuqtadiProfilePage() {
 
         <div className="space-y-2">
           <Label>Father Name</Label>
-          <Input value={profile.fatherName} disabled />
+          <Input
+            value={profile.fatherName}
+            onChange={(e) => setProfile((prev) => ({ ...prev, fatherName: e.target.value }))}
+          />
         </div>
 
         <div className="space-y-2">

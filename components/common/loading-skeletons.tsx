@@ -57,3 +57,60 @@ export function PageSkeleton({ rows = 1, cardCount = 3 }: PageSkeletonProps) {
     </div>
   );
 }
+
+export function MuqtadiHeroSkeleton() {
+  return (
+    <div className="space-y-4">
+      <Skeleton className="h-24 w-full rounded-2xl" />
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+        <Skeleton className="h-36 w-full rounded-2xl" />
+        <Skeleton className="h-36 w-full rounded-2xl" />
+      </div>
+      <Skeleton className="h-28 w-full rounded-2xl" />
+    </div>
+  );
+}
+
+export function MuqtadiResolveSkeleton() {
+  return (
+    <div className="mx-auto w-full max-w-xl space-y-3 rounded-2xl border border-border/80 bg-card p-4 shadow-sm">
+      <Skeleton className="h-7 w-1/2 rounded-lg" />
+      <Skeleton className="h-4 w-11/12 rounded-lg" />
+      <Skeleton className="h-20 w-full rounded-xl" />
+      <div className="flex gap-2">
+        <Skeleton className="h-9 w-24 rounded-lg" />
+        <Skeleton className="h-9 w-32 rounded-lg" />
+      </div>
+    </div>
+  );
+}
+
+export function MuqtadiDuesSkeleton() {
+  return (
+    <div className="space-y-4">
+      <Skeleton className="h-14 w-full rounded-xl app-shimmer" />
+      <Skeleton className="h-36 w-full rounded-2xl app-shimmer" />
+      <Skeleton className="h-12 w-full rounded-xl app-shimmer" />
+      <div className="space-y-3">
+        <Skeleton className="h-20 w-full rounded-xl app-shimmer" />
+        <Skeleton className="h-20 w-full rounded-xl app-shimmer" />
+        <Skeleton className="h-20 w-full rounded-xl app-shimmer" />
+      </div>
+    </div>
+  );
+}
+
+export function MuqtadiProfileSkeleton() {
+  return (
+    <div className="space-y-4">
+      <Skeleton className="h-14 w-full rounded-xl app-shimmer" />
+      <Skeleton className="h-10 w-full rounded-xl app-shimmer" />
+      <Skeleton className="h-10 w-full rounded-xl app-shimmer" />
+      <Skeleton className="h-10 w-full rounded-xl app-shimmer" />
+      <Skeleton className="h-10 w-full rounded-xl app-shimmer" />
+      <Skeleton className="h-10 w-full rounded-xl app-shimmer" />
+      <Skeleton className="h-10 w-full rounded-xl app-shimmer" />
+      <Skeleton className="h-11 w-full rounded-xl app-shimmer" />
+    </div>
+  );
+}

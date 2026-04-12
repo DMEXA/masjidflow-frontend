@@ -840,6 +840,7 @@ export const muqtadisService = {
 
   async updateMyProfile(payload: {
     name?: string;
+    fatherName?: string;
     phone?: string;
     whatsappNumber?: string;
     email?: string;

@@ -1,16 +1,27 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useAuthStore } from '@/src/store/auth.store';
-import { AuthLoadingScreen } from '@/components/common/auth-loading-screen';
+import { AppShellLoader } from '@/components/common/app-shell-loader';
 import { DashboardSidebar } from '@/components/dashboard/sidebar';
 import { DashboardHeader } from '@/components/dashboard/header';
 import { MobileBottomNav } from '@/components/dashboard/mobile-bottom-nav';
+import { useProfileQuery } from '@/hooks/useProfileQuery';
+
+const PENDING_ALLOWED_PREFIXES = ['/app/announcements', '/app/meekaat', '/app/donate', '/app/profile'];
 
 export default function AppRouteLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
+  const pathname = usePathname();
   const { checkAuth, isAuthenticated, isLoading, authStatus, hasTriedBootstrap, user } = useAuthStore();
+  const isMuqtadi = user?.role === 'muqtadi';
+  const profileQuery = useProfileQuery(Boolean(authStatus === 'authenticated' && isAuthenticated && isMuqtadi));
+  const isPendingMuqtadi = isMuqtadi && profileQuery.data?.isVerified === false;
+  const isAllowedPendingPath =
+    isPendingMuqtadi
+      ? PENDING_ALLOWED_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`))
+      : true;
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -26,11 +37,28 @@ export default function AppRouteLayout({ children }: { children: React.ReactNode
 
     if (authStatus === 'authenticated' && isAuthenticated && !user?.mosqueId) {
       router.replace('/login');
+      return;
     }
-  }, [authStatus, hasTriedBootstrap, isAuthenticated, user?.mosqueId, router]);
 
-  if (authStatus === 'loading' || isLoading) {
-    return <AuthLoadingScreen message="Loading app..." />;
+    if (isPendingMuqtadi && !isAllowedPendingPath) {
+      router.replace('/household-pending');
+    }
+  }, [authStatus, hasTriedBootstrap, isAuthenticated, user?.mosqueId, isPendingMuqtadi, isAllowedPendingPath, router]);
+
+  if (!hasTriedBootstrap || authStatus === 'loading' || isLoading) {
+    return <AppShellLoader title="Restoring your session" message="Checking auth, role, and mosque context..." />;
+  }
+
+  if (authStatus === 'authenticated' && (!user || !user.mosqueId)) {
+    return <AppShellLoader title="Hydrating account" message="Fetching your profile and access context..." />;
+  }
+
+  if (isMuqtadi && profileQuery.isLoading) {
+    return <AppShellLoader title="Loading Muqtadi profile" message="Checking verification and household state..." />;
+  }
+
+  if (isPendingMuqtadi && !isAllowedPendingPath) {
+    return <AppShellLoader title="Redirecting" message="Sending you to household approval view..." />;
   }
 
   if (!isAuthenticated || !user?.mosqueId) {
@@ -65,7 +93,9 @@ export default function AppRouteLayout({ children }: { children: React.ReactNode
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <DashboardHeader onMobileMenuToggle={() => setMobileMenuOpen(!mobileMenuOpen)} />
         <main className="flex-1 overflow-y-auto overflow-x-hidden pb-20 lg:pb-0">
-          <div className="mx-auto w-full max-w-screen-2xl ds-section">{children}</div>
+          <div key={pathname} className="route-fade-enter mx-auto w-full max-w-screen-2xl ds-section">
+            {children}
+          </div>
         </main>
         <MobileBottomNav />
       </div>

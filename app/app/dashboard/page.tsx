@@ -19,10 +19,11 @@ import {
   extractPrayerTimesFromSettings,
 } from '@/src/utils/prayer-times';
 import { toast } from 'sonner';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '@/lib/query-keys';
 import { ListEmptyState } from '@/components/common/list-empty-state';
-import { PageSkeleton } from '@/components/common/loading-skeletons';
+import { MuqtadiHeroSkeleton } from '@/components/common/loading-skeletons';
+import { muqtadiQueryPolicy } from '@/lib/muqtadi-query-policy';
 
 interface AnnouncementItem {
   id: string;
@@ -43,9 +44,35 @@ function getStatusClasses(status: 'Paid' | 'Partial' | 'Pending') {
   return 'bg-red-100 text-red-700 border-red-200';
 }
 
+function formatHijriDate(date: Date): string {
+  const locales = ['en-IN-u-ca-islamic', 'en-IN-u-ca-islamic-civil', 'en-u-ca-islamic'];
+  for (const locale of locales) {
+    try {
+      const formatted = new Intl.DateTimeFormat(locale, {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+      }).format(date);
+      if (formatted) {
+        return `${formatted} AH`;
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return `${new Intl.DateTimeFormat('en-GB', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  }).format(date)} AH`;
+}
+
 export default function MuqtadiDashboardPage() {
   const { mosque, user } = useAuthStore();
+  const queryClient = useQueryClient();
   const [now, setNow] = useState(new Date());
+  const dashboardKey = queryKeys.muqtadiDashboard(mosque?.id);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -56,9 +83,14 @@ export default function MuqtadiDashboardPage() {
   }, []);
 
   const dashboardQuery = useQuery<MuqtadiDashboardResponse>({
-    queryKey: queryKeys.muqtadiDashboard(mosque?.id),
+    queryKey: dashboardKey,
     enabled: Boolean(mosque?.id),
-    staleTime: 30_000,
+    staleTime: muqtadiQueryPolicy.dashboard.staleTime,
+    gcTime: muqtadiQueryPolicy.dashboard.gcTime,
+    placeholderData: (previous) => previous ?? queryClient.getQueryData<MuqtadiDashboardResponse>(dashboardKey),
+    refetchOnWindowFocus: muqtadiQueryPolicy.dashboard.refetchOnWindowFocus,
+    refetchInterval: muqtadiQueryPolicy.dashboard.refetchInterval,
+    refetchIntervalInBackground: true,
     queryFn: async () => {
       const [dashboardResponse, mosqueInfo] = await Promise.all([
         muqtadisService.getDashboard(),
@@ -166,17 +198,12 @@ export default function MuqtadiDashboardPage() {
   );
 
   const hijriDate = useMemo(
-    () =>
-      `${new Intl.DateTimeFormat('en-TN-u-ca-islamic', {
-        day: 'numeric',
-        month: 'long',
-        year: 'numeric',
-      }).format(now)} AH`,
+    () => formatHijriDate(now),
     [now],
   );
 
   if (dashboardQuery.isLoading) {
-    return <PageSkeleton rows={2} cardCount={4} />;
+    return <MuqtadiHeroSkeleton />;
   }
 
   return (

@@ -3,11 +3,12 @@
 import Link from 'next/link';
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Bell, Clock3, HandCoins } from 'lucide-react';
+import { Bell, Clock3, HandCoins, UserRound } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useAuthStore } from '@/src/store/auth.store';
 import { useProfileQuery } from '@/hooks/useProfileQuery';
+import { AppShellLoader } from '@/components/common/app-shell-loader';
 
 export default function HouseholdPendingPage() {
   const router = useRouter();
@@ -35,11 +36,7 @@ export default function HouseholdPendingPage() {
   }, [isLoading, isAuthenticated, user, profileQuery.isLoading, profileQuery.data?.isVerified, router]);
 
   if (isLoading || profileQuery.isLoading) {
-    return (
-      <div className="mx-auto flex min-h-screen w-full max-w-2xl items-center justify-center px-4">
-        <div className="h-24 w-full animate-pulse rounded-xl bg-muted" />
-      </div>
-    );
+    return <AppShellLoader title="Checking household status" message="Verifying your approval state and access..." />;
   }
 
   if (isAuthenticated && user?.role && user.role !== 'muqtadi') {
@@ -69,9 +66,15 @@ export default function HouseholdPendingPage() {
             </Link>
           </Button>
           <Button asChild className="w-full">
-            <Link href="/donate">
+            <Link href="/app/donate">
               <HandCoins className="mr-2 h-4 w-4" />
               Donate
+            </Link>
+          </Button>
+          <Button asChild className="w-full" variant="outline">
+            <Link href="/app/profile">
+              <UserRound className="mr-2 h-4 w-4" />
+              Profile
             </Link>
           </Button>
         </CardContent>

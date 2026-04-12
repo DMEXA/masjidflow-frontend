@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Menu, User, Settings, LogOut } from 'lucide-react';
 import Link from 'next/link';
+import { useUnreadImportantNotificationCount } from '@/hooks/useNotificationsQuery';
 
 interface DashboardHeaderProps {
   title?: string;
@@ -23,6 +24,8 @@ interface DashboardHeaderProps {
 export function DashboardHeader({ title, onMobileMenuToggle }: DashboardHeaderProps) {
   const { user, logout } = useAuthStore();
   const isMuqtadi = user?.role === 'muqtadi';
+  const notifications = useUnreadImportantNotificationCount();
+  const unreadCount = notifications.unreadCount;
 
   const navItems = isMuqtadi
     ? [
@@ -81,6 +84,18 @@ export function DashboardHeader({ title, onMobileMenuToggle }: DashboardHeaderPr
       </div>
 
       <div className="flex items-center gap-4">
+        {isMuqtadi ? (
+          <Button asChild variant="ghost" size="sm" className="relative">
+            <Link href="/app/notifications">
+              Notifications
+              {unreadCount > 0 ? (
+                <span className="ml-2 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1.5 text-[11px] font-semibold text-destructive-foreground">
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </span>
+              ) : null}
+            </Link>
+          </Button>
+        ) : null}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" className="relative flex items-center gap-2 px-2">

@@ -5,10 +5,12 @@ import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/src/store/auth.store';
 import { getMobileSidebarNavItems } from '@/components/dashboard/sidebar-config';
+import { useUnreadImportantNotificationCount } from '@/hooks/useNotificationsQuery';
 
 export function MobileBottomNav() {
   const pathname = usePathname();
   const { user, mosque } = useAuthStore();
+  const { unreadCount } = useUnreadImportantNotificationCount();
   const visibleNavItems = getMobileSidebarNavItems(user?.role, mosque?.slug);
 
   return (
@@ -21,7 +23,7 @@ export function MobileBottomNav() {
               <Link
                 href={item.href}
                 className={cn(
-                  'flex min-h-14 flex-col items-center justify-center rounded-md px-1 py-1 text-[10px] font-medium leading-tight transition-colors',
+                  'relative flex min-h-14 flex-col items-center justify-center rounded-md px-1 py-1 text-[10px] font-medium leading-tight transition-colors',
                   isActive
                     ? 'bg-primary/10 text-primary'
                     : 'text-muted-foreground hover:bg-muted hover:text-foreground',
@@ -30,6 +32,11 @@ export function MobileBottomNav() {
               >
                 <item.icon className="mb-1 h-4 w-4 shrink-0" />
                 <span className="max-w-full text-center text-[9px] leading-none whitespace-nowrap">{item.label}</span>
+                {user?.role === 'muqtadi' && item.href === '/app/announcements' && unreadCount > 0 ? (
+                  <span className="absolute right-1 top-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[9px] font-semibold text-destructive-foreground">
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </span>
+                ) : null}
               </Link>
             </li>
           );

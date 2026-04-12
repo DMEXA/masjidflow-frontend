@@ -13,7 +13,8 @@ import { formatCurrency } from '@/src/utils/format';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '@/lib/query-keys';
 import { ListEmptyState } from '@/components/common/list-empty-state';
-import { PageSkeleton } from '@/components/common/loading-skeletons';
+import { MuqtadiDuesSkeleton } from '@/components/common/loading-skeletons';
+import { muqtadiQueryPolicy } from '@/lib/muqtadi-query-policy';
 
 type PaymentFilter = 'ALL' | 'VERIFIED' | 'PENDING' | 'REJECTED';
 
@@ -60,10 +61,13 @@ export default function MyDuesPage() {
     queryKey: dashboardKey,
     queryFn: () => muqtadisService.getDashboard(),
     enabled: Boolean(mosque?.id),
-    initialData: () => queryClient.getQueryData<MuqtadiDashboardApiResponse>(dashboardKey),
-    staleTime: 0,
-    refetchOnWindowFocus: false,
-    refetchOnMount: 'always',
+    staleTime: muqtadiQueryPolicy.dues.staleTime,
+    gcTime: muqtadiQueryPolicy.dues.gcTime,
+    placeholderData: (previous) => previous ?? queryClient.getQueryData<MuqtadiDashboardApiResponse>(dashboardKey),
+    refetchOnWindowFocus: muqtadiQueryPolicy.dues.refetchOnWindowFocus,
+    refetchOnMount: true,
+    refetchInterval: muqtadiQueryPolicy.dues.refetchInterval,
+    refetchIntervalInBackground: true,
   });
 
   const history = useMemo(
@@ -85,7 +89,7 @@ export default function MyDuesPage() {
   }, [filter, history]);
 
   if (dashboardQuery.isLoading) {
-    return <PageSkeleton rows={2} cardCount={3} />;
+    return <MuqtadiDuesSkeleton />;
   }
 
   if (dashboardQuery.isError) {

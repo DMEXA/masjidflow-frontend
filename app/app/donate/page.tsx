@@ -6,31 +6,48 @@ import { useAuthStore } from '@/src/store/auth.store';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { PageSkeleton } from '@/components/common/loading-skeletons';
+import { MuqtadiResolveSkeleton } from '@/components/common/loading-skeletons';
+import { AppShellLoader } from '@/components/common/app-shell-loader';
 
-type ResolveState = 'resolving' | 'ready' | 'failed';
+type ResolveState = 'booting' | 'resolving' | 'success' | 'failed';
 
 export default function MuqtadiDonateEntryPage() {
   const router = useRouter();
-  const { mosque, isLoading, authStatus } = useAuthStore();
-  const [resolveState, setResolveState] = useState<ResolveState>('resolving');
+  const { mosque, isLoading, authStatus, hasTriedBootstrap } = useAuthStore();
+  const [resolveState, setResolveState] = useState<ResolveState>('booting');
 
   useEffect(() => {
     let cancelled = false;
+    let failTimer: ReturnType<typeof setTimeout> | null = null;
 
     const resolveAndRedirect = async () => {
-      if (authStatus !== 'authenticated' || isLoading) {
+      if (!hasTriedBootstrap || isLoading || authStatus === 'loading') {
+        if (!cancelled) {
+          setResolveState('booting');
+        }
+        return;
+      }
+
+      if (authStatus !== 'authenticated') {
+        if (!cancelled) {
+          setResolveState('failed');
+        }
         return;
       }
 
       if (!cancelled) {
         if (mosque?.slug) {
-          setResolveState('ready');
+          setResolveState('success');
           router.replace(`/app/donate/${mosque.slug}`);
           return;
         }
 
-        setResolveState('failed');
+        setResolveState('resolving');
+        failTimer = setTimeout(() => {
+          if (!cancelled && !mosque?.slug) {
+            setResolveState('failed');
+          }
+        }, 1500);
       }
     };
 
@@ -38,8 +55,15 @@ export default function MuqtadiDonateEntryPage() {
 
     return () => {
       cancelled = true;
+      if (failTimer) {
+        clearTimeout(failTimer);
+      }
     };
-  }, [authStatus, isLoading, mosque?.slug, router]);
+  }, [authStatus, hasTriedBootstrap, isLoading, mosque?.slug, router]);
+
+  if (resolveState === 'booting') {
+    return <AppShellLoader title="Opening Donate" message="Verifying your session and mosque access..." />;
+  }
 
   if (resolveState === 'failed') {
     return (
@@ -64,7 +88,7 @@ export default function MuqtadiDonateEntryPage() {
 
   return (
     <div className="mx-auto w-full max-w-2xl px-4 py-6">
-      <PageSkeleton rows={1} cardCount={2} />
+      <MuqtadiResolveSkeleton />
     </div>
   );
 }

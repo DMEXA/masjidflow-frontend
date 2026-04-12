@@ -15,6 +15,8 @@ import { toast } from 'sonner';
 import { getErrorMessage } from '@/src/utils/error';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ListEmptyState } from '@/components/common/list-empty-state';
+import { useAuthStore } from '@/src/store/auth.store';
+import { queryKeys } from '@/lib/query-keys';
 
 function getNotificationIcon(type: string) {
   if (type.startsWith('PAYMENT')) {
@@ -56,6 +58,8 @@ function formatRelativeTime(dateInput: string): string {
 
 export default function NotificationsPage() {
   const queryClient = useQueryClient();
+  const { user } = useAuthStore();
+  const notificationsKey = queryKeys.notifications(user?.id);
   const notificationsQuery = useNotificationsQuery();
 
   const notifications = notificationsQuery.data ?? [];
@@ -63,10 +67,10 @@ export default function NotificationsPage() {
   const markAsReadMutation = useMutation({
     mutationFn: (notificationId: string) => notificationsService.markAsRead(notificationId),
     onMutate: async (notificationId: string) => {
-      await queryClient.cancelQueries({ queryKey: ['notifications'] });
-      const previous = queryClient.getQueryData<AppNotification[]>(['notifications']) ?? [];
+      await queryClient.cancelQueries({ queryKey: notificationsKey });
+      const previous = queryClient.getQueryData<AppNotification[]>(notificationsKey) ?? [];
 
-      queryClient.setQueryData<AppNotification[]>(['notifications'], (old = []) =>
+      queryClient.setQueryData<AppNotification[]>(notificationsKey, (old = []) =>
         old.map((item) =>
           item.id === notificationId ? { ...item, isRead: true } : item,
         ),
@@ -76,12 +80,12 @@ export default function NotificationsPage() {
     },
     onError: (error, _notificationId, context) => {
       if (context?.previous) {
-        queryClient.setQueryData(['notifications'], context.previous);
+        queryClient.setQueryData(notificationsKey, context.previous);
       }
       toast.error(getErrorMessage(error, 'Failed to mark notification as read'));
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      queryClient.invalidateQueries({ queryKey: notificationsKey });
     },
   });
 

@@ -31,6 +31,8 @@ export const queryKeys = {
   platformSubscriptions: (filters: { page: number; limit: number; status: string }) =>
     ['platform-subscriptions', 'platform', filters] as const,
   muqtadiDues: (userId?: string) => ['muqtadi-dues', userId ?? 'none'] as const,
+  muqtadiProfile: (userId?: string) => ['muqtadi-profile', userId ?? 'none'] as const,
+  notifications: (userId?: string) => ['notifications', userId ?? 'none'] as const,
   dashboardOverview: (mosqueId?: string) => ['dashboard-overview', mosqueId ?? 'none'] as const,
   muqtadiDashboard: (mosqueId?: string) => ['muqtadi-dashboard', mosqueId ?? 'none'] as const,
   imamFundHistory: (

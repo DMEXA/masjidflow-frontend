@@ -140,28 +140,17 @@ export const useAuthStore = create<AuthState>()(
                 ? (error as { response?: { status?: number } }).response?.status
                 : undefined;
 
-            if (status === 401 || status === 403) {
-              // Bootstrap refresh auth failures should not trigger logout chain.
-              set({
-                user: null,
-                mosque: null,
-                token: null,
-                isAuthenticated: false,
-                isLoading: false,
-                authStatus: 'unauthenticated',
-                hasTriedBootstrap: true,
-              });
-              return;
+            if (status !== 401 && status !== 403) {
+              console.warn('Refresh failed during bootstrap, falling back to unauthenticated state');
             }
 
-            console.warn('Profile missing or refresh unavailable transiently, skipping logout');
             set({
-              token: get().token,
-              user: get().user,
-              mosque: get().mosque,
-              isAuthenticated: true,
+              user: null,
+              mosque: null,
+              token: null,
+              isAuthenticated: false,
               isLoading: false,
-              authStatus: 'authenticated',
+              authStatus: 'unauthenticated',
               hasTriedBootstrap: true,
             });
             return;
@@ -181,10 +170,14 @@ export const useAuthStore = create<AuthState>()(
           } catch (error) {
             console.error('getCurrentUser ERROR:', error);
 
-            // DO NOT logout immediately
+            authService.removeToken();
             set({
+              user: null,
+              mosque: null,
+              token: null,
+              isAuthenticated: false,
               isLoading: false,
-              authStatus: 'authenticated',
+              authStatus: 'unauthenticated',
               hasTriedBootstrap: true,
             });
           }

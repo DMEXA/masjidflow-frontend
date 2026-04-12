@@ -53,7 +53,7 @@ function buildPublicUpiNote(mosqueName: string): string {
 }
 
 function buildPublicUpiDeepLink(input: { upiId: string; upiName: string; amount: string; note: string }): string {
-  const transactionRef = `MLD-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+  const transactionRef = `MLD-${Date.now()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
   const params = new URLSearchParams({
     pa: input.upiId.trim(),
     pn: input.upiName.trim(),
@@ -493,7 +493,7 @@ export default function DonateBySlugPage() {
                 id="donate-phone-number"
                 value={phoneNumber}
                 onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, '').slice(0, 15))}
-                placeholder="Enter 10 to 15 digit phone number"
+                placeholder="Enter 10 digit phone number"
                 inputMode="numeric"
                 minLength={10}
                 maxLength={15}
