@@ -45,13 +45,21 @@ function isMobileDevice(): boolean {
   return mobileRegex.test(userAgent);
 }
 
-function buildPublicUpiDeepLink(input: { upiId: string; upiName: string; amount: string; intentId: string }): string {
-  const pa = encodeURIComponent(input.upiId);
-  const pn = encodeURIComponent(input.upiName);
-  const am = encodeURIComponent(input.amount);
-  const cu = encodeURIComponent('INR');
-  const tn = encodeURIComponent(input.intentId);
-  return `upi://pay?pa=${pa}&pn=${pn}&am=${am}&cu=${cu}&tn=${tn}`;
+function buildPublicUpiNote(mosqueName: string): string {
+  const normalized = mosqueName.trim().replace(/\s+/g, ' ');
+  const note = `Donation | ${normalized || 'Masjid'}`;
+  return note.length > 80 ? `${note.slice(0, 80).trim()}...` : note;
+}
+
+function buildPublicUpiDeepLink(input: { upiId: string; upiName: string; amount: string; note: string }): string {
+  const params = new URLSearchParams({
+    pa: input.upiId.trim(),
+    pn: input.upiName.trim(),
+    am: input.amount.trim(),
+    cu: 'INR',
+    tn: input.note.trim(),
+  });
+  return `upi://pay?${params.toString()}`;
 }
 
 async function copyText(value: string, label: string) {
@@ -264,7 +272,7 @@ export default function DonateBySlugPage() {
             upiId: config.upiId,
             upiName: config.upiName,
             amount: safeAmount.toFixed(2),
-            intentId: publicDraft.intentId,
+            note: buildPublicUpiNote(config.mosqueName),
           })
         : '';
 

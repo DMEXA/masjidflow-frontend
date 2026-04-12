@@ -41,12 +41,14 @@ function isMobileDevice(): boolean {
 }
 
 function buildUpiDeepLink(input: { upiId: string; payeeName: string; amount: number; note: string }): string {
-  const pa = encodeURIComponent(input.upiId);
-  const pn = encodeURIComponent(input.payeeName);
-  const am = encodeURIComponent(input.amount.toFixed(2));
-  const cu = encodeURIComponent('INR');
-  const tn = encodeURIComponent(input.note);
-  return `upi://pay?pa=${pa}&pn=${pn}&am=${am}&cu=${cu}&tn=${tn}`;
+  const params = new URLSearchParams({
+    pa: input.upiId.trim(),
+    pn: input.payeeName.trim(),
+    am: input.amount.toFixed(2),
+    cu: 'INR',
+    tn: input.note.trim(),
+  });
+  return `upi://pay?${params.toString()}`;
 }
 
 function toShortName(name?: string | null): string {
@@ -67,13 +69,14 @@ function buildUpiVerificationNote(input: {
   const monthLabel = new Date(year, Math.max(0, Math.min(11, month - 1)), 1).toLocaleString('en-US', {
     month: 'short',
   });
+  const shortYear = String(year).slice(-2);
 
-  const parts = [`Due ${monthLabel}-${year}`, toShortName(input.payerName)];
+  const parts = [`Due ${monthLabel}-${shortYear}`, toShortName(input.payerName)];
   if (typeof input.householdMembers === 'number' && Number.isFinite(input.householdMembers) && input.householdMembers > 0) {
     parts.push(`HH${Math.trunc(input.householdMembers)}`);
   }
 
-  const note = parts.join(' | ');
+  const note = parts.join(' ');
   return note.length > 80 ? `${note.slice(0, 80).trim()}...` : note;
 }
 
