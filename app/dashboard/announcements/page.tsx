@@ -21,22 +21,22 @@ import { usePermission } from '@/hooks/usePermission';
 
 export default function AdminAnnouncementsPage() {
   const queryClient = useQueryClient();
-  const { user } = useAuthStore();
+  const { user, mosque } = useAuthStore();
   const { canCreate, canEdit, canDelete } = usePermission(user?.role);
   const [title, setTitle] = useState('');
   const [message, setMessage] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
 
   const announcementsQuery = useQuery<AnnouncementItem[]>({
-    queryKey: queryKeys.announcements,
-    queryFn: () => announcementsService.getAll(),
+    queryKey: queryKeys.announcementsByMosque(mosque?.id),
+    queryFn: () => announcementsService.getAll(mosque?.id),
     staleTime: 30_000,
   });
 
   const createMutation = useMutation({
     mutationFn: (payload: { title: string; message: string }) => announcementsService.create(payload),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: queryKeys.announcements });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.announcementsByMosque(mosque?.id) });
     },
   });
 
@@ -44,14 +44,14 @@ export default function AdminAnnouncementsPage() {
     mutationFn: (payload: { id: string; title: string; message: string }) =>
       announcementsService.update(payload.id, { title: payload.title, message: payload.message }),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: queryKeys.announcements });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.announcementsByMosque(mosque?.id) });
     },
   });
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => announcementsService.remove(id),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: queryKeys.announcements });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.announcementsByMosque(mosque?.id) });
     },
   });
 

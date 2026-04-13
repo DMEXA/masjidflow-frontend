@@ -16,15 +16,18 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ListEmptyState } from '@/components/common/list-empty-state';
+import { PublicDonateSkeleton } from '@/components/common/loading-skeletons';
 import { Loader2, CheckCircle2, Upload } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { toast } from 'sonner';
 import { donationsService } from '@/services/donations.service';
 import { fundsService } from '@/services/funds.service';
-import { getErrorMessage, isRequestCanceled } from '@/src/utils/error';
+import { getErrorMessage } from '@/src/utils/error';
 import { isStrictAmountString } from '@/src/utils/numeric-input';
 import { openExternalUrl } from '@/src/utils/open-external-url';
 import { launchUpiDeepLink } from '@/src/utils/upi-launch';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { queryKeys } from '@/lib/query-keys';
 
 const DEVICE_ID_KEY = 'mld_public_device_id';
 
@@ -80,26 +83,11 @@ async function copyText(value: string, label: string) {
 export default function DonateBySlugPage() {
   const params = useParams<{ mosqueSlug: string }>();
   const mosqueSlug = params.mosqueSlug;
+  const queryClient = useQueryClient();
 
-  const [isLoadingConfig, setIsLoadingConfig] = useState(true);
   const [isInitiating, setIsInitiating] = useState(false);
   const [isSubmittingProof, setIsSubmittingProof] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
-  const [loadError, setLoadError] = useState<string | null>(null);
-
-  const [config, setConfig] = useState<{
-    mosqueId: string;
-    mosqueName: string;
-    upiId: string;
-    upiName: string;
-    phoneNumber?: string | null;
-    bankAccountName?: string | null;
-    bankAccount?: string | null;
-    ifsc?: string | null;
-    bankName?: string | null;
-    paymentInstructions?: string | null;
-    funds: Array<{ id: string; name: string }>;
-  } | null>(null);
 
   const [fundId, setFundId] = useState('');
   const [amount, setAmount] = useState('');
@@ -135,6 +123,60 @@ export default function DonateBySlugPage() {
   const trimmedPhoneNumber = phoneNumber.trim();
   const isPhoneValid = /^\d{10,15}$/.test(trimmedPhoneNumber);
 
+  const slugQuery = useQuery({
+    queryKey: queryKeys.publicDonateSlug(mosqueSlug),
+    enabled: Boolean(mosqueSlug),
+    staleTime: 60_000,
+    gcTime: 15 * 60_000,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+    refetchInterval: 60_000,
+    refetchIntervalInBackground: true,
+    placeholderData: (previous) => previous ?? queryClient.getQueryData(queryKeys.publicDonateSlug(mosqueSlug)),
+    queryFn: () => donationsService.getPublicConfigBySlug(mosqueSlug),
+  });
+
+  const mosqueId = slugQuery.data?.mosqueId;
+  const publicConfigQuery = useQuery({
+    queryKey: queryKeys.publicDonateConfig(mosqueId),
+    enabled: Boolean(mosqueId),
+    staleTime: 45_000,
+    gcTime: 15 * 60_000,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+    refetchInterval: 60_000,
+    refetchIntervalInBackground: true,
+    placeholderData: (previous) => previous ?? queryClient.getQueryData(queryKeys.publicDonateConfig(mosqueId)),
+    queryFn: () => donationsService.getPublicConfig(mosqueId),
+  });
+
+  const publicFundsQuery = useQuery({
+    queryKey: queryKeys.publicDonateFunds(mosqueId),
+    enabled: Boolean(mosqueId),
+    staleTime: 45_000,
+    gcTime: 15 * 60_000,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+    refetchInterval: 60_000,
+    refetchIntervalInBackground: true,
+    placeholderData: (previous) => previous ?? queryClient.getQueryData(queryKeys.publicDonateFunds(mosqueId)),
+    queryFn: () => fundsService.getPublicByMosqueId(mosqueId!),
+  });
+
+  const config = useMemo(() => {
+    if (!publicConfigQuery.data) return null;
+    return {
+      ...publicConfigQuery.data,
+      funds: (publicFundsQuery.data ?? []).map((fund) => ({ id: fund.id, name: fund.name })),
+    };
+  }, [publicConfigQuery.data, publicFundsQuery.data]);
+
+  const isLoadingConfig = slugQuery.isLoading || publicConfigQuery.isLoading || publicFundsQuery.isLoading;
+  const loadError = useMemo(() => {
+    const error = slugQuery.error ?? publicConfigQuery.error ?? publicFundsQuery.error;
+    return error ? getErrorMessage(error, 'Failed to load donation page') : null;
+  }, [publicConfigQuery.error, publicFundsQuery.error, slugQuery.error]);
+
   useEffect(() => {
     let isCancelled = false;
 
@@ -166,42 +208,16 @@ export default function DonateBySlugPage() {
   }, [config?.mosqueId, fundId, isPhoneValid, trimmedPhoneNumber]);
 
   useEffect(() => {
-    const controller = new AbortController();
-
-    const loadConfig = async () => {
-      setIsLoadingConfig(true);
-      setLoadError(null);
-      try {
-        const slugConfig = await donationsService.getPublicConfigBySlug(mosqueSlug);
-        const result = await donationsService.getPublicConfig(slugConfig.mosqueId);
-        const fundList = await fundsService.getPublicByMosqueId(result.mosqueId, {
-          signal: controller.signal,
-        });
-        if (fundList.length > 0) {
-          setFundId(fundList[0].id);
-        }
-        setConfig({
-          ...result,
-          funds: fundList.map((fund) => ({ id: fund.id, name: fund.name })),
-        });
-      } catch (error) {
-        if (isRequestCanceled(error)) {
-          return;
-        }
-        const message = getErrorMessage(error, 'Failed to load donation page');
-        setLoadError(message);
-        toast.error(getErrorMessage(error, 'Failed to load donation page'));
-      } finally {
-        setIsLoadingConfig(false);
-      }
-    };
-
-    if (mosqueSlug) {
-      loadConfig();
+    if (loadError) {
+      toast.error(loadError);
     }
+  }, [loadError]);
 
-    return () => controller.abort();
-  }, [mosqueSlug]);
+  useEffect(() => {
+    if (!fundId && config?.funds?.length) {
+      setFundId(config.funds[0].id);
+    }
+  }, [config?.funds, fundId]);
 
   const normalizedAmount = useMemo(() => amount.trim(), [amount]);
   const hasValidAmount = useMemo(() => {
@@ -349,7 +365,7 @@ export default function DonateBySlugPage() {
     }
 
     if (!isPhoneValid) {
-      toast.error('Phone number must be 10 to 15 digits.');
+      toast.error('Phone number must be 10 digits.');
       return;
     }
 
@@ -398,14 +414,7 @@ export default function DonateBySlugPage() {
   };
 
   if (isLoadingConfig) {
-    return (
-      <div className="mx-auto w-full max-w-xl animate-pulse space-y-4 px-4 py-10">
-        <div className="h-14 rounded-xl bg-muted" />
-        <div className="h-24 rounded-xl bg-muted" />
-        <div className="h-24 rounded-xl bg-muted" />
-        <div className="h-12 rounded-xl bg-muted" />
-      </div>
-    );
+    return <PublicDonateSkeleton />;
   }
 
   if (loadError) {
@@ -500,7 +509,7 @@ export default function DonateBySlugPage() {
                 required
                 disabled={isDonationFormDisabled}
               />
-              <p className="text-xs text-muted-foreground">Required. Use 10 to 15 digits.</p>
+              {/* <p className="text-xs text-muted-foreground">Required. Use 10 to 15 digits.</p> */}
             </div>
 
             {!hasAnyPaymentOption ? (

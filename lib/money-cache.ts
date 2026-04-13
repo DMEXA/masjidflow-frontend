@@ -5,5 +5,7 @@ export async function invalidateMoneyQueries(queryClient: QueryClient): Promise<
     queryClient.invalidateQueries({ queryKey: ['funds'] }),
     queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
     queryClient.invalidateQueries({ queryKey: ['reports'] }),
+    queryClient.invalidateQueries({ queryKey: ['muqtadi-dashboard'], exact: false }),
+    queryClient.invalidateQueries({ queryKey: ['muqtadi-dues'], exact: false }),
   ]);
 }

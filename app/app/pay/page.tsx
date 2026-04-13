@@ -31,6 +31,8 @@ import { queryKeys } from '@/lib/query-keys';
 import { QRCodeSVG } from 'qrcode.react';
 import { useProfileQuery } from '@/hooks/useProfileQuery';
 import { muqtadiQueryPolicy } from '@/lib/muqtadi-query-policy';
+import { invalidateMuqtadiFinancialQueries } from '@/lib/realtime-invalidation';
+import { MuqtadiDuesSkeleton } from '@/components/common/loading-skeletons';
 
 type SortOrder = 'newest' | 'oldest';
 type PaymentMethod = 'UPI' | 'BANK' | 'PHONE';
@@ -561,10 +563,10 @@ export default function PayPage() {
       setReference('');
       setExistingScreenshotUrl('');
       setShowProofStep(false);
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.muqtadiDues(user?.id) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.muqtadiDashboard(mosque?.id) }),
-      ]);
+      await invalidateMuqtadiFinancialQueries(queryClient, {
+        userId: user?.id,
+        mosqueId: mosque?.id,
+      });
       await duesQuery.refetch();
     } catch (error) {
       toast.error(getErrorMessage(error, 'Failed to submit payment'));
@@ -575,14 +577,7 @@ export default function PayPage() {
   };
 
   if (duesQuery.isLoading) {
-    return (
-      <div className="animate-pulse space-y-3">
-        <div className="h-12 rounded-xl bg-muted" />
-        <div className="h-16 rounded-xl bg-muted" />
-        <div className="h-16 rounded-xl bg-muted" />
-        <div className="h-16 rounded-xl bg-muted" />
-      </div>
-    );
+    return <MuqtadiDuesSkeleton />;
   }
 
   return (

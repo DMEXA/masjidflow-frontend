@@ -2,6 +2,7 @@ export const queryKeys = {
   mosqueSettings: (mosqueId: string) => ['mosque-settings', mosqueId] as const,
   prayerTimes: (mosqueId: string) => ['prayer-times', mosqueId] as const,
   announcements: ['announcements'] as const,
+  announcementsByMosque: (mosqueId?: string) => ['announcements', mosqueId ?? 'none'] as const,
   members: (params: {
     page: number;
     limit: number;
@@ -35,6 +36,9 @@ export const queryKeys = {
   notifications: (userId?: string) => ['notifications', userId ?? 'none'] as const,
   dashboardOverview: (mosqueId?: string) => ['dashboard-overview', mosqueId ?? 'none'] as const,
   muqtadiDashboard: (mosqueId?: string) => ['muqtadi-dashboard', mosqueId ?? 'none'] as const,
+  publicDonateSlug: (mosqueSlug?: string) => ['public-donate-slug', mosqueSlug ?? 'none'] as const,
+  publicDonateConfig: (mosqueId?: string) => ['public-donate-config', mosqueId ?? 'none'] as const,
+  publicDonateFunds: (mosqueId?: string) => ['public-donate-funds', mosqueId ?? 'none'] as const,
   imamFundHistory: (
     mosqueId: string | undefined,
     filters: {

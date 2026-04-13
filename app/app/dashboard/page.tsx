@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { muqtadisService, type MuqtadiDashboardApiResponse } from '@/services/muqtadis.service';
 import { mosqueService, type PrayerTimesSetting } from '@/services/mosque.service';
+import { announcementsService, type AnnouncementItem } from '@/services/announcements.service';
 import { useAuthStore } from '@/src/store/auth.store';
 import { formatCurrency } from '@/src/utils/format';
 import { getErrorMessage } from '@/src/utils/error';
@@ -16,7 +17,6 @@ import {
   getCountdownLabel,
   getNextPrayer,
   getPrayerClockEntries,
-  extractPrayerTimesFromSettings,
 } from '@/src/utils/prayer-times';
 import { toast } from 'sonner';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -25,18 +25,11 @@ import { ListEmptyState } from '@/components/common/list-empty-state';
 import { MuqtadiHeroSkeleton } from '@/components/common/loading-skeletons';
 import { muqtadiQueryPolicy } from '@/lib/muqtadi-query-policy';
 
-interface AnnouncementItem {
-  id: string;
-  title: string;
-  message: string;
-  createdAt: string;
+function getPaymentSortTimestamp(payment: { createdAt?: string; updatedAt?: string }) {
+  const updated = payment.updatedAt ? new Date(payment.updatedAt).getTime() : 0;
+  const created = payment.createdAt ? new Date(payment.createdAt).getTime() : 0;
+  return Math.max(updated || 0, created || 0);
 }
-
-type MuqtadiDashboardResponse = {
-  dashboard: MuqtadiDashboardApiResponse;
-  prayerTimes: PrayerTimesSetting | null;
-  latestAnnouncement: AnnouncementItem | null;
-};
 
 function getStatusClasses(status: 'Paid' | 'Partial' | 'Pending') {
   if (status === 'Paid') return 'bg-emerald-100 text-emerald-700 border-emerald-200';
@@ -82,44 +75,42 @@ export default function MuqtadiDashboardPage() {
     return () => clearInterval(timer);
   }, []);
 
-  const dashboardQuery = useQuery<MuqtadiDashboardResponse>({
+  const dashboardQuery = useQuery<MuqtadiDashboardApiResponse>({
     queryKey: dashboardKey,
     enabled: Boolean(mosque?.id),
     staleTime: muqtadiQueryPolicy.dashboard.staleTime,
     gcTime: muqtadiQueryPolicy.dashboard.gcTime,
-    placeholderData: (previous) => previous ?? queryClient.getQueryData<MuqtadiDashboardResponse>(dashboardKey),
+    placeholderData: (previous) => previous ?? queryClient.getQueryData<MuqtadiDashboardApiResponse>(dashboardKey),
     refetchOnWindowFocus: muqtadiQueryPolicy.dashboard.refetchOnWindowFocus,
     refetchInterval: muqtadiQueryPolicy.dashboard.refetchInterval,
     refetchIntervalInBackground: true,
-    queryFn: async () => {
-      const [dashboardResponse, mosqueInfo] = await Promise.all([
-        muqtadisService.getDashboard(),
-        mosque?.id ? mosqueService.getById(mosque.id) : Promise.resolve(null),
-      ]);
+    queryFn: () => muqtadisService.getDashboard(),
+  });
 
-      if (typeof dashboardResponse?.expectedAmount !== 'number' || !Array.isArray(dashboardResponse.history)) {
-        throw new Error(
-          `Dashboard API missing required fields. expectedAmountType=${typeof dashboardResponse?.expectedAmount} historyIsArray=${String(Array.isArray(dashboardResponse?.history))}`,
-        );
-      }
+  const prayerTimesKey = queryKeys.prayerTimes(mosque?.id ?? 'none');
+  const prayerTimesQuery = useQuery<PrayerTimesSetting | null>({
+    queryKey: prayerTimesKey,
+    enabled: Boolean(mosque?.id),
+    staleTime: muqtadiQueryPolicy.prayerTimes.staleTime,
+    gcTime: muqtadiQueryPolicy.prayerTimes.gcTime,
+    refetchOnWindowFocus: muqtadiQueryPolicy.prayerTimes.refetchOnWindowFocus,
+    refetchInterval: muqtadiQueryPolicy.prayerTimes.refetchInterval,
+    refetchIntervalInBackground: true,
+    placeholderData: (previous) => previous ?? queryClient.getQueryData<PrayerTimesSetting | null>(prayerTimesKey),
+    queryFn: () => mosqueService.getPrayerTimes(mosque!.id),
+  });
 
-      const settings = mosqueInfo?.settings;
-      const settingsObj =
-        settings && typeof settings === 'object' && !Array.isArray(settings)
-          ? (settings as Record<string, unknown>)
-          : null;
-      const prayerConfig = extractPrayerTimesFromSettings(settingsObj);
-
-      const announcements = Array.isArray(settingsObj?.announcements)
-        ? (settingsObj.announcements as AnnouncementItem[])
-        : [];
-
-      return {
-        dashboard: dashboardResponse,
-        prayerTimes: prayerConfig,
-        latestAnnouncement: announcements[0] ?? null,
-      };
-    },
+  const announcementsKey = queryKeys.announcementsByMosque(mosque?.id);
+  const announcementsQuery = useQuery<AnnouncementItem[]>({
+    queryKey: announcementsKey,
+    enabled: Boolean(mosque?.id),
+    staleTime: muqtadiQueryPolicy.announcements.staleTime,
+    gcTime: muqtadiQueryPolicy.announcements.gcTime,
+    refetchOnWindowFocus: muqtadiQueryPolicy.announcements.refetchOnWindowFocus,
+    refetchInterval: muqtadiQueryPolicy.announcements.refetchInterval,
+    refetchIntervalInBackground: true,
+    placeholderData: (previous) => previous ?? queryClient.getQueryData<AnnouncementItem[]>(announcementsKey),
+    queryFn: () => announcementsService.getAll(mosque!.id),
   });
 
   useEffect(() => {
@@ -128,14 +119,14 @@ export default function MuqtadiDashboardPage() {
     }
   }, [dashboardQuery.error]);
 
-  const dashboard = useMemo(
-    () => dashboardQuery.data?.dashboard ?? null,
-    [dashboardQuery.data?.dashboard],
+  const dashboard = dashboardQuery.data ?? null;
+  const prayerTimes = prayerTimesQuery.data ?? null;
+  const latestAnnouncement = useMemo(
+    () => (announcementsQuery.data ?? []).slice().sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0] ?? null,
+    [announcementsQuery.data],
   );
-  const prayerTimes = dashboardQuery.data?.prayerTimes ?? null;
-  const latestAnnouncement = dashboardQuery.data?.latestAnnouncement ?? null;
   const paymentHistory = useMemo(
-    () => [...(dashboard?.history ?? [])].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
+    () => [...(dashboard?.history ?? [])].sort((a, b) => getPaymentSortTimestamp(b) - getPaymentSortTimestamp(a)),
     [dashboard?.history],
   );
   const lastPayment = paymentHistory[0] ?? null;
@@ -202,7 +193,7 @@ export default function MuqtadiDashboardPage() {
     [now],
   );
 
-  if (dashboardQuery.isLoading) {
+  if ((dashboardQuery.isLoading || dashboardQuery.isError) && !dashboard) {
     return <MuqtadiHeroSkeleton />;
   }
 

@@ -20,7 +20,7 @@ type AnnouncementsProps = {
 export function Announcements({ mosqueId }: AnnouncementsProps) {
   const [sortOrder, setSortOrder] = useState<SortOrder>('newest');
   const queryClient = useQueryClient();
-  const announcementsKey = [...queryKeys.announcements, mosqueId] as const;
+  const announcementsKey = queryKeys.announcementsByMosque(mosqueId);
 
   const announcementsQuery = useQuery<AnnouncementItem[]>({
     queryKey: announcementsKey,
@@ -34,17 +34,17 @@ export function Announcements({ mosqueId }: AnnouncementsProps) {
     placeholderData: (previous) => previous ?? queryClient.getQueryData<AnnouncementItem[]>(announcementsKey),
   });
 
-  const announcements = announcementsQuery.data ?? [];
-
   const sortedAnnouncements = useMemo(
     () =>
-      [...announcements].sort((a, b) => {
+      [...(announcementsQuery.data ?? [])].sort((a, b) => {
         const left = new Date(a.createdAt).getTime();
         const right = new Date(b.createdAt).getTime();
         return sortOrder === 'newest' ? right - left : left - right;
       }),
-    [announcements, sortOrder],
+    [announcementsQuery.data, sortOrder],
   );
+
+  const announcements = announcementsQuery.data ?? [];
 
   useEffect(() => {
     if (announcementsQuery.error) {

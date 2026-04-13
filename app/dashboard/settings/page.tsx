@@ -46,6 +46,7 @@ import { getErrorMessage } from '@/src/utils/error';
 import { formatCurrency, formatCycleLabel } from '@/src/utils/format';
 import { parseStrictAmountInput } from '@/src/utils/numeric-input';
 import { ListEmptyState } from '@/components/common/list-empty-state';
+import { invalidateMosqueLiveQueries, invalidateMuqtadiFinancialQueries } from '@/lib/realtime-invalidation';
 
 type PrayerName = 'fajr' | 'zawal' | 'zuhr' | 'asr' | 'maghrib' | 'isha' | 'jumuah';
 type SortOrder = 'newest' | 'oldest';
@@ -416,8 +417,11 @@ export default function SettingsPage() {
     mutationFn: (payload: PrayerTimesUpdateInput) =>
       mosqueService.updatePrayerTimes(currentMosque!.id, payload),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: queryKeys.prayerTimes(currentMosque?.id ?? 'none') });
-      await queryClient.invalidateQueries({ queryKey: queryKeys.mosqueSettings(currentMosque?.id ?? 'none') });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.prayerTimes(currentMosque?.id ?? 'none') }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.mosqueSettings(currentMosque?.id ?? 'none') }),
+        invalidateMosqueLiveQueries(queryClient, currentMosque?.id),
+      ]);
     },
   });
 
@@ -544,6 +548,7 @@ export default function SettingsPage() {
           useCurrentSettingsForNextCycle: true,
         });
         await nextCycleInfoQuery.refetch();
+        await invalidateMuqtadiFinancialQueries(queryClient, { mosqueId: currentMosque?.id });
         toast.success('Next cycle will continue with current settings');
       } catch (error) {
         toast.error(getErrorMessage(error, 'Failed to update salary settings'));
@@ -591,6 +596,7 @@ export default function SettingsPage() {
       setApplyCurrentMonthBlockedReason(null);
       await loadSalaryMonths();
       await nextCycleInfoQuery.refetch();
+      await invalidateMuqtadiFinancialQueries(queryClient, { mosqueId: currentMosque?.id });
       if (applyNow) {
         toast.success('Salary settings updated');
       } else if (nextCycleMode === 'update-next') {
@@ -630,6 +636,7 @@ export default function SettingsPage() {
         year: currentPeriod.year,
       });
       toast.success(`Month created with ${formatCurrency(created.contributionAmount ?? created.perHead)} fixed contribution`);
+      await invalidateMuqtadiFinancialQueries(queryClient, { mosqueId: currentMosque?.id });
       await loadSalaryMonths();
     } catch (error) {
       toast.error(getErrorMessage(error, 'Failed to create salary month'));
@@ -880,6 +887,7 @@ export default function SettingsPage() {
       });
 
       toast.success('Payment settings updated');
+      await invalidateMosqueLiveQueries(queryClient, mosqueId);
     } catch (error) {
       toast.error(getErrorMessage(error, 'Failed to update payment settings'));
     } finally {

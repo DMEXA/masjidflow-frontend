@@ -290,6 +290,7 @@ export interface MuqtadiDashboardApiResponse {
     screenshotUrl?: string | null;
     utr?: string | null;
     createdAt: string;
+    updatedAt?: string;
   }>;
 }
 

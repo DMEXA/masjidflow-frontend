@@ -61,12 +61,12 @@ export function PageSkeleton({ rows = 1, cardCount = 3 }: PageSkeletonProps) {
 export function MuqtadiHeroSkeleton() {
   return (
     <div className="space-y-4">
-      <Skeleton className="h-24 w-full rounded-2xl" />
+      <Skeleton className="h-28 w-full rounded-2xl app-shimmer" />
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-        <Skeleton className="h-36 w-full rounded-2xl" />
-        <Skeleton className="h-36 w-full rounded-2xl" />
+        <Skeleton className="h-40 w-full rounded-2xl app-shimmer" />
+        <Skeleton className="h-40 w-full rounded-2xl app-shimmer" />
       </div>
-      <Skeleton className="h-28 w-full rounded-2xl" />
+      <Skeleton className="h-32 w-full rounded-2xl app-shimmer" />
     </div>
   );
 }
@@ -111,6 +111,20 @@ export function MuqtadiProfileSkeleton() {
       <Skeleton className="h-10 w-full rounded-xl app-shimmer" />
       <Skeleton className="h-10 w-full rounded-xl app-shimmer" />
       <Skeleton className="h-11 w-full rounded-xl app-shimmer" />
+    </div>
+  );
+}
+
+export function PublicDonateSkeleton() {
+  return (
+    <div className="mx-auto max-w-3xl space-y-4 px-4 py-6">
+      <Skeleton className="h-12 w-52 rounded-xl app-shimmer" />
+      <Skeleton className="h-44 w-full rounded-2xl app-shimmer" />
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+        <Skeleton className="h-40 w-full rounded-2xl app-shimmer" />
+        <Skeleton className="h-40 w-full rounded-2xl app-shimmer" />
+      </div>
+      <Skeleton className="h-56 w-full rounded-2xl app-shimmer" />
     </div>
   );
 }

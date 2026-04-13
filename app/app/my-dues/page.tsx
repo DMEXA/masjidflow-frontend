@@ -18,6 +18,12 @@ import { muqtadiQueryPolicy } from '@/lib/muqtadi-query-policy';
 
 type PaymentFilter = 'ALL' | 'VERIFIED' | 'PENDING' | 'REJECTED';
 
+function getPaymentSortTimestamp(payment: { createdAt?: string; updatedAt?: string }) {
+  const updated = payment.updatedAt ? new Date(payment.updatedAt).getTime() : 0;
+  const created = payment.createdAt ? new Date(payment.createdAt).getTime() : 0;
+  return Math.max(updated || 0, created || 0);
+}
+
 function getStatusBadgeClass(status: string) {
   if (status === 'VERIFIED') return 'bg-emerald-100 text-emerald-700 border-emerald-200';
   if (status === 'PENDING') return 'bg-amber-100 text-amber-700 border-amber-200';
@@ -74,21 +80,24 @@ export default function MyDuesPage() {
     () => dashboardQuery.data?.history ?? [],
     [dashboardQuery.data?.history],
   );
-  const outstandingAmount = Number(dashboardQuery.data?.outstandingAmount ?? dashboardQuery.data?.remainingAmount ?? 0);
+  const hasFinancialTruth = Boolean(dashboardQuery.data);
+  const outstandingAmount = hasFinancialTruth
+    ? Number(dashboardQuery.data?.outstandingAmount ?? dashboardQuery.data?.remainingAmount ?? 0)
+    : Number.NaN;
   const allDuesPaid = outstandingAmount <= 0.0001;
   const firstRetryablePayment = history.find((item) => needsRetryAction(item.status)) ?? null;
   const hasRetryablePayment = history.some((item) => needsRetryAction(item.status));
 
   const payments = useMemo(() => {
     const sorted = [...history].sort(
-      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+      (a, b) => getPaymentSortTimestamp(b) - getPaymentSortTimestamp(a),
     );
 
     if (filter === 'ALL') return sorted;
     return sorted.filter((item) => item.status === filter);
   }, [filter, history]);
 
-  if (dashboardQuery.isLoading) {
+  if (dashboardQuery.isLoading && !hasFinancialTruth) {
     return <MuqtadiDuesSkeleton />;
   }
 

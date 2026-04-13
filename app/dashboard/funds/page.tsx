@@ -52,6 +52,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { downloadPdfExport, EXPORT_MAX_ROWS } from '@/src/utils/export';
 import { useDebounce } from '@/hooks/useDebounce';
 import { usePermission } from '@/hooks/usePermission';
+import { invalidateMosqueLiveQueries } from '@/lib/realtime-invalidation';
 
 export default function FundsPage() {
   const router = useRouter();
@@ -177,7 +178,10 @@ export default function FundsPage() {
       toast.success('Fund created successfully');
       setIsCreateOpen(false);
       resetForm();
-      await queryClient.invalidateQueries({ queryKey: ['funds'] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['funds'] }),
+        invalidateMosqueLiveQueries(queryClient, mosqueId),
+      ]);
     } catch (error) {
       toast.error(getErrorMessage(error, 'Failed to create fund'));
     } finally {
@@ -207,7 +211,10 @@ export default function FundsPage() {
       setIsEditOpen(false);
       setEditId(null);
       resetForm();
-      await queryClient.invalidateQueries({ queryKey: ['funds'] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['funds'] }),
+        invalidateMosqueLiveQueries(queryClient, mosqueId),
+      ]);
     } catch (error) {
       toast.error(getErrorMessage(error, 'Failed to update fund'));
     } finally {
@@ -227,6 +234,7 @@ export default function FundsPage() {
       await queryClient.invalidateQueries({ queryKey: ['inactive-funds'] });
       await queryClient.invalidateQueries({ queryKey: ['funds'], exact: false });
       await queryClient.refetchQueries({ queryKey: ['funds'] });
+      await invalidateMosqueLiveQueries(queryClient, mosqueId);
     } catch (error) {
       const message = getErrorMessage(error, 'Failed to deactivate fund');
       if (message.includes('transactions exist')) {
@@ -247,6 +255,7 @@ export default function FundsPage() {
       await queryClient.invalidateQueries({ queryKey: ['inactive-funds'] });
       await queryClient.invalidateQueries({ queryKey: ['funds'], exact: false });
       await queryClient.refetchQueries({ queryKey: ['funds'] });
+      await invalidateMosqueLiveQueries(queryClient, mosqueId);
     } catch (error) {
       toast.error(getErrorMessage(error, 'Failed to restore fund'));
     } finally {

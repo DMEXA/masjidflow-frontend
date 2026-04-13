@@ -1,37 +1,37 @@
 export const muqtadiQueryPolicy = {
   dashboard: {
-    staleTime: 45_000,
+    staleTime: 30_000,
     gcTime: 10 * 60_000,
     refetchOnWindowFocus: true,
-    refetchInterval: 120_000,
+    refetchInterval: 60_000,
   },
   dues: {
     staleTime: 20_000,
     gcTime: 10 * 60_000,
     refetchOnWindowFocus: true,
-    refetchInterval: 90_000,
+    refetchInterval: 30_000,
   },
   profile: {
-    staleTime: 5 * 60_000,
+    staleTime: 10 * 60_000,
     gcTime: 20 * 60_000,
-    refetchOnWindowFocus: false,
+    refetchOnWindowFocus: true,
   },
   announcements: {
-    staleTime: 60_000,
+    staleTime: 45_000,
     gcTime: 15 * 60_000,
     refetchOnWindowFocus: true,
-    refetchInterval: 120_000,
+    refetchInterval: 60_000,
   },
   prayerTimes: {
-    staleTime: 5 * 60_000,
+    staleTime: 3 * 60_000,
     gcTime: 30 * 60_000,
-    refetchOnWindowFocus: false,
-    refetchInterval: 5 * 60_000,
+    refetchOnWindowFocus: true,
+    refetchInterval: 3 * 60_000,
   },
   notifications: {
     staleTime: 30_000,
     gcTime: 10 * 60_000,
-    refetchOnWindowFocus: false,
+    refetchOnWindowFocus: true,
     refetchInterval: 60_000,
   },
 } as const;

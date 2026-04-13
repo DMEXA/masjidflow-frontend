@@ -12,8 +12,13 @@ import { muqtadisService } from '@/services/muqtadis.service';
 import { useProfileQuery } from '@/hooks/useProfileQuery';
 import { getErrorMessage } from '@/src/utils/error';
 import { MuqtadiProfileSkeleton } from '@/components/common/loading-skeletons';
+import { useQueryClient } from '@tanstack/react-query';
+import { useAuthStore } from '@/src/store/auth.store';
+import { queryKeys } from '@/lib/query-keys';
 
 export default function MuqtadiProfilePage() {
+  const queryClient = useQueryClient();
+  const { user, mosque } = useAuthStore();
   const profileQuery = useProfileQuery();
   const [submitting, setSubmitting] = useState(false);
   const [profile, setProfile] = useState({
@@ -100,6 +105,10 @@ export default function MuqtadiProfilePage() {
     try {
       await muqtadisService.updateMyProfile(payload);
       toast.success('Profile updated');
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.muqtadiProfile(user?.id) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.muqtadiDashboard(mosque?.id) }),
+      ]);
       await profileQuery.refetch();
     } catch (error) {
       toast.error(getErrorMessage(error, 'Failed to update profile'));
