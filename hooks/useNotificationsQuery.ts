@@ -35,6 +35,7 @@ export function useNotificationsQuery() {
     refetchInterval: muqtadiQueryPolicy.notifications.refetchInterval,
     refetchIntervalInBackground: true,
     refetchOnWindowFocus: muqtadiQueryPolicy.notifications.refetchOnWindowFocus,
+    refetchOnReconnect: true,
   });
 }
 
@@ -56,6 +57,7 @@ export function useConditionalNotificationsQuery(enabled = true) {
     refetchInterval: muqtadiQueryPolicy.notifications.refetchInterval,
     refetchIntervalInBackground: true,
     refetchOnWindowFocus: muqtadiQueryPolicy.notifications.refetchOnWindowFocus,
+    refetchOnReconnect: true,
   });
 }
 

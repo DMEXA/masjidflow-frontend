@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import { Check, ChevronDown, Copy, Loader2 } from 'lucide-react';
@@ -33,6 +33,7 @@ import { useProfileQuery } from '@/hooks/useProfileQuery';
 import { muqtadiQueryPolicy } from '@/lib/muqtadi-query-policy';
 import { invalidateMuqtadiFinancialQueries } from '@/lib/realtime-invalidation';
 import { MuqtadiDuesSkeleton } from '@/components/common/loading-skeletons';
+import { useMinimumLoading } from '@/hooks/useMinimumLoading';
 
 type SortOrder = 'newest' | 'oldest';
 type PaymentMethod = 'UPI' | 'BANK' | 'PHONE';
@@ -128,12 +129,27 @@ export default function PayPage() {
   const [resumeBlocked, setResumeBlocked] = useState(false);
   const [exactResumeMatched, setExactResumeMatched] = useState(false);
   const [upiTransactionRef, setUpiTransactionRef] = useState('');
+  const isMountedRef = useRef(true);
 
   useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  const muqtadiDraftHintKey = useMemo(() => {
+    if (!mosque?.id) return null;
+    return `mld_muqtadi_pay_hint_${mosque.id}`;
+  }, [mosque?.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+
     const loadPaymentConfig = async () => {
       if (!mosque?.id) return;
       try {
         const config = await paymentSettingsService.get();
+        if (cancelled || !isMountedRef.current) return;
         setPaymentConfig({
           upiId: config?.upiId ?? null,
           bankAccount: config?.bankAccount ?? null,
@@ -141,12 +157,62 @@ export default function PayPage() {
           phoneNumber: config?.phoneNumber ?? config?.adminWhatsappNumber ?? null,
         });
       } catch {
+        if (cancelled || !isMountedRef.current) return;
         setPaymentConfig(null);
       }
     };
 
     void loadPaymentConfig();
+
+    return () => {
+      cancelled = true;
+    };
   }, [mosque?.id]);
+
+  useEffect(() => {
+    if (!muqtadiDraftHintKey || typeof window === 'undefined') return;
+    const raw = window.localStorage.getItem(muqtadiDraftHintKey);
+    if (!raw) return;
+
+    try {
+      const parsed = JSON.parse(raw) as {
+        selectedCycleId?: string;
+        amount?: string;
+        selectedMethod?: PaymentMethod;
+      };
+
+      if (!selectedCycleId && parsed.selectedCycleId) {
+        setSelectedCycleId(parsed.selectedCycleId);
+      }
+      if (!amount && parsed.amount) {
+        setAmount(parsed.amount);
+      }
+      if (!selectedMethod && parsed.selectedMethod && ['UPI', 'BANK', 'PHONE'].includes(parsed.selectedMethod)) {
+        setSelectedMethod(parsed.selectedMethod);
+      }
+    } catch {
+      // ignore corrupted local hint
+    }
+  }, [amount, muqtadiDraftHintKey, selectedCycleId, selectedMethod]);
+
+  useEffect(() => {
+    if (!muqtadiDraftHintKey || typeof window === 'undefined') return;
+    const hasHint = Boolean(selectedCycleId || amount || selectedMethod);
+    if (!hasHint) {
+      window.localStorage.removeItem(muqtadiDraftHintKey);
+      return;
+    }
+
+    window.localStorage.setItem(
+      muqtadiDraftHintKey,
+      JSON.stringify({
+        selectedCycleId,
+        amount,
+        selectedMethod,
+        updatedAt: Date.now(),
+      }),
+    );
+  }, [amount, muqtadiDraftHintKey, selectedCycleId, selectedMethod]);
 
   const duesQuery = useQuery<MyDuesResponse>({
     queryKey: queryKeys.muqtadiDues(user?.id),
@@ -155,6 +221,7 @@ export default function PayPage() {
     staleTime: muqtadiQueryPolicy.dues.staleTime,
     gcTime: muqtadiQueryPolicy.dues.gcTime,
     refetchOnWindowFocus: muqtadiQueryPolicy.dues.refetchOnWindowFocus,
+    refetchOnReconnect: true,
     refetchInterval: muqtadiQueryPolicy.dues.refetchInterval,
     refetchIntervalInBackground: true,
     placeholderData: (previous) => previous ?? queryClient.getQueryData<MyDuesResponse>(queryKeys.muqtadiDues(user?.id)),
@@ -163,10 +230,11 @@ export default function PayPage() {
   const dashboardQuery = useQuery<MuqtadiDashboardApiResponse>({
     queryKey: queryKeys.muqtadiDashboard(mosque?.id),
     queryFn: () => muqtadisService.getDashboard(),
-    enabled: Boolean(user?.id && mosque?.id && resumeProofMode),
+    enabled: Boolean(user?.id && mosque?.id),
     staleTime: muqtadiQueryPolicy.dashboard.staleTime,
     gcTime: muqtadiQueryPolicy.dashboard.gcTime,
     refetchOnWindowFocus: muqtadiQueryPolicy.dashboard.refetchOnWindowFocus,
+    refetchOnReconnect: true,
     refetchInterval: muqtadiQueryPolicy.dashboard.refetchInterval,
     refetchIntervalInBackground: true,
     placeholderData: (previous) => previous ?? queryClient.getQueryData<MuqtadiDashboardApiResponse>(queryKeys.muqtadiDashboard(mosque?.id)),
@@ -210,6 +278,35 @@ export default function PayPage() {
       return sortOrder === 'newest' ? right - left : left - right;
     });
   }, [dues, sortOrder]);
+
+  const preferredAutoDue = useMemo(() => {
+    if (!dues.length) return null;
+
+    const unpaidDues = dues.filter((due) => {
+      const outstanding = Math.max(due.expectedAmount - due.paidAmount, 0);
+      return due.status !== 'PAID' && outstanding > 0;
+    });
+    if (!unpaidDues.length) return null;
+
+    const now = new Date();
+    const currentMonth = now.getMonth() + 1;
+    const currentYear = now.getFullYear();
+
+    const currentMonthUnpaid = unpaidDues.find(
+      (due) => due.month === currentMonth && due.year === currentYear,
+    );
+    if (currentMonthUnpaid) return currentMonthUnpaid;
+
+    return unpaidDues
+      .slice()
+      .sort((a, b) => {
+        if (a.year !== b.year) return b.year - a.year;
+        if (a.month !== b.month) return b.month - a.month;
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      })[0];
+  }, [dues]);
+
+  const showPayLoader = useMinimumLoading(duesQuery.isLoading && !duesQuery.data);
 
   const currentDue = useMemo(() => {
     return Number(duesQuery.data?.summary?.outstandingAmount ?? 0);
@@ -306,6 +403,30 @@ export default function PayPage() {
     return paymentConfig.phoneNumber ? `Phone: ${paymentConfig.phoneNumber}` : null;
   }, [paymentConfig, selectedMethod]);
 
+  const initiatedDraft = useMemo(() => {
+    if (!historyRows.length || !dues.length) return null;
+
+    const payableDueCycleIds = new Set(
+      dues
+        .filter((due) => due.status !== 'PAID' && Math.max(due.expectedAmount - due.paidAmount, 0) > 0)
+        .map((due) => due.cycleId),
+    );
+
+    const initiatedRows = historyRows.filter((row) => {
+      const status = String(row.status ?? '').toUpperCase();
+      return status === 'INITIATED' && Boolean(row.cycleId);
+    });
+
+    if (!initiatedRows.length) return null;
+
+    const selectedCycleDraft = selectedCycleId
+      ? initiatedRows.find((row) => row.cycleId === selectedCycleId && payableDueCycleIds.has(String(row.cycleId)))
+      : null;
+    if (selectedCycleDraft) return selectedCycleDraft;
+
+    return initiatedRows.find((row) => payableDueCycleIds.has(String(row.cycleId))) ?? null;
+  }, [dues, historyRows, selectedCycleId]);
+
   const copyValue = async (value?: string | null) => {
     if (!value) return;
     try {
@@ -314,6 +435,67 @@ export default function PayPage() {
     } catch {
       toast.error('Failed to copy');
     }
+  };
+
+  const ensureSoftDraftFromCopyIntent = async (method: PaymentMethod) => {
+    const numericAmount = parseStrictAmountInput(amount);
+
+    if (!selectedCycleId || numericAmount === null || numericAmount <= 0) {
+      toast.error('Select a month and enter a valid amount');
+      return false;
+    }
+
+    if (selectedDue?.status === 'PAID' || remainingDue <= 0) {
+      toast.error('This month is already fully paid');
+      return false;
+    }
+
+    if (selectedDue && numericAmount > remainingDue) {
+      toast.error(`Amount cannot exceed remaining due (${formatCurrency(remainingDue)})`);
+      return false;
+    }
+
+    try {
+      await muqtadisService.initiateMyPayment({
+        cycleId: selectedCycleId,
+        amount: numericAmount,
+        method: method === 'PHONE' ? 'UPI' : method,
+        reference: `COPY_${method}`,
+      });
+      await dashboardQuery.refetch();
+      return true;
+    } catch (error) {
+      toast.error(getErrorMessage(error, 'Unable to create payment draft'));
+      return false;
+    }
+  };
+
+  const handleCopyWithDraftIntent = async (value?: string | null, label?: string, method?: PaymentMethod) => {
+    if (!value || !label || !method) return;
+    const createdOrReused = await ensureSoftDraftFromCopyIntent(method);
+    if (!createdOrReused) {
+      return;
+    }
+    await copyValue(value);
+  };
+
+  const handleContinuePaymentDraft = () => {
+    if (!initiatedDraft?.cycleId) {
+      return;
+    }
+
+    const matchedDue = dues.find((due) => due.cycleId === initiatedDraft.cycleId) ?? null;
+    if (matchedDue) {
+      setSelectedCycleId(matchedDue.cycleId);
+      setSelectedDueId(matchedDue.id);
+    }
+
+    const methodFromDraft = String(initiatedDraft.method ?? '').toUpperCase();
+    if (methodFromDraft && ['UPI', 'BANK', 'PHONE'].includes(methodFromDraft)) {
+      setSelectedMethod(methodFromDraft as PaymentMethod);
+    }
+
+    setShowProofStep(true);
   };
 
   useEffect(() => {
@@ -338,7 +520,7 @@ export default function PayPage() {
     }
 
     const requestedPaymentStatus = (requestedPayment?.status ?? '').toUpperCase();
-    const isRetryableResumePayment = requestedPaymentStatus === 'PENDING' || requestedPaymentStatus === 'REJECTED';
+    const isRetryableResumePayment = requestedPaymentStatus === 'INITIATED' || requestedPaymentStatus === 'PENDING' || requestedPaymentStatus === 'REJECTED';
     if (resumeProofMode && requestedPayment && isRetryableResumePayment) {
       if (requestedPayment.cycleId) {
         setSelectedCycleId(requestedPayment.cycleId);
@@ -420,6 +602,63 @@ export default function PayPage() {
     resumeBlocked,
     resumeProofMode,
   ]);
+
+  useEffect(() => {
+    if (!availableMethods.length) return;
+
+    if (!selectedMethod || !availableMethods.includes(selectedMethod)) {
+      setSelectedMethod(availableMethods[0]);
+    }
+  }, [availableMethods, selectedMethod]);
+
+  useEffect(() => {
+    if (!mosque?.id || !selectedMethod) return;
+    window.localStorage.setItem(`mld_muqtadi_pay_method_${mosque.id}`, selectedMethod);
+  }, [mosque?.id, selectedMethod]);
+
+  useEffect(() => {
+    if (!mosque?.id || selectedMethod || !availableMethods.length) return;
+    const savedMethod = window.localStorage.getItem(`mld_muqtadi_pay_method_${mosque.id}`);
+    if (savedMethod && ['UPI', 'BANK', 'PHONE'].includes(savedMethod) && availableMethods.includes(savedMethod as PaymentMethod)) {
+      setSelectedMethod(savedMethod as PaymentMethod);
+      return;
+    }
+    setSelectedMethod(availableMethods[0]);
+  }, [availableMethods, mosque?.id, selectedMethod]);
+
+  useEffect(() => {
+    if (resumeProofMode || exactResumeMatched) {
+      return;
+    }
+
+    if (initiatedDraft?.cycleId) {
+      const initiatedDue = dues.find((due) => due.cycleId === initiatedDraft.cycleId) ?? null;
+      const initiatedOutstanding = initiatedDue
+        ? Math.max(initiatedDue.expectedAmount - initiatedDue.paidAmount, 0)
+        : 0;
+      if (initiatedDue && initiatedOutstanding > 0) {
+        setSelectedCycleId(initiatedDue.cycleId);
+        setSelectedDueId(initiatedDue.id);
+        return;
+      }
+    }
+
+    if (!preferredAutoDue) {
+      return;
+    }
+
+    const currentSelection = dues.find((due) => due.cycleId === selectedCycleId) ?? null;
+    const currentSelectionOutstanding = currentSelection
+      ? Math.max(currentSelection.expectedAmount - currentSelection.paidAmount, 0)
+      : 0;
+
+    if (currentSelection && currentSelection.status !== 'PAID' && currentSelectionOutstanding > 0) {
+      return;
+    }
+
+    setSelectedCycleId(preferredAutoDue.cycleId);
+    setSelectedDueId(preferredAutoDue.id);
+  }, [dues, exactResumeMatched, initiatedDraft?.cycleId, preferredAutoDue, resumeProofMode, selectedCycleId]);
 
   const onHavePaid = () => {
     const numericAmount = parseStrictAmountInput(amount);
@@ -545,6 +784,9 @@ export default function PayPage() {
       if (fileToUpload) {
         setUploadingScreenshot(true);
         const uploaded = await donationsService.uploadDonationScreenshot(fileToUpload, mosque?.id);
+        if (!isMountedRef.current) {
+          return;
+        }
         setUploadingScreenshot(false);
         screenshotUrl = uploaded.url;
       }
@@ -552,6 +794,7 @@ export default function PayPage() {
       await muqtadisService.initiateMyPayment({
         cycleId: selectedCycleId,
         amount: numericAmount,
+        method: selectedMethod === 'PHONE' ? 'UPI' : selectedMethod,
         utr: utr.trim() || undefined,
         reference: reference.trim() || selectedMethod,
         screenshotUrl,
@@ -571,12 +814,14 @@ export default function PayPage() {
     } catch (error) {
       toast.error(getErrorMessage(error, 'Failed to submit payment'));
     } finally {
-      setUploadingScreenshot(false);
-      setSubmitting(false);
+      if (isMountedRef.current) {
+        setUploadingScreenshot(false);
+        setSubmitting(false);
+      }
     }
   };
 
-  if (duesQuery.isLoading) {
+  if (showPayLoader) {
     return <MuqtadiDuesSkeleton />;
   }
 
@@ -602,6 +847,16 @@ export default function PayPage() {
             <p className="text-xs text-muted-foreground">Current Due</p>
             <p className="mt-1 text-3xl font-bold">{formatCurrency(currentDue)}</p>
           </div>
+
+          {initiatedDraft?.cycleId ? (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2">
+              <p className="text-sm font-medium text-amber-900">Continue Payment Draft</p>
+              <p className="mt-1 text-xs text-amber-800">Draft is saved for your selected due. Continue with proof upload.</p>
+              <Button type="button" size="sm" className="mt-2" onClick={handleContinuePaymentDraft}>
+                Continue Payment Draft
+              </Button>
+            </div>
+          ) : null}
 
           {allDuesPaid && !resumeProofMode ? (
             <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
@@ -724,7 +979,19 @@ export default function PayPage() {
               <p className="mt-1">{selectedMethodDetails}</p>
 
               {selectedMethod === 'UPI' ? (
-                <p className="mt-2 text-xs text-muted-foreground">UPI note: {upiVerificationNote}</p>
+                <div className="mt-2 space-y-2">
+                  <p className="text-xs text-muted-foreground">UPI note: {upiVerificationNote}</p>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void handleCopyWithDraftIntent(paymentConfig?.upiId, 'UPI ID', 'UPI')}
+                    disabled={!paymentConfig?.upiId}
+                  >
+                    <Copy className="mr-1 h-3.5 w-3.5" />
+                    Copy UPI ID
+                  </Button>
+                </div>
               ) : null}
 
               {selectedMethod === 'BANK' ? (
@@ -733,7 +1000,7 @@ export default function PayPage() {
                     type="button"
                     size="sm"
                     variant="outline"
-                    onClick={() => void copyValue(paymentConfig?.bankAccount)}
+                    onClick={() => void handleCopyWithDraftIntent(paymentConfig?.bankAccount, 'Account Number', 'BANK')}
                     disabled={!paymentConfig?.bankAccount}
                   >
                     <Copy className="mr-1 h-3.5 w-3.5" />
@@ -743,7 +1010,7 @@ export default function PayPage() {
                     type="button"
                     size="sm"
                     variant="outline"
-                    onClick={() => void copyValue(paymentConfig?.ifsc)}
+                    onClick={() => void handleCopyWithDraftIntent(paymentConfig?.ifsc, 'IFSC', 'BANK')}
                     disabled={!paymentConfig?.ifsc}
                   >
                     <Copy className="mr-1 h-3.5 w-3.5" />
@@ -758,7 +1025,7 @@ export default function PayPage() {
                     type="button"
                     size="sm"
                     variant="outline"
-                    onClick={() => void copyValue(paymentConfig?.phoneNumber)}
+                    onClick={() => void handleCopyWithDraftIntent(paymentConfig?.phoneNumber, 'Phone Number', 'PHONE')}
                     disabled={!paymentConfig?.phoneNumber}
                   >
                     <Copy className="mr-1 h-3.5 w-3.5" />

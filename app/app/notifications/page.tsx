@@ -17,6 +17,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { ListEmptyState } from '@/components/common/list-empty-state';
 import { useAuthStore } from '@/src/store/auth.store';
 import { queryKeys } from '@/lib/query-keys';
+import { useMinimumLoading } from '@/hooks/useMinimumLoading';
 
 function getNotificationIcon(type: string) {
   if (type.startsWith('PAYMENT')) {
@@ -62,7 +63,7 @@ export default function NotificationsPage() {
   const notificationsKey = queryKeys.notifications(user?.id);
   const notificationsQuery = useNotificationsQuery();
 
-  const notifications = notificationsQuery.data ?? [];
+  const notifications = useMemo(() => notificationsQuery.data ?? [], [notificationsQuery.data]);
 
   const markAsReadMutation = useMutation({
     mutationFn: (notificationId: string) => notificationsService.markAsRead(notificationId),
@@ -94,12 +95,17 @@ export default function NotificationsPage() {
     [notifications],
   );
 
-  if (notificationsQuery.isLoading) {
+  const showLoader = useMinimumLoading(notificationsQuery.isLoading && !notificationsQuery.data);
+
+  if (showLoader) {
     return (
       <div className="ds-stack">
-        <Skeleton className="h-12 w-full" />
-        <Skeleton className="h-24 w-full" />
-        <Skeleton className="h-24 w-full" />
+        <div className="rounded-xl border p-4">
+          <p className="text-sm font-medium text-muted-foreground">Notifications</p>
+          <Skeleton className="mt-2 h-4 w-2/3" />
+        </div>
+        <Skeleton className="h-28 w-full rounded-xl app-shimmer" />
+        <Skeleton className="h-28 w-full rounded-xl app-shimmer" />
       </div>
     );
   }
@@ -123,7 +129,7 @@ export default function NotificationsPage() {
       <div className="rounded-xl border p-4">
         <h1 className="text-xl font-semibold">Notifications</h1>
         <p className="text-sm text-muted-foreground">Important updates for your account.</p>
-        <p className="mt-1 text-xs text-muted-foreground">Unread: {unreadCount}</p>
+        <p className="mt-1 inline-flex rounded-full border bg-muted/40 px-2 py-1 text-xs text-muted-foreground">Unread: {unreadCount}</p>
       </div>
 
       {notifications.length === 0 ? (
@@ -141,36 +147,47 @@ export default function NotificationsPage() {
         </Card>
       ) : (
         notifications.map((item) => (
-          <Button
+          <Card
             key={item.id}
-            type="button"
-            variant="ghost"
-            className="h-auto w-full p-0 text-left"
-            onClick={() => {
-              if (!item.isRead) {
-                markAsReadMutation.mutate(item.id);
-              }
-            }}
+            className={`overflow-hidden transition-all duration-200 ${item.isRead ? 'border-[#d8e5ce] bg-white' : 'border-primary/40 bg-primary/8'} hover:-translate-y-px hover:shadow-sm`}
           >
-            <Card className={item.isRead ? 'border-[#d8e5ce] bg-white' : 'border-primary/40 bg-primary/8'}>
-              <CardHeader className="pb-2">
-                <div className="flex items-start gap-2">
-                  <span className="mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted/70">
-                    {getNotificationIcon(item.type)}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <CardTitle className={`text-base text-[#22492b] ${item.isRead ? 'font-semibold' : 'font-bold'}`}>
+            <CardHeader className="p-3 pb-2 sm:p-4 sm:pb-2">
+              <div className="flex items-start gap-2 sm:gap-3">
+                <span className="mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted/70">
+                  {getNotificationIcon(item.type)}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <CardTitle className={`min-w-0 text-sm text-[#22492b] wrap-break-word sm:text-base ${item.isRead ? 'font-semibold' : 'font-bold'}`}>
                       {item.title}
                     </CardTitle>
-                    <CardDescription className="mt-1 text-xs">{formatRelativeTime(item.createdAt)}</CardDescription>
+                    {!item.isRead ? (
+                      <span className="inline-flex rounded-full border border-primary/30 bg-primary/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
+                        New
+                      </span>
+                    ) : null}
                   </div>
+                  <CardDescription className="mt-1 text-[11px] sm:text-xs">{formatRelativeTime(item.createdAt)}</CardDescription>
                 </div>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm leading-6 text-[#314235]">{item.message}</p>
-              </CardContent>
-            </Card>
-          </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-3 p-3 pt-0 sm:p-4 sm:pt-0">
+              <p className="text-sm leading-6 text-[#314235] wrap-break-word">{item.message}</p>
+              {!item.isRead ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="w-full sm:w-auto"
+                  disabled={markAsReadMutation.isPending}
+                  onClick={() => markAsReadMutation.mutate(item.id)}
+                >
+                  {markAsReadMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  Mark as read
+                </Button>
+              ) : null}
+            </CardContent>
+          </Card>
         ))
       )}
     </div>

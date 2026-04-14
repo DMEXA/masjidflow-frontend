@@ -29,6 +29,7 @@ export function Announcements({ mosqueId }: AnnouncementsProps) {
     staleTime: muqtadiQueryPolicy.announcements.staleTime,
     gcTime: muqtadiQueryPolicy.announcements.gcTime,
     refetchOnWindowFocus: muqtadiQueryPolicy.announcements.refetchOnWindowFocus,
+    refetchOnReconnect: true,
     refetchInterval: muqtadiQueryPolicy.announcements.refetchInterval,
     refetchIntervalInBackground: true,
     placeholderData: (previous) => previous ?? queryClient.getQueryData<AnnouncementItem[]>(announcementsKey),

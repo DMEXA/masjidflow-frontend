@@ -157,9 +157,10 @@
   }
 
   .app-shimmer {
-    background: linear-gradient(90deg, rgb(243 244 246 / 0.9) 25%, rgb(229 231 235 / 0.9) 50%, rgb(243 244 246 / 0.9) 75%);
+    background: linear-gradient(90deg, rgb(229 231 235 / 0.95) 20%, rgb(209 213 219 / 0.95) 50%, rgb(229 231 235 / 0.95) 80%);
     background-size: 240% 100%;
-    animation: app-shimmer 1.4s ease-in-out infinite;
+    animation: app-shimmer 1.2s linear infinite;
+    animation-fill-mode: both;
   }
 
   .app-shimmer-track {
@@ -176,6 +177,10 @@
 
   .route-fade-enter {
     @apply animate-in fade-in-0 slide-in-from-bottom-1 duration-300;
+  }
+
+  .skeleton-fade {
+    @apply animate-in fade-in-0 duration-200;
   }
 }
 

@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { useAuthStore } from '@/src/store/auth.store';
 import { useProfileQuery } from '@/hooks/useProfileQuery';
 import { AppShellLoader } from '@/components/common/app-shell-loader';
+import { PendingApprovalSkeleton } from '@/components/common/loading-skeletons';
 
 export default function HouseholdPendingPage() {
   const router = useRouter();
@@ -36,7 +37,7 @@ export default function HouseholdPendingPage() {
   }, [isLoading, isAuthenticated, user, profileQuery.isLoading, profileQuery.data?.isVerified, router]);
 
   if (isLoading || profileQuery.isLoading) {
-    return <AppShellLoader title="Checking household status" message="Verifying your approval state and access..." />;
+    return <PendingApprovalSkeleton />;
   }
 
   if (isAuthenticated && user?.role && user.role !== 'muqtadi') {

@@ -224,7 +224,7 @@ export interface PaymentTransaction {
   reference?: string | null;
   utr?: string | null;
   intentId?: string | null;
-  status: 'PENDING' | 'VERIFIED';
+  status: 'INITIATED' | 'PENDING' | 'VERIFIED' | 'REJECTED' | 'FAILED';
   cycleId?: string | null;
   month?: number | null;
   year?: number | null;
@@ -399,6 +399,7 @@ export interface ImamFundSummary {
 export interface InitiateMyPaymentPayload {
   cycleId: string;
   amount: number;
+  method?: 'UPI' | 'BANK' | 'CASH';
   reference?: string;
   utr?: string;
   screenshotUrl?: string;
@@ -772,7 +773,7 @@ export const muqtadisService = {
     upiDeepLink: string;
     amount: number;
     month: { month: number; year: number };
-    status: 'PENDING' | 'VERIFIED';
+    status: 'INITIATED' | 'PENDING' | 'VERIFIED' | 'REJECTED';
     paymentMethods: {
       upiId?: string | null;
       bankAccount?: string | null;

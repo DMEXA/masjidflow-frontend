@@ -1,74 +1,28 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { ListEmptyState } from '@/components/common/list-empty-state';
 import { PublicDonateSkeleton } from '@/components/common/loading-skeletons';
 import { Loader2, CheckCircle2, Upload } from 'lucide-react';
-import { QRCodeSVG } from 'qrcode.react';
 import { toast } from 'sonner';
 import { donationsService } from '@/services/donations.service';
 import { fundsService } from '@/services/funds.service';
 import { getErrorMessage } from '@/src/utils/error';
 import { isStrictAmountString } from '@/src/utils/numeric-input';
-import { openExternalUrl } from '@/src/utils/open-external-url';
-import { launchUpiDeepLink } from '@/src/utils/upi-launch';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '@/lib/query-keys';
+import { useMinimumLoading } from '@/hooks/useMinimumLoading';
 
-const DEVICE_ID_KEY = 'mld_public_device_id';
-
-function getDeviceId(): string {
-  if (typeof window === 'undefined') return '';
-  const existing = window.localStorage.getItem(DEVICE_ID_KEY);
-  if (existing) return existing;
-
-  const generated =
-    window.crypto?.randomUUID?.() ?? `mld-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-  window.localStorage.setItem(DEVICE_ID_KEY, generated);
-  return generated;
-}
-
-function isMobileDevice(): boolean {
-  if (typeof window === 'undefined') return false;
-  const userAgent = window.navigator.userAgent.toLowerCase();
-  const mobileRegex = /android|iphone|ipad|ipod|opera mini|iemobile|mobile/;
-  return mobileRegex.test(userAgent);
-}
-
-function buildPublicUpiNote(mosqueName: string): string {
-  const normalized = mosqueName.trim().replace(/\s+/g, ' ');
-  const note = `Donation ${normalized || 'Masjid'}`;
-  return note.length > 80 ? `${note.slice(0, 80).trim()}...` : note;
-}
-
-function buildPublicUpiDeepLink(input: { upiId: string; upiName: string; amount: string; note: string }): string {
-  const transactionRef = `MLD-${Date.now()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
-  const params = new URLSearchParams({
-    pa: input.upiId.trim(),
-    pn: input.upiName.trim(),
-    am: input.amount.trim(),
-    cu: 'INR',
-    tn: input.note.trim(),
-    tr: transactionRef,
-    mc: '0000',
-    orgid: '000000',
-  });
-  return `upi://pay?${params.toString()}`;
-}
+const MAX_SCREENSHOT_BYTES = 5 * 1024 * 1024;
+const ALLOWED_SCREENSHOT_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 
 async function copyText(value: string, label: string) {
   if (!value) return;
@@ -85,9 +39,9 @@ export default function DonateBySlugPage() {
   const mosqueSlug = params.mosqueSlug;
   const queryClient = useQueryClient();
 
-  const [isInitiating, setIsInitiating] = useState(false);
   const [isSubmittingProof, setIsSubmittingProof] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [isCreatingDraft, setIsCreatingDraft] = useState(false);
 
   const [fundId, setFundId] = useState('');
   const [amount, setAmount] = useState('');
@@ -95,18 +49,17 @@ export default function DonateBySlugPage() {
   const [session, setSession] = useState<{
     donationId: string;
     intentId: string;
-    upiDeepLink: string;
     expiresAt: string;
   } | null>(null);
   const [minutesLeft, setMinutesLeft] = useState<number | null>(null);
 
-  const [showPaymentQuestion, setShowPaymentQuestion] = useState(false);
   const [showProofForm, setShowProofForm] = useState(false);
-  const [showDesktopUpiModal, setShowDesktopUpiModal] = useState(false);
 
   const [donorName, setDonorName] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [upiTransactionId, setUpiTransactionId] = useState('');
+  const [verificationNote, setVerificationNote] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState<'UPI' | 'BANK' | 'PHONE'>('UPI');
   const [screenshot, setScreenshot] = useState<File | null>(null);
   const [publicDraft, setPublicDraft] = useState<{
     id: string;
@@ -119,6 +72,26 @@ export default function DonateBySlugPage() {
     screenshotUrl?: string | null;
     expiresAt?: string | null;
   } | null>(null);
+  const [resumeDraft, setResumeDraft] = useState<{
+    id: string;
+    intentId: string;
+    amount: number;
+    donationStatus: 'INITIATED' | 'PENDING' | 'VERIFIED' | 'REJECTED';
+    donorName?: string | null;
+    donorPhone?: string | null;
+    upiTransactionId?: string | null;
+    screenshotUrl?: string | null;
+    fundId?: string | null;
+    expiresAt?: string | null;
+  } | null>(null);
+  const isMountedRef = useRef(true);
+  const restoredHintRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   const trimmedPhoneNumber = phoneNumber.trim();
   const isPhoneValid = /^\d{10,15}$/.test(trimmedPhoneNumber);
@@ -172,6 +145,7 @@ export default function DonateBySlugPage() {
   }, [publicConfigQuery.data, publicFundsQuery.data]);
 
   const isLoadingConfig = slugQuery.isLoading || publicConfigQuery.isLoading || publicFundsQuery.isLoading;
+  const showDonateLoader = useMinimumLoading(isLoadingConfig && !config);
   const loadError = useMemo(() => {
     const error = slugQuery.error ?? publicConfigQuery.error ?? publicFundsQuery.error;
     return error ? getErrorMessage(error, 'Failed to load donation page') : null;
@@ -208,6 +182,39 @@ export default function DonateBySlugPage() {
   }, [config?.mosqueId, fundId, isPhoneValid, trimmedPhoneNumber]);
 
   useEffect(() => {
+    let isCancelled = false;
+
+    const loadResumeDraft = async () => {
+      if (!config?.mosqueId || !isPhoneValid) {
+        setResumeDraft(null);
+        return;
+      }
+
+      try {
+        const draft = await donationsService.getPublicDonationDraft({
+          mosqueId: config.mosqueId,
+          donorPhone: trimmedPhoneNumber,
+        });
+        if (isCancelled) return;
+        if (draft?.donationStatus === 'INITIATED') {
+          setResumeDraft(draft);
+        } else {
+          setResumeDraft(null);
+        }
+      } catch {
+        if (isCancelled) return;
+        setResumeDraft(null);
+      }
+    };
+
+    void loadResumeDraft();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [config?.mosqueId, isPhoneValid, trimmedPhoneNumber]);
+
+  useEffect(() => {
     if (loadError) {
       toast.error(loadError);
     }
@@ -234,10 +241,87 @@ export default function DonateBySlugPage() {
   );
   const hasPhoneOption = Boolean(config?.phoneNumber?.trim());
   const hasAnyPaymentOption = hasUpiOption || hasBankOption || hasPhoneOption;
+  const availablePaymentMethods = useMemo(() => {
+    const methods: Array<'UPI' | 'BANK' | 'PHONE'> = [];
+    if (hasUpiOption) methods.push('UPI');
+    if (hasBankOption) methods.push('BANK');
+    if (hasPhoneOption) methods.push('PHONE');
+    return methods;
+  }, [hasBankOption, hasPhoneOption, hasUpiOption]);
   const hasEditableDraft =
     publicDraft?.donationStatus === 'INITIATED'
     || publicDraft?.donationStatus === 'PENDING'
     || publicDraft?.donationStatus === 'REJECTED';
+
+  const donationHintStorageKey = useMemo(() => {
+    if (!config?.mosqueId) return null;
+    return `mld_public_donation_hint_${config.mosqueId}`;
+  }, [config?.mosqueId]);
+
+  useEffect(() => {
+    if (!donationHintStorageKey || typeof window === 'undefined') return;
+    if (restoredHintRef.current === donationHintStorageKey) return;
+
+    const raw = window.localStorage.getItem(donationHintStorageKey);
+    if (!raw) {
+      restoredHintRef.current = donationHintStorageKey;
+      return;
+    }
+
+    try {
+      const parsed = JSON.parse(raw) as {
+        phoneNumber?: string;
+        fundId?: string;
+        amount?: string;
+        paymentMethod?: 'UPI' | 'BANK' | 'PHONE';
+      };
+
+      if (!phoneNumber && parsed.phoneNumber) {
+        setPhoneNumber(String(parsed.phoneNumber).replace(/\D/g, '').slice(0, 15));
+      }
+      if (!fundId && parsed.fundId) {
+        setFundId(parsed.fundId);
+      }
+      if (!amount && parsed.amount) {
+        setAmount(parsed.amount);
+      }
+      if (parsed.paymentMethod && ['UPI', 'BANK', 'PHONE'].includes(parsed.paymentMethod)) {
+        setPaymentMethod(parsed.paymentMethod);
+      }
+    } catch {
+      // ignore corrupted local cache
+    }
+
+    restoredHintRef.current = donationHintStorageKey;
+  }, [amount, donationHintStorageKey, fundId, phoneNumber]);
+
+  useEffect(() => {
+    if (!donationHintStorageKey || typeof window === 'undefined') return;
+
+    const hasAnyHint = Boolean(phoneNumber || fundId || amount);
+    if (!hasAnyHint) {
+      window.localStorage.removeItem(donationHintStorageKey);
+      return;
+    }
+
+    window.localStorage.setItem(
+      donationHintStorageKey,
+      JSON.stringify({
+        phoneNumber,
+        fundId,
+        amount,
+        paymentMethod,
+        updatedAt: Date.now(),
+      }),
+    );
+  }, [amount, donationHintStorageKey, fundId, paymentMethod, phoneNumber]);
+
+  useEffect(() => {
+    if (availablePaymentMethods.length === 0) return;
+    if (!availablePaymentMethods.includes(paymentMethod)) {
+      setPaymentMethod(availablePaymentMethods[0]);
+    }
+  }, [availablePaymentMethods, paymentMethod]);
 
   useEffect(() => {
     if (!session?.expiresAt) {
@@ -257,7 +341,110 @@ export default function DonateBySlugPage() {
     return () => window.clearInterval(timer);
   }, [session?.expiresAt]);
 
-  const handlePayWithUpi = async () => {
+  useEffect(() => {
+    if (!config?.mosqueId || !isPhoneValid) {
+      return;
+    }
+
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const key = `mld_public_payment_method_${config.mosqueId}_${trimmedPhoneNumber}`;
+    window.localStorage.setItem(key, paymentMethod);
+  }, [config?.mosqueId, isPhoneValid, paymentMethod, trimmedPhoneNumber]);
+
+  const ensureSoftDraftFromCopyIntent = async (): Promise<boolean> => {
+    if (!config) {
+      toast.error('Donation configuration is unavailable');
+      return false;
+    }
+
+    if (!fundId) {
+      toast.error('Please select a fund first.');
+      return false;
+    }
+
+    if (!hasValidAmount) {
+      toast.error('Please enter a valid amount first.');
+      return false;
+    }
+
+    if (!trimmedPhoneNumber || !isPhoneValid) {
+      toast.error('Please enter a valid phone number first.');
+      return false;
+    }
+
+    if (isCreatingDraft) {
+      return false;
+    }
+
+    setIsCreatingDraft(true);
+    try {
+      if (donationHintStorageKey && typeof window !== 'undefined') {
+        window.localStorage.setItem(
+          donationHintStorageKey,
+          JSON.stringify({
+            phoneNumber: trimmedPhoneNumber,
+            fundId,
+            amount,
+            paymentMethod,
+            updatedAt: Date.now(),
+          }),
+        );
+      }
+
+      const initiated = await donationsService.initiatePublicDonation({
+        mosqueId: config.mosqueId,
+        fundId,
+        amount: normalizedAmount,
+        donorPhone: trimmedPhoneNumber,
+      });
+
+      if (!isMountedRef.current) {
+        return false;
+      }
+
+      setSession({
+        donationId: initiated.donationId,
+        intentId: initiated.intentId,
+        expiresAt: initiated.expiresAt,
+      });
+
+      const [fundDraft, latestDraft] = await Promise.all([
+        donationsService.getPublicDonationDraft({
+          mosqueId: config.mosqueId,
+          donorPhone: trimmedPhoneNumber,
+          fundId,
+        }),
+        donationsService.getPublicDonationDraft({
+          mosqueId: config.mosqueId,
+          donorPhone: trimmedPhoneNumber,
+        }),
+      ]);
+
+      setPublicDraft(fundDraft);
+      setResumeDraft(latestDraft?.donationStatus === 'INITIATED' ? latestDraft : null);
+      return true;
+    } catch (error) {
+      toast.error(getErrorMessage(error, 'Could not save donation draft'));
+      return false;
+    } finally {
+      if (isMountedRef.current) {
+        setIsCreatingDraft(false);
+      }
+    }
+  };
+
+  const handleCopyWithDraftIntent = async (value: string, label: string) => {
+    const draftSaved = await ensureSoftDraftFromCopyIntent();
+    if (!draftSaved) {
+      return;
+    }
+    await copyText(value, label);
+  };
+
+  const handleOpenProofFlow = () => {
     if (!config) {
       toast.error('Donation configuration is unavailable');
       return;
@@ -283,81 +470,64 @@ export default function DonateBySlugPage() {
       return;
     }
 
-    if (config && publicDraft && hasEditableDraft) {
-      const draftAmount = Number(publicDraft.amount);
-      const safeAmount = Number.isFinite(draftAmount) && draftAmount > 0
-        ? draftAmount
-        : Number(normalizedAmount || '0');
-      const upiDeepLink = config.upiId
-        ? buildPublicUpiDeepLink({
-            upiId: config.upiId,
-            upiName: config.upiName,
-            amount: safeAmount.toFixed(2),
-            note: buildPublicUpiNote(config.mosqueName),
-          })
-        : '';
-
+    if (publicDraft && hasEditableDraft) {
       setSession({
         donationId: publicDraft.id,
         intentId: publicDraft.intentId,
-        upiDeepLink,
         expiresAt: publicDraft.expiresAt || new Date(Date.now() + 30 * 60 * 1000).toISOString(),
       });
       setDonorName(publicDraft.donorName ?? donorName);
       setUpiTransactionId(publicDraft.upiTransactionId ?? '');
-      setShowPaymentQuestion(false);
       setShowProofForm(true);
       toast.success('Continuing your existing donation draft.');
       return;
     }
 
-    setIsInitiating(true);
-    try {
-      const initiated = await donationsService.initiatePublicDonation({
-        mosqueId: config.mosqueId,
-        fundId,
-        amount: normalizedAmount,
-        deviceId: getDeviceId(),
-        donorPhone: trimmedPhoneNumber,
-      });
-
-      setSession(initiated);
-      setShowPaymentQuestion(true);
-
-      if (initiated.upiDeepLink && isMobileDevice()) {
-        toast.info('Opening your UPI app...');
-        launchUpiDeepLink(initiated.upiDeepLink);
-      } else if (initiated.upiDeepLink) {
-        setShowDesktopUpiModal(true);
-        toast.info('Open this page on your mobile device to complete the payment.');
-      } else {
-        toast.info('Proceed with bank transfer and upload your payment proof.');
-      }
-    } catch (error) {
-      const message = getErrorMessage(error, 'Failed to start payment');
-      toast.error(message);
-    } finally {
-      setIsInitiating(false);
-    }
-  };
-
-  const handlePaidClick = () => {
+    setSession(null);
     setShowProofForm(true);
-    toast.success('Payment recorded. Please upload proof.');
+    toast.success('Upload your payment proof to submit donation.');
   };
 
-  const handleCancelledClick = () => {
-    setShowProofForm(false);
-    toast.info('No problem. You can retry payment anytime using this page.');
+  const handleContinueResumeDraft = () => {
+    if (!resumeDraft || !config?.mosqueId) {
+      return;
+    }
+
+    if (resumeDraft.fundId) {
+      setFundId(resumeDraft.fundId);
+    }
+    if (resumeDraft.amount) {
+      setAmount(String(resumeDraft.amount));
+    }
+    if (resumeDraft.donorPhone) {
+      setPhoneNumber(resumeDraft.donorPhone);
+    }
+    if (resumeDraft.donorName) {
+      setDonorName(resumeDraft.donorName);
+    }
+    if (resumeDraft.upiTransactionId) {
+      setUpiTransactionId(resumeDraft.upiTransactionId);
+    }
+
+    if (typeof window !== 'undefined') {
+      const key = `mld_public_payment_method_${config.mosqueId}_${resumeDraft.donorPhone ?? trimmedPhoneNumber}`;
+      const savedMethod = window.localStorage.getItem(key);
+      if (savedMethod === 'UPI' || savedMethod === 'BANK' || savedMethod === 'PHONE') {
+        setPaymentMethod(savedMethod);
+      }
+    }
+
+    setSession({
+      donationId: resumeDraft.id,
+      intentId: resumeDraft.intentId,
+      expiresAt: resumeDraft.expiresAt || new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+    });
+    setShowProofForm(true);
+    toast.success('Draft resumed. Continue with proof upload.');
   };
 
   const handleProofSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    if (!session) {
-      toast.error('Payment session not found');
-      return;
-    }
 
     if (!trimmedPhoneNumber) {
       toast.error('Phone number is required');
@@ -365,7 +535,7 @@ export default function DonateBySlugPage() {
     }
 
     if (!isPhoneValid) {
-      toast.error('Phone number must be 10 digits.');
+      toast.error('Phone number must be 10 to 15 digits.');
       return;
     }
 
@@ -377,9 +547,12 @@ export default function DonateBySlugPage() {
 
     let screenshotUrl: string | undefined;
     if (screenshot) {
-      const allowedTypes = ['image/jpeg', 'image/png'];
-      if (!allowedTypes.includes(screenshot.type)) {
-        toast.error('Unsupported file type');
+      if (!ALLOWED_SCREENSHOT_TYPES.includes(screenshot.type)) {
+        toast.error('Only JPG, PNG, or WEBP images are allowed.');
+        return;
+      }
+      if (screenshot.size > MAX_SCREENSHOT_BYTES) {
+        toast.error('Screenshot must be 5MB or smaller.');
         return;
       }
     }
@@ -392,28 +565,82 @@ export default function DonateBySlugPage() {
           screenshot,
           config.mosqueId,
         );
+        if (!isMountedRef.current) {
+          return;
+        }
         screenshotUrl = upload.url;
         setIsUploading(false);
       }
 
-      await donationsService.updatePublicDonationProof(session.donationId, {
-        donorName: donorName.trim() || undefined,
-        phoneNumber: trimmedPhoneNumber,
-        upiTransactionId: trimmedUtr || undefined,
-        screenshotUrl,
-      });
+      const donorNameValue = donorName.trim() || undefined;
+      const upiTransactionIdValue = trimmedUtr || undefined;
+      const verificationNoteValue = verificationNote.trim() || undefined;
+
+      const donation = session?.donationId
+        ? await donationsService.updatePublicDonationProof(session.donationId, {
+            donorName: donorNameValue,
+            phoneNumber: trimmedPhoneNumber,
+            upiTransactionId: upiTransactionIdValue,
+            verificationNote: verificationNoteValue,
+            screenshotUrl,
+          })
+        : await donationsService.submitPublicDonationProof({
+            mosqueId: config?.mosqueId,
+            fundId,
+            amount: normalizedAmount,
+            donorPhone: trimmedPhoneNumber,
+            donorName: donorNameValue,
+            upiTransactionId: upiTransactionIdValue,
+            verificationNote: verificationNoteValue,
+            screenshotUrl,
+          });
+
+      if (donation?.id && donation?.intentId) {
+        if (!isMountedRef.current) {
+          return;
+        }
+        setSession({
+          donationId: donation.id,
+          intentId: donation.intentId,
+          expiresAt: donation.expiresAt || new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+        });
+      }
+
+      try {
+        if (config?.mosqueId && fundId && isPhoneValid) {
+          const refreshedDraft = await donationsService.getPublicDonationDraft({
+            mosqueId: config.mosqueId,
+            fundId,
+            donorPhone: trimmedPhoneNumber,
+          });
+          if (!isMountedRef.current) {
+            return;
+          }
+          setPublicDraft(refreshedDraft);
+        }
+      } catch {
+        // Non-blocking refresh
+      }
 
       toast.success('Proof uploaded successfully');
+      if (!isMountedRef.current) {
+        return;
+      }
+      setVerificationNote('');
       setShowProofForm(false);
     } catch (error) {
-      setIsUploading(false);
+      if (isMountedRef.current) {
+        setIsUploading(false);
+      }
       toast.error(getErrorMessage(error, 'Failed to submit proof'));
     } finally {
-      setIsSubmittingProof(false);
+      if (isMountedRef.current) {
+        setIsSubmittingProof(false);
+      }
     }
   };
 
-  if (isLoadingConfig) {
+  if (showDonateLoader) {
     return <PublicDonateSkeleton />;
   }
 
@@ -454,7 +681,7 @@ export default function DonateBySlugPage() {
         <div className="text-center">
           <h1 className="text-3xl font-bold text-foreground">Donate to {config.mosqueName}</h1>
           <p className="mt-2 text-muted-foreground">
-            Select fund and amount, then choose your preferred payment method.
+            Pay using any method below, then upload proof.
           </p>
         </div>
 
@@ -464,6 +691,21 @@ export default function DonateBySlugPage() {
             <CardDescription>This page is tied to a permanent mosque QR link.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            {resumeDraft ? (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm">
+                <p className="font-medium text-amber-900">Continue Previous Donation Draft</p>
+                <p className="mt-1 text-amber-800">
+                  Draft amount: INR {Number(resumeDraft.amount ?? 0).toFixed(2)}
+                </p>
+                <p className="text-amber-800">
+                  Expires in {Math.max(0, Math.ceil((new Date(resumeDraft.expiresAt || Date.now()).getTime() - Date.now()) / 60000))} minute(s)
+                </p>
+                <Button type="button" size="sm" className="mt-2" onClick={handleContinueResumeDraft}>
+                  Continue Draft
+                </Button>
+              </div>
+            ) : null}
+
             <div className="space-y-2">
               <Label htmlFor="fundId">Fund</Label>
               <Select value={fundId} onValueChange={setFundId} disabled={isDonationFormDisabled}>
@@ -518,92 +760,109 @@ export default function DonateBySlugPage() {
               </div>
             ) : null}
 
-            {hasUpiOption ? (
-              <div className="space-y-2 rounded-lg border border-dashed border-emerald-300 bg-white p-4 text-sm">
-                <p className="font-semibold text-foreground">Pay via UPI</p>
-                <p className="text-xs text-emerald-700">Recommended: Use UPI for faster verification</p>
-                <p className="text-muted-foreground">
-                  UPI ID: <span className="font-medium text-foreground">{config.upiId}</span>
-                </p>
-                <div className="flex gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => void copyText(config.upiId, 'UPI ID')}
-                  >
-                    Copy UPI ID
-                  </Button>
-                </div>
-              </div>
-            ) : null}
-
-            {hasBankOption ? (
-              <div className="space-y-2 rounded-lg border border-dashed border-blue-300 bg-white p-4 text-sm">
-                <p className="font-semibold text-foreground">Pay via Bank Transfer</p>
-                {config.bankAccountName ? (
-                  <p className="text-muted-foreground">
-                    Account Holder: <span className="font-medium text-foreground">{config.bankAccountName}</span>
-                  </p>
-                ) : null}
-                {config.bankAccount ? (
-                  <p className="text-muted-foreground">
-                    Account Number: <span className="font-medium text-foreground">{config.bankAccount}</span>
-                  </p>
-                ) : null}
-                {config.ifsc ? (
-                  <p className="text-muted-foreground">
-                    IFSC: <span className="font-medium text-foreground">{config.ifsc}</span>
-                  </p>
-                ) : null}
-                {config.bankName ? (
-                  <p className="text-muted-foreground">
-                    Bank: <span className="font-medium text-foreground">{config.bankName}</span>
-                  </p>
-                ) : null}
+            {hasAnyPaymentOption ? (
+              <div className="space-y-3 rounded-xl border border-border bg-muted/10 p-3">
                 <div className="flex flex-wrap gap-2">
-                  {config.bankAccount ? (
+                  {availablePaymentMethods.map((method) => (
                     <Button
+                      key={method}
                       type="button"
-                      variant="outline"
                       size="sm"
-                      onClick={() => void copyText(config.bankAccount ?? '', 'Account number')}
+                      variant={paymentMethod === method ? 'default' : 'outline'}
+                      onClick={() => setPaymentMethod(method)}
                     >
-                      Copy Account Number
+                      {method}
                     </Button>
-                  ) : null}
-                  {config.ifsc ? (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => void copyText(config.ifsc ?? '', 'IFSC')}
-                    >
-                      Copy IFSC
-                    </Button>
-                  ) : null}
+                  ))}
                 </div>
+
+                {paymentMethod === 'UPI' && hasUpiOption ? (
+                  <div className="space-y-2 rounded-lg border border-emerald-200 bg-white p-4 text-sm">
+                    <p className="font-semibold text-foreground">UPI</p>
+                    <p className="text-muted-foreground">
+                      UPI ID: <span className="font-medium text-foreground">{config.upiId}</span>
+                    </p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void handleCopyWithDraftIntent(config.upiId, 'UPI ID')}
+                    >
+                      Copy UPI ID
+                    </Button>
+                  </div>
+                ) : null}
+
+                {paymentMethod === 'BANK' && hasBankOption ? (
+                  <div className="space-y-2 rounded-lg border border-blue-200 bg-white p-4 text-sm">
+                    <p className="font-semibold text-foreground">Bank</p>
+                    {config.bankAccountName ? (
+                      <p className="text-muted-foreground">
+                        Account Holder: <span className="font-medium text-foreground">{config.bankAccountName}</span>
+                      </p>
+                    ) : null}
+                    {config.bankAccount ? (
+                      <p className="text-muted-foreground">
+                        Account Number: <span className="font-medium text-foreground">{config.bankAccount}</span>
+                      </p>
+                    ) : null}
+                    {config.ifsc ? (
+                      <p className="text-muted-foreground">
+                        IFSC: <span className="font-medium text-foreground">{config.ifsc}</span>
+                      </p>
+                    ) : null}
+                    {config.bankName ? (
+                      <p className="text-muted-foreground">
+                        Bank Name: <span className="font-medium text-foreground">{config.bankName}</span>
+                      </p>
+                    ) : null}
+                    <div className="flex flex-wrap gap-2">
+                      {config.bankAccount ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => void handleCopyWithDraftIntent(config.bankAccount ?? '', 'Account number')}
+                        >
+                          Copy Account Number
+                        </Button>
+                      ) : null}
+                      {config.ifsc ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => void handleCopyWithDraftIntent(config.ifsc ?? '', 'IFSC')}
+                        >
+                          Copy IFSC
+                        </Button>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : null}
+
+                {paymentMethod === 'PHONE' && hasPhoneOption ? (
+                  <div className="space-y-2 rounded-lg border border-violet-200 bg-white p-4 text-sm">
+                    <p className="font-semibold text-foreground">Phone</p>
+                    <p className="text-muted-foreground">
+                      Phone Number: <span className="font-medium text-foreground">{config.phoneNumber}</span>
+                    </p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void handleCopyWithDraftIntent(config.phoneNumber ?? '', 'Phone number')}
+                    >
+                      Copy Phone Number
+                    </Button>
+                  </div>
+                ) : null}
               </div>
             ) : null}
 
-            {hasPhoneOption ? (
-              <div className="space-y-2 rounded-lg border border-dashed border-violet-300 bg-white p-4 text-sm">
-                <p className="font-semibold text-foreground">Pay via Phone Number</p>
-                <p className="text-muted-foreground">
-                  Phone: <span className="font-medium text-foreground">{config.phoneNumber}</span>
-                </p>
-                <div className="flex gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => void copyText(config.phoneNumber ?? '', 'Phone number')}
-                  >
-                    Copy Phone Number
-                  </Button>
-                </div>
-              </div>
-            ) : null}
+            <div className="rounded-lg border bg-muted/30 p-3 text-sm text-muted-foreground">
+              Step 1: Pay using your selected method. Step 2: Upload payment proof.
+            </div>
 
             {config.paymentInstructions ? (
               <div className="rounded-lg border bg-muted/30 p-3 text-sm text-muted-foreground">
@@ -612,22 +871,21 @@ export default function DonateBySlugPage() {
             ) : null}
 
             <Button
-              onClick={handlePayWithUpi}
+              onClick={handleOpenProofFlow}
               disabled={
                 isDonationFormDisabled ||
-                isInitiating ||
                 !hasValidAmount ||
                 !fundId ||
                 !hasAnyPaymentOption
               }
             >
-              {isInitiating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              {hasEditableDraft ? 'Continue Donation' : 'Start Payment'}
+              <Upload className="mr-2 h-4 w-4" />
+              Upload Payment Proof
             </Button>
 
             {hasEditableDraft ? (
               <p className="text-xs text-amber-700">
-                Existing {publicDraft?.donationStatus?.toLowerCase()} draft found for this phone and fund. Continuing will update the same donation.
+                Existing {publicDraft?.donationStatus?.toLowerCase()} draft found for this phone and fund. You can continue it here.
               </p>
             ) : null}
 
@@ -643,38 +901,27 @@ export default function DonateBySlugPage() {
           </CardContent>
         </Card>
 
-        {showPaymentQuestion && session ? (
-          <Card>
-            <CardHeader>
-              <CardTitle>Did you complete the payment?</CardTitle>
-              <CardDescription>
-                Donation reference: {session.intentId}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-wrap gap-3">
+        <Sheet
+          open={showProofForm}
+          onOpenChange={(open) => {
+            setShowProofForm(open);
+          }}
+        >
+          <SheetContent side="bottom" className="max-h-[92vh] overflow-y-auto rounded-t-2xl p-0">
+            <SheetHeader className="border-b p-4">
+              <SheetTitle>Upload Payment Proof</SheetTitle>
+              <p className="text-sm text-muted-foreground">
+                Phone number is required. Add UTR, screenshot, or note.
+              </p>
+            </SheetHeader>
+
+            <div className="p-4">
               {minutesLeft !== null ? (
-                <p className="w-full text-sm text-muted-foreground">
+                <p className="mb-3 text-sm text-muted-foreground">
                   Session expires in {minutesLeft} minute{minutesLeft === 1 ? '' : 's'}
                 </p>
               ) : null}
-              <Button onClick={handlePaidClick}>I HAVE PAID</Button>
-              <Button variant="outline" onClick={handleCancelledClick}>I CANCELLED</Button>
-              <Button variant="secondary" asChild>
-                <Link href={`/donate/status/${session.donationId}`}>Open Status Page</Link>
-              </Button>
-            </CardContent>
-          </Card>
-        ) : null}
 
-        {showProofForm && session ? (
-          <Card>
-            <CardHeader>
-              <CardTitle>Upload Payment Proof</CardTitle>
-              <CardDescription>
-                Phone number is required. Screenshot is optional for apps that block screenshots.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
               <form onSubmit={handleProofSubmit} className="space-y-4">
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
@@ -709,11 +956,21 @@ export default function DonateBySlugPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="screenshot">Screenshot (Optional, JPG/PNG)</Label>
+                  <Label htmlFor="verification-note">Note (Optional)</Label>
+                  <Input
+                    id="verification-note"
+                    value={verificationNote}
+                    onChange={(e) => setVerificationNote(e.target.value)}
+                    placeholder="Add any payment note"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="screenshot">Screenshot (Optional, JPG/PNG/WEBP, up to 5MB)</Label>
                   <Input
                     id="screenshot"
                     type="file"
-                    accept="image/jpeg,image/png"
+                    accept="image/jpeg,image/png,image/webp"
                     onChange={(e) => setScreenshot(e.target.files?.[0] ?? null)}
                   />
                   {publicDraft?.screenshotUrl ? (
@@ -723,7 +980,7 @@ export default function DonateBySlugPage() {
                   ) : null}
                 </div>
 
-                <Button type="submit" disabled={isSubmittingProof}>
+                <Button type="submit" disabled={isSubmittingProof} className="w-full">
                   {isSubmittingProof ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -737,9 +994,9 @@ export default function DonateBySlugPage() {
                   )}
                 </Button>
               </form>
-            </CardContent>
-          </Card>
-        ) : null}
+            </div>
+          </SheetContent>
+        </Sheet>
 
         {session ? (
           <Card className="border-emerald-200 bg-emerald-50">
@@ -757,41 +1014,6 @@ export default function DonateBySlugPage() {
             </CardContent>
           </Card>
         ) : null}
-
-        <Dialog open={showDesktopUpiModal} onOpenChange={setShowDesktopUpiModal}>
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle>Complete Payment on Mobile</DialogTitle>
-              <DialogDescription>
-                Open this page on your mobile device to complete the payment.
-              </DialogDescription>
-            </DialogHeader>
-
-            {session ? (
-              <div className="space-y-4">
-                <div className="rounded-md border border-dashed border-border p-4 text-center">
-                  <p className="text-xs text-muted-foreground">QR Fallback</p>
-                  <div className="mt-3 flex justify-center">
-                    <QRCodeSVG value={session.upiDeepLink} size={180} />
-                  </div>
-                  <p className="mt-3 text-xs text-muted-foreground">
-                    Scan this QR from your UPI app on phone.
-                  </p>
-                </div>
-
-                <Button
-                  type="button"
-                  className="w-full"
-                  onClick={() => {
-                    openExternalUrl(session.upiDeepLink, { requireHttp: false });
-                  }}
-                >
-                  Try Opening UPI Link
-                </Button>
-              </div>
-            ) : null}
-          </DialogContent>
-        </Dialog>
       </div>
     </div>
   );

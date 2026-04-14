@@ -1,12 +1,13 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { mosqueService, type PrayerTimesSetting } from '@/services/mosque.service';
 import { queryKeys } from '@/lib/query-keys';
 import { muqtadiQueryPolicy } from '@/lib/muqtadi-query-policy';
+import { toast } from 'sonner';
 import {
   format12Hour,
   getCurrentPrayerKey,
@@ -74,6 +75,7 @@ function getPrayerAccent(prayerKey: string) {
 export function PrayerTimes({ mosqueId, mosqueName }: PrayerTimesProps) {
   const queryClient = useQueryClient();
   const prayerTimesKey = queryKeys.prayerTimes(mosqueId);
+  const previousSignatureRef = useRef<string | null>(null);
 
   const prayerTimesQuery = useQuery<PrayerTimesSetting | null>({
     queryKey: prayerTimesKey,
@@ -81,12 +83,34 @@ export function PrayerTimes({ mosqueId, mosqueName }: PrayerTimesProps) {
     staleTime: muqtadiQueryPolicy.prayerTimes.staleTime,
     gcTime: muqtadiQueryPolicy.prayerTimes.gcTime,
     refetchOnWindowFocus: muqtadiQueryPolicy.prayerTimes.refetchOnWindowFocus,
+    refetchOnReconnect: true,
     refetchInterval: muqtadiQueryPolicy.prayerTimes.refetchInterval,
     refetchIntervalInBackground: true,
-    refetchOnMount: false,
+    refetchOnMount: true,
     placeholderData: (previous) => previous ?? queryClient.getQueryData<PrayerTimesSetting | null>(prayerTimesKey),
     queryFn: async () => mosqueService.getPrayerTimes(mosqueId),
   });
+
+  useEffect(() => {
+    if (!mosqueId || !prayerTimesQuery.data) {
+      return;
+    }
+
+    const signature = JSON.stringify(prayerTimesQuery.data);
+    const previous = previousSignatureRef.current;
+
+    if (previous && previous !== signature) {
+      const toastSessionKey = `mld-prayer-update-toast-${mosqueId}`;
+      if (typeof window !== 'undefined' && !window.sessionStorage.getItem(toastSessionKey)) {
+        toast.success('Prayer timings updated', {
+          description: 'Latest mosque prayer schedule is now live.',
+        });
+        window.sessionStorage.setItem(toastSessionKey, String(Date.now()));
+      }
+    }
+
+    previousSignatureRef.current = signature;
+  }, [mosqueId, prayerTimesQuery.data]);
 
   const rows = useMemo(() => getFullPrayerRows(prayerTimesQuery.data ?? null), [prayerTimesQuery.data]);
   const currentPrayer = useMemo(

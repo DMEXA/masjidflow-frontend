@@ -11,7 +11,6 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
   Loader2,
-  MessageCircle,
   Clock3,
   Wallet,
   AlertTriangle,
@@ -26,7 +25,6 @@ import type { Donation } from '@/types';
 import { getErrorMessage } from '@/src/utils/error';
 import { formatDate } from '@/src/utils/format';
 import { usePermission } from '@/hooks/usePermission';
-import { API_BASE_URL } from '@/src/constants';
 import {
   Dialog,
   DialogContent,
@@ -68,9 +66,10 @@ export default function PendingDonationsPage() {
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isBulkVerifying, setIsBulkVerifying] = useState(false);
+  const [isBulkRejecting, setIsBulkRejecting] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewScale, setPreviewScale] = useState(1);
-  const [statusFilter, setStatusFilter] = useState<'ALL' | 'INITIATED' | 'PENDING'>('PENDING');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING'>('PENDING');
   const [verifyTarget, setVerifyTarget] = useState<Donation | null>(null);
   const [verifyTransactionId, setVerifyTransactionId] = useState('');
   const [verificationNote, setVerificationNote] = useState('');
@@ -224,7 +223,6 @@ export default function PendingDonationsPage() {
         .reduce((sum, item) => sum + item.amount, 0),
     [filteredDonations, selectedIds],
   );
-
   const allSelected = filteredDonations.length > 0 && selectedIds.length === filteredDonations.length;
 
   const toggleSelectAll = (checked: boolean) => {
@@ -245,17 +243,38 @@ export default function PendingDonationsPage() {
   };
 
   const handleBulkVerify = async () => {
-    if (selectedIds.length === 0) {
-      toast.error('Select at least one donation to verify');
+    const targetDonations = filteredDonations.filter(
+      (item) =>
+        selectedIds.includes(item.id)
+        && item.donationStatus === 'PENDING',
+    );
+
+    if (targetDonations.length === 0) {
+      toast.error('Select at least one pending donation to verify');
       return;
     }
 
     setIsBulkVerifying(true);
     try {
-      const result = await donationsService.bulkVerifyPending(selectedIds);
-      toast.success(
-        `${result.verifiedCount} donations verified (INR ${result.totalAmountVerified.toFixed(2)})`,
+      const results = await Promise.allSettled(
+        targetDonations.map((donation) =>
+          donationsService.approvePending(donation.id, {
+            manualConfirm: true,
+            verificationNote: 'Bulk manual verification by admin.',
+          }),
+        ),
       );
+      const verifiedCount = results.filter((result) => result.status === 'fulfilled').length;
+      const verifiedIds = new Set(
+        results
+          .filter((result): result is PromiseFulfilledResult<Donation> => result.status === 'fulfilled')
+          .map((result) => result.value.id),
+      );
+      const totalAmountVerified = targetDonations
+        .filter((donation) => verifiedIds.has(donation.id))
+        .reduce((sum, donation) => sum + donation.amount, 0);
+
+      toast.success(`${verifiedCount} donations verified (INR ${totalAmountVerified.toFixed(2)})`);
       setSelectedIds([]);
       await refreshDonationQueries();
       await invalidateMoneyQueries(queryClient);
@@ -264,6 +283,36 @@ export default function PendingDonationsPage() {
       toast.error(getErrorMessage(error, 'Failed to bulk verify donations'));
     } finally {
       setIsBulkVerifying(false);
+    }
+  };
+
+  const handleBulkReject = async () => {
+    const targetDonations = filteredDonations.filter(
+      (item) =>
+        selectedIds.includes(item.id)
+        && item.donationStatus === 'PENDING',
+    );
+
+    if (targetDonations.length === 0) {
+      toast.error('Select at least one pending donation to reject');
+      return;
+    }
+
+    setIsBulkRejecting(true);
+    try {
+      const results = await Promise.allSettled(
+        targetDonations.map((donation) => donationsService.rejectPending(donation.id)),
+      );
+      const rejectedCount = results.filter((result) => result.status === 'fulfilled').length;
+      toast.success(`${rejectedCount} donations rejected`);
+      setSelectedIds([]);
+      await refreshDonationQueries();
+      await invalidateMoneyQueries(queryClient);
+      await fetchPending();
+    } catch (error) {
+      toast.error(getErrorMessage(error, 'Failed to bulk reject donations'));
+    } finally {
+      setIsBulkRejecting(false);
     }
   };
 
@@ -285,13 +334,13 @@ export default function PendingDonationsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Pending Donations"
-        description="Review initiated and pending UPI donations before they affect fund balances"
+        description="Review pending UPI donations before they affect fund balances"
         backHref="/dashboard/donations"
         backLabel="Back to Donations"
       >
         <Button
           onClick={handleBulkVerify}
-          disabled={selectedIds.length === 0 || isBulkVerifying}
+          disabled={selectedIds.length === 0 || isBulkVerifying || isBulkRejecting}
         >
           {isBulkVerifying ? (
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -299,6 +348,18 @@ export default function PendingDonationsPage() {
             <CheckCircle2 className="mr-2 h-4 w-4" />
           )}
           Verify Selected ({selectedIds.length})
+        </Button>
+        <Button
+          variant="outline"
+          onClick={handleBulkReject}
+          disabled={selectedIds.length === 0 || isBulkVerifying || isBulkRejecting}
+        >
+          {isBulkRejecting ? (
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          ) : (
+            <XCircle className="mr-2 h-4 w-4" />
+          )}
+          Reject Selected ({selectedIds.length})
         </Button>
         <Button variant="outline" asChild>
           <Link href="/dashboard/donations">All Donations</Link>
@@ -368,16 +429,6 @@ export default function PendingDonationsPage() {
           All
         </Button>
         <Button
-          variant={statusFilter === 'INITIATED' ? 'default' : 'outline'}
-          size="sm"
-          onClick={() => {
-            setStatusFilter('INITIATED');
-            setSelectedIds([]);
-          }}
-        >
-          INITIATED
-        </Button>
-        <Button
           variant={statusFilter === 'PENDING' ? 'default' : 'outline'}
           size="sm"
           onClick={() => {
@@ -397,7 +448,7 @@ export default function PendingDonationsPage() {
                 checked={allSelected}
                 onCheckedChange={(checked) => toggleSelectAll(Boolean(checked))}
               />
-              <span className="text-sm text-muted-foreground">Select all initiated and pending donations</span>
+              <span className="text-sm text-muted-foreground">Select all pending donations</span>
             </div>
             <div className="text-sm font-medium text-foreground">
               Selected amount: INR {selectedAmount.toFixed(2)}
@@ -415,7 +466,7 @@ export default function PendingDonationsPage() {
             <div className="rounded-xl border-0 p-0">
               <ListEmptyState
                 title="No pending donations"
-                description="All initiated and pending donations are cleared."
+                description="All pending donations are cleared."
                 actionLabel="Refresh"
                 onAction={fetchPending}
               />
@@ -427,7 +478,8 @@ export default function PendingDonationsPage() {
                 const waLink = toWaLink(donation.donorPhone);
                 const proofUrl = donation.screenshotUrl ?? null;
                 const canReview =
-                  donation.donationStatus === 'PENDING' && (isAdmin || isSuperAdmin);
+                  donation.donationStatus === 'PENDING'
+                  && (isAdmin || isSuperAdmin);
 
                 return (
                   <div

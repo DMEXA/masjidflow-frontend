@@ -16,7 +16,8 @@ export function useProfileQuery(enabled = true) {
     staleTime: muqtadiQueryPolicy.profile.staleTime,
     gcTime: muqtadiQueryPolicy.profile.gcTime,
     refetchOnWindowFocus: muqtadiQueryPolicy.profile.refetchOnWindowFocus,
-    placeholderData: () => queryClient.getQueryData(profileKey),
+    refetchOnReconnect: true,
+    placeholderData: (previous) => previous ?? queryClient.getQueryData(profileKey),
     retry: 1,
   });
 }

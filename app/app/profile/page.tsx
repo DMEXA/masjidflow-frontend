@@ -15,11 +15,13 @@ import { MuqtadiProfileSkeleton } from '@/components/common/loading-skeletons';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '@/src/store/auth.store';
 import { queryKeys } from '@/lib/query-keys';
+import { useMinimumLoading } from '@/hooks/useMinimumLoading';
 
 export default function MuqtadiProfilePage() {
   const queryClient = useQueryClient();
   const { user, mosque } = useAuthStore();
   const profileQuery = useProfileQuery();
+  const showProfileLoader = useMinimumLoading(profileQuery.isLoading && !profileQuery.data);
   const [submitting, setSubmitting] = useState(false);
   const [profile, setProfile] = useState({
     name: '',
@@ -103,7 +105,16 @@ export default function MuqtadiProfilePage() {
 
     setSubmitting(true);
     try {
-      await muqtadisService.updateMyProfile(payload);
+      const updatedProfile = await muqtadisService.updateMyProfile(payload);
+      queryClient.setQueryData(queryKeys.muqtadiProfile(user?.id), (prev: any) => {
+        if (!updatedProfile || typeof updatedProfile !== 'object') {
+          return prev;
+        }
+        return {
+          ...(prev ?? {}),
+          ...(updatedProfile as Record<string, unknown>),
+        };
+      });
       toast.success('Profile updated');
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.muqtadiProfile(user?.id) }),
@@ -117,7 +128,7 @@ export default function MuqtadiProfilePage() {
     }
   };
 
-  if (profileQuery.isLoading) {
+  if (showProfileLoader) {
     return <MuqtadiProfileSkeleton />;
   }
 

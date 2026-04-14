@@ -15,8 +15,9 @@ import { queryKeys } from '@/lib/query-keys';
 import { ListEmptyState } from '@/components/common/list-empty-state';
 import { MuqtadiDuesSkeleton } from '@/components/common/loading-skeletons';
 import { muqtadiQueryPolicy } from '@/lib/muqtadi-query-policy';
+import { useMinimumLoading } from '@/hooks/useMinimumLoading';
 
-type PaymentFilter = 'ALL' | 'VERIFIED' | 'PENDING' | 'REJECTED';
+type PaymentFilter = 'ALL' | 'INITIATED' | 'VERIFIED' | 'PENDING' | 'REJECTED';
 
 function getPaymentSortTimestamp(payment: { createdAt?: string; updatedAt?: string }) {
   const updated = payment.updatedAt ? new Date(payment.updatedAt).getTime() : 0;
@@ -25,12 +26,14 @@ function getPaymentSortTimestamp(payment: { createdAt?: string; updatedAt?: stri
 }
 
 function getStatusBadgeClass(status: string) {
+  if (status === 'INITIATED') return 'bg-sky-100 text-sky-700 border-sky-200';
   if (status === 'VERIFIED') return 'bg-emerald-100 text-emerald-700 border-emerald-200';
   if (status === 'PENDING') return 'bg-amber-100 text-amber-700 border-amber-200';
   return 'bg-red-100 text-red-700 border-red-200';
 }
 
 function getDisplayStatus(status: string) {
+  if (status === 'INITIATED') return 'DRAFT';
   if (status === 'VERIFIED') return 'VERIFIED';
   if (status === 'PENDING') return 'PENDING';
   if (status === 'REJECTED') return 'REJECTED';
@@ -38,11 +41,11 @@ function getDisplayStatus(status: string) {
 }
 
 function needsRetryAction(status: string) {
-  return status === 'PENDING' || status === 'REJECTED';
+  return status === 'INITIATED' || status === 'PENDING' || status === 'REJECTED';
 }
 
 function getRetryLabel() {
-  return 'Continue Payment';
+  return 'Continue Payment Draft';
 }
 
 function buildRetryHref(payment: MuqtadiDashboardApiResponse['history'][number]) {
@@ -71,6 +74,7 @@ export default function MyDuesPage() {
     gcTime: muqtadiQueryPolicy.dues.gcTime,
     placeholderData: (previous) => previous ?? queryClient.getQueryData<MuqtadiDashboardApiResponse>(dashboardKey),
     refetchOnWindowFocus: muqtadiQueryPolicy.dues.refetchOnWindowFocus,
+    refetchOnReconnect: true,
     refetchOnMount: true,
     refetchInterval: muqtadiQueryPolicy.dues.refetchInterval,
     refetchIntervalInBackground: true,
@@ -97,7 +101,9 @@ export default function MyDuesPage() {
     return sorted.filter((item) => item.status === filter);
   }, [filter, history]);
 
-  if (dashboardQuery.isLoading && !hasFinancialTruth) {
+  const showDuesLoader = useMinimumLoading(dashboardQuery.isLoading && !hasFinancialTruth);
+
+  if (showDuesLoader) {
     return <MuqtadiDuesSkeleton />;
   }
 
@@ -148,6 +154,7 @@ export default function MyDuesPage() {
               onChange={(e) => setFilter(e.target.value as PaymentFilter)}
             >
               <option value="ALL">All</option>
+              <option value="INITIATED">Draft</option>
               <option value="VERIFIED">Verified</option>
               <option value="PENDING">Pending</option>
               <option value="REJECTED">Rejected</option>

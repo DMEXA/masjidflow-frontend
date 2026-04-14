@@ -80,7 +80,7 @@ export default function DonationsPage() {
   const canViewPendingCount = isAdmin || isSuperAdmin;
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [donationStatusFilter, setDonationStatusFilter] = useState<'all' | 'VERIFIED' | 'PENDING' | 'INITIATED'>('all');
+  const [donationStatusFilter, setDonationStatusFilter] = useState<'all' | 'VERIFIED' | 'PENDING'>('all');
   const [paymentTypeFilter, setPaymentTypeFilter] = useState<string>('all');
   const [fundTypeFilter, setFundTypeFilter] = useState<string>('all');
   const [page, setPage] = useState(1);
@@ -88,7 +88,7 @@ export default function DonationsPage() {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
-  const [pendingStatusFilter, setPendingStatusFilter] = useState<'all' | 'VERIFIED' | 'PENDING' | 'INITIATED'>('all');
+  const [pendingStatusFilter, setPendingStatusFilter] = useState<'all' | 'VERIFIED' | 'PENDING'>('all');
   const [pendingPaymentTypeFilter, setPendingPaymentTypeFilter] = useState<string>('all');
   const [receiptModalDonation, setReceiptModalDonation] = useState<Donation | null>(null);
   const [receiptContentLoaded, setReceiptContentLoaded] = useState(false);
@@ -381,11 +381,10 @@ export default function DonationsPage() {
     }
   };
 
-  const tabs: Array<{ label: string; value: 'all' | 'PENDING' | 'VERIFIED' | 'INITIATED' }> = [
+  const tabs: Array<{ label: string; value: 'all' | 'PENDING' | 'VERIFIED' }> = [
     { label: 'All', value: 'all' },
     { label: 'Pending', value: 'PENDING' },
     { label: 'Verified', value: 'VERIFIED' },
-    { label: 'Initiated', value: 'INITIATED' },
   ];
 
   return (
@@ -736,7 +735,6 @@ export default function DonationsPage() {
                 <SelectItem value="all">All Status</SelectItem>
                 <SelectItem value="VERIFIED">Verified</SelectItem>
                 <SelectItem value="PENDING">Pending</SelectItem>
-                <SelectItem value="INITIATED">Initiated</SelectItem>
               </SelectContent>
             </Select>
             <Select value={pendingPaymentTypeFilter} onValueChange={setPendingPaymentTypeFilter}>

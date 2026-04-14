@@ -12,7 +12,7 @@ export const muqtadiQueryPolicy = {
     refetchInterval: 30_000,
   },
   profile: {
-    staleTime: 10 * 60_000,
+    staleTime: 60_000,
     gcTime: 20 * 60_000,
     refetchOnWindowFocus: true,
   },
@@ -23,10 +23,10 @@ export const muqtadiQueryPolicy = {
     refetchInterval: 60_000,
   },
   prayerTimes: {
-    staleTime: 3 * 60_000,
+    staleTime: 2 * 60_000,
     gcTime: 30 * 60_000,
     refetchOnWindowFocus: true,
-    refetchInterval: 3 * 60_000,
+    refetchInterval: 2 * 60_000,
   },
   notifications: {
     staleTime: 30_000,

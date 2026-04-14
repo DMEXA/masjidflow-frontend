@@ -24,6 +24,7 @@ import { queryKeys } from '@/lib/query-keys';
 import { ListEmptyState } from '@/components/common/list-empty-state';
 import { MuqtadiHeroSkeleton } from '@/components/common/loading-skeletons';
 import { muqtadiQueryPolicy } from '@/lib/muqtadi-query-policy';
+import { useMinimumLoading } from '@/hooks/useMinimumLoading';
 
 function getPaymentSortTimestamp(payment: { createdAt?: string; updatedAt?: string }) {
   const updated = payment.updatedAt ? new Date(payment.updatedAt).getTime() : 0;
@@ -82,6 +83,7 @@ export default function MuqtadiDashboardPage() {
     gcTime: muqtadiQueryPolicy.dashboard.gcTime,
     placeholderData: (previous) => previous ?? queryClient.getQueryData<MuqtadiDashboardApiResponse>(dashboardKey),
     refetchOnWindowFocus: muqtadiQueryPolicy.dashboard.refetchOnWindowFocus,
+    refetchOnReconnect: true,
     refetchInterval: muqtadiQueryPolicy.dashboard.refetchInterval,
     refetchIntervalInBackground: true,
     queryFn: () => muqtadisService.getDashboard(),
@@ -94,6 +96,7 @@ export default function MuqtadiDashboardPage() {
     staleTime: muqtadiQueryPolicy.prayerTimes.staleTime,
     gcTime: muqtadiQueryPolicy.prayerTimes.gcTime,
     refetchOnWindowFocus: muqtadiQueryPolicy.prayerTimes.refetchOnWindowFocus,
+    refetchOnReconnect: true,
     refetchInterval: muqtadiQueryPolicy.prayerTimes.refetchInterval,
     refetchIntervalInBackground: true,
     placeholderData: (previous) => previous ?? queryClient.getQueryData<PrayerTimesSetting | null>(prayerTimesKey),
@@ -107,6 +110,7 @@ export default function MuqtadiDashboardPage() {
     staleTime: muqtadiQueryPolicy.announcements.staleTime,
     gcTime: muqtadiQueryPolicy.announcements.gcTime,
     refetchOnWindowFocus: muqtadiQueryPolicy.announcements.refetchOnWindowFocus,
+    refetchOnReconnect: true,
     refetchInterval: muqtadiQueryPolicy.announcements.refetchInterval,
     refetchIntervalInBackground: true,
     placeholderData: (previous) => previous ?? queryClient.getQueryData<AnnouncementItem[]>(announcementsKey),
@@ -120,6 +124,7 @@ export default function MuqtadiDashboardPage() {
   }, [dashboardQuery.error]);
 
   const dashboard = dashboardQuery.data ?? null;
+  const showDashboardLoader = useMinimumLoading((dashboardQuery.isLoading || dashboardQuery.isError) && !dashboard);
   const prayerTimes = prayerTimesQuery.data ?? null;
   const latestAnnouncement = useMemo(
     () => (announcementsQuery.data ?? []).slice().sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0] ?? null,
@@ -131,7 +136,7 @@ export default function MuqtadiDashboardPage() {
   );
   const lastPayment = paymentHistory[0] ?? null;
   const lastPaymentStatus = (lastPayment?.status ?? '').toUpperCase();
-  const needsProofResume = lastPaymentStatus === 'PENDING' || lastPaymentStatus === 'REJECTED';
+  const needsProofResume = lastPaymentStatus === 'INITIATED' || lastPaymentStatus === 'PENDING' || lastPaymentStatus === 'REJECTED';
   const outstandingAmount = Number(dashboard?.outstandingAmount ?? dashboard?.remainingAmount ?? 0);
   const allDuesPaid = outstandingAmount <= 0.0001;
   const lastPaymentResumeHref = useMemo(() => {
@@ -193,7 +198,7 @@ export default function MuqtadiDashboardPage() {
     [now],
   );
 
-  if ((dashboardQuery.isLoading || dashboardQuery.isError) && !dashboard) {
+  if (showDashboardLoader) {
     return <MuqtadiHeroSkeleton />;
   }
 
