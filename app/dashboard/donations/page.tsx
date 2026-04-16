@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -98,10 +97,12 @@ export default function DonationsPage() {
   const [isBulkDeleteOpen, setIsBulkDeleteOpen] = useState(false);
   const pageLimit = getSafeLimit(20);
   const debouncedSearch = useDebounce(searchQuery);
+  const apiBaseUrl = API_BASE_URL ?? '';
+  const apiOrigin = apiBaseUrl.replace('/api/v1', '');
 
   const fundsQuery = useFundsListQuery(mosqueId);
 
-  const funds = fundsQuery.data ?? [];
+  const funds = useMemo(() => fundsQuery.data ?? [], [fundsQuery.data]);
 
   const selectedFundId = useMemo(() => {
     if (fundTypeFilter === 'all') return undefined;
@@ -128,12 +129,18 @@ export default function DonationsPage() {
         search: debouncedSearch || undefined,
       }),
     enabled: Boolean(mosqueId) && Boolean(token),
+    staleTime: 30_000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: true,
   });
 
   const pendingCountQuery = useQuery({
     queryKey: ['pending-count', mosqueId],
     queryFn: () => donationsService.getPendingCount(),
     enabled: false,
+    staleTime: 30_000,
+    refetchOnMount: false,
     initialData: () => queryClient.getQueryData<{ count: number }>(['pending-count', mosqueId]),
   });
 
@@ -585,9 +592,9 @@ export default function DonationsPage() {
                   </p>
                   <Badge className={`text-xs ${statusClass}`}>{donation.donationStatus}</Badge>
                 </div>
-                <p className="text-xs text-muted-foreground">
+                {/* <p className="text-xs text-muted-foreground">
                   Contact: {donation.donorPhone || donation.donorEmail || '-'}
-                </p>
+                </p> */}
                 <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
                   <p>{donation.fund?.name ?? '-'}</p>
                   <Badge variant="secondary" className={`h-5 rounded-md px-2 text-[10px] ${roleClass}`}>{roleText}</Badge>
@@ -885,7 +892,7 @@ export default function DonationsPage() {
                 (() => {
                   const url = resolveReceiptUrl(
                     receiptModalDonation.receipt,
-                    API_BASE_URL.replace('/api/v1', ''),
+                    apiOrigin,
                   );
                   if (!url) {
                     return <p className="text-sm text-muted-foreground">Receipt preview unavailable.</p>;
@@ -939,7 +946,7 @@ export default function DonationsPage() {
                   if (!receiptModalDonation?.receipt) return;
                   const url = resolveReceiptUrl(
                     receiptModalDonation.receipt,
-                    API_BASE_URL.replace('/api/v1', ''),
+                    apiOrigin,
                   );
                   if (url) router.push(url);
                 }}
@@ -949,7 +956,7 @@ export default function DonationsPage() {
             ) : receiptModalDonation?.intentId ? (
               <Button
                 onClick={() =>
-                  router.push(`${API_BASE_URL}${donationsService.getPublicReceiptPdfUrl(receiptModalDonation.intentId)}`)
+                  router.push(`${apiBaseUrl}${donationsService.getPublicReceiptPdfUrl(receiptModalDonation.intentId)}`)
                 }
               >
                 Download
