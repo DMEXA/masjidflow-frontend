@@ -25,7 +25,7 @@ import { USER_ROLES } from '@/src/constants';
 import { Search } from 'lucide-react';
 import { toast } from 'sonner';
 import { membersService, type InviteRecord } from '@/services/members.service';
-import { getErrorMessage } from '@/src/utils/error';
+import { getErrorMessage, isTransientServiceError } from '@/src/utils/error';
 import type { Member } from '@/types';
 import type { UserRole } from '@/src/constants';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -139,18 +139,22 @@ export default function MembersPage() {
     queryFn: () => membersService.getAll({ page, pageSize: pageLimit }),
     enabled: canManageMembers,
     placeholderData: keepPreviousData,
+    staleTime: 30_000,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
-    retry: false,
+    refetchOnMount: false,
+    retry: (failureCount, error) => isTransientServiceError(error) && failureCount < 2,
   });
 
   const invitesQuery = useQuery({
     queryKey: invitesQueryKey,
     queryFn: () => membersService.getInvites(),
     enabled: canManageMembers,
+    staleTime: 30_000,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
-    retry: false,
+    refetchOnMount: false,
+    retry: (failureCount, error) => isTransientServiceError(error) && failureCount < 2,
   });
 
   useEffect(() => {

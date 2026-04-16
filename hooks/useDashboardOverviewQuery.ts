@@ -66,9 +66,12 @@ export function useDashboardOverviewQuery(options: {
     enabled,
     placeholderData: (previous) => previous,
     queryFn: async () => {
-      const [yearlyResult, membersResult, donationsResult, expensesResult] = await Promise.allSettled([
+      const [yearlyResult, membersResult] = await Promise.allSettled([
         api.get<YearlyReportResponse>('/reports/yearly').then((r) => r.data),
         membersService.getAll({ page: 1, pageSize: 1 }),
+      ]);
+
+      const [donationsResult, expensesResult] = await Promise.allSettled([
         api.get(`/donations?limit=${chartsLimit}`).then((r) => r.data),
         api.get(`/expenses?limit=${chartsLimit}`).then((r) => r.data),
       ]);

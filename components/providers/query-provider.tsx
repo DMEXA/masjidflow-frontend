@@ -13,7 +13,7 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
             staleTime: 60_000,
             gcTime: 10 * 60_000,
             refetchOnWindowFocus: false,
-            refetchOnMount: true,
+            refetchOnMount: false,
             refetchOnReconnect: true,
             retry: (failureCount, error) => {
               if (isTransientServiceError(error)) {

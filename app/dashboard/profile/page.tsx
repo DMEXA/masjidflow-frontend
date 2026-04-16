@@ -34,7 +34,7 @@ const EMPTY_FORM: ProfileFormState = {
 
 export default function DashboardProfilePage() {
   const router = useRouter();
-  const { user, mosque, token, setAuth, logout, isLoading } = useAuthStore();
+  const { user, mosque, token, setAuth, isLoading } = useAuthStore();
   const { canManageSettings } = usePermission();
 
   const [form, setForm] = useState<ProfileFormState>(EMPTY_FORM);
@@ -181,11 +181,6 @@ export default function DashboardProfilePage() {
     } finally {
       setSecurityLoading(false);
     }
-  };
-
-  const handleLogout = async () => {
-    await logout();
-    router.replace('/login');
   };
 
   if (isLoading || !user || !mosque) {

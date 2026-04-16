@@ -119,6 +119,10 @@ export default function ExpensesPage() {
       }),
     enabled: Boolean(mosque?.id) && Boolean(token),
     placeholderData: keepPreviousData,
+    staleTime: 30_000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: true,
   });
 
   useEffect(() => {
@@ -131,6 +135,9 @@ export default function ExpensesPage() {
     queryKey: ['expenses-pending-count', mosque?.id],
     queryFn: () => expensesService.getPendingCount(),
     enabled: Boolean(mosque?.id) && Boolean(token) && canViewPendingCount,
+    staleTime: 30_000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
   });
 
   const deleteMutation = useMutation({
