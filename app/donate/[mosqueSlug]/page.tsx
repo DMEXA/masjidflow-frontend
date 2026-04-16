@@ -21,7 +21,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '@/lib/query-keys';
 import { useMinimumLoading } from '@/hooks/useMinimumLoading';
 
-const MAX_SCREENSHOT_BYTES = 5 * 1024 * 1024;
+const MAX_SCREENSHOT_BYTES = 10 * 1024 * 1024;
 const ALLOWED_SCREENSHOT_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 
 async function copyText(value: string, label: string) {
@@ -41,6 +41,7 @@ export default function DonateBySlugPage() {
 
   const [isSubmittingProof, setIsSubmittingProof] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [isCompressing, setIsCompressing] = useState(false);
   const [isCreatingDraft, setIsCreatingDraft] = useState(false);
 
   const [fundId, setFundId] = useState('');
@@ -552,7 +553,7 @@ export default function DonateBySlugPage() {
         return;
       }
       if (screenshot.size > MAX_SCREENSHOT_BYTES) {
-        toast.error('Screenshot must be 5MB or smaller.');
+        toast.error('Screenshot must be 10MB or smaller.');
         return;
       }
     }
@@ -561,14 +562,20 @@ export default function DonateBySlugPage() {
     try {
       if (screenshot && config) {
         setIsUploading(true);
+        setIsCompressing(true);
         const upload = await donationsService.uploadDonationScreenshot(
           screenshot,
           config.mosqueId,
+          (stage) => {
+            setIsCompressing(stage === 'compressing');
+            setIsUploading(stage === 'uploading');
+          },
         );
         if (!isMountedRef.current) {
           return;
         }
         screenshotUrl = upload.url;
+        setIsCompressing(false);
         setIsUploading(false);
       }
 
@@ -630,6 +637,7 @@ export default function DonateBySlugPage() {
       setShowProofForm(false);
     } catch (error) {
       if (isMountedRef.current) {
+        setIsCompressing(false);
         setIsUploading(false);
       }
       toast.error(getErrorMessage(error, 'Failed to submit proof'));
@@ -966,7 +974,7 @@ export default function DonateBySlugPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="screenshot">Screenshot (Optional, JPG/PNG/WEBP, up to 5MB)</Label>
+                  <Label htmlFor="screenshot">Screenshot (Optional, JPG/PNG/WEBP, up to 10MB)</Label>
                   <Input
                     id="screenshot"
                     type="file"
@@ -984,7 +992,7 @@ export default function DonateBySlugPage() {
                   {isSubmittingProof ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      {isUploading ? 'Processing image...' : 'Submitting...'}
+                      {isCompressing ? 'Compressing screenshot...' : isUploading ? 'Uploading screenshot...' : 'Submitting...'}
                     </>
                   ) : (
                     <>

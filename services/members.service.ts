@@ -14,7 +14,7 @@ function fromApiRole(role: string): UserRole {
 }
 
 export interface InviteMemberData {
-  email: string;
+  phone: string;
   isMuqtadi?: boolean;
   role: UserRole;
 }
@@ -30,7 +30,8 @@ export interface CreateMemberData {
 
 export interface InviteMemberResponse {
   id: string;
-  email: string;
+  phone?: string | null;
+  email?: string | null;
   role: ApiRole;
   token?: string;
   link?: string;
@@ -53,7 +54,8 @@ export type InviteStatus = 'PENDING' | 'ACCEPTED' | 'CANCELLED' | 'EXPIRED';
 
 export interface InviteRecord {
   id: string;
-  email: string;
+  phone?: string | null;
+  email?: string | null;
   role: ApiRole;
   invitedBy?: string | null;
   status: InviteStatus;
@@ -124,6 +126,7 @@ export const membersService = {
         fatherName: item.user?.fatherName ?? null,
         isMuqtadi: item.role === 'MUQTADI' || Boolean(item.user?.muqtadiProfile),
         email: item.user?.email ?? '',
+        phone: item.user?.phone ?? null,
         role: fromApiRole(item.role),
         status: 'active' as const,
         joinedAt: item.createdAt,

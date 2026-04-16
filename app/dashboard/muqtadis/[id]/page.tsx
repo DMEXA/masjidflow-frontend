@@ -32,6 +32,7 @@ import {
 import { getErrorMessage } from '@/src/utils/error';
 import { formatCurrency, formatCycleLabel, formatDate, getCycleStatus } from '@/src/utils/format';
 import { parseStrictAmountInput, parseStrictIntegerInput } from '@/src/utils/numeric-input';
+import { isValidIndianPhone, normalizeIndianPhone } from '@/src/utils/phone';
 import { invalidateMoneyQueries } from '@/lib/money-cache';
 import { useQueryClient } from '@tanstack/react-query';
 import { usePermission } from '@/hooks/usePermission';
@@ -67,7 +68,7 @@ export default function MuqtadiDetailPage() {
   const [isAdjusting, setIsAdjusting] = useState(false);
   const [isLoginFormOpen, setIsLoginFormOpen] = useState(false);
   const [loginForm, setLoginForm] = useState({
-    email: '',
+    phone: '',
     password: '',
     autoGeneratePassword: true,
   });
@@ -92,7 +93,7 @@ export default function MuqtadiDetailPage() {
       });
       setLoginForm((prev) => ({
         ...prev,
-        email: result.email || '',
+        phone: result.phone || result.whatsappNumber || '',
       }));
     } catch (error) {
       toast.error(getErrorMessage(error, 'Failed to load household details'));
@@ -341,8 +342,19 @@ export default function MuqtadiDetailPage() {
   const enableLogin = async () => {
     if (!details) return;
 
-    if (!loginForm.email.trim()) {
-      toast.error('Email is required');
+    if (!loginForm.phone.trim()) {
+      toast.error('Phone is required');
+      return;
+    }
+
+    if (!isValidIndianPhone(loginForm.phone)) {
+      toast.error('Please enter a valid Indian phone number');
+      return;
+    }
+
+    const normalizedPhone = normalizeIndianPhone(loginForm.phone);
+    if (!normalizedPhone) {
+      toast.error('Please enter a valid Indian phone number');
       return;
     }
 
@@ -354,7 +366,7 @@ export default function MuqtadiDetailPage() {
     setSubmitting(true);
     try {
       const result = await muqtadisService.enableLogin(details.id, {
-        email: loginForm.email.trim(),
+        phone: normalizedPhone,
         password: loginForm.autoGeneratePassword ? undefined : loginForm.password.trim(),
         autoGeneratePassword: loginForm.autoGeneratePassword,
       });
@@ -629,11 +641,12 @@ export default function MuqtadiDetailPage() {
           <CardHeader><CardTitle>Enable Login</CardTitle></CardHeader>
           <CardContent className="grid gap-3 sm:grid-cols-2">
             <div className="sm:col-span-2">
-              <Label>Email</Label>
+              <Label>Phone</Label>
               <Input
-                type="email"
-                value={loginForm.email}
-                onChange={(e) => setLoginForm((prev) => ({ ...prev, email: e.target.value }))}
+                type="tel"
+                value={loginForm.phone}
+                onChange={(e) => setLoginForm((prev) => ({ ...prev, phone: e.target.value }))}
+                placeholder="+91 98765 43210"
               />
             </div>
             <label className="sm:col-span-2 flex items-center gap-2 text-sm">

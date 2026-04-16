@@ -27,6 +27,7 @@ import { USER_ROLES } from '@/src/constants';
 import type { UserRole } from '@/src/constants';
 import { usePermission } from '@/hooks/usePermission';
 import { openExternalUrl } from '@/src/utils/open-external-url';
+import { isValidIndianPhone, normalizeIndianPhone } from '@/src/utils/phone';
 
 const INVITABLE_ROLES: { value: UserRole; label: string }[] = [
   { value: USER_ROLES.ADMIN, label: 'Admin' },
@@ -51,30 +52,33 @@ export default function InviteMemberPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [inviteLink, setInviteLink] = useState('');
   const [formData, setFormData] = useState({
-    isMuqtadi: false,
-    email: '',
+    phone: '',
     role: '' as UserRole | '',
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.email || !formData.role) {
+    if (!formData.phone || !formData.role) {
       toast.error('Please fill in all required fields');
       return;
     }
 
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(formData.email)) {
-      toast.error('Please enter a valid email address');
+    if (!isValidIndianPhone(formData.phone)) {
+      toast.error('Please enter a valid Indian phone number');
+      return;
+    }
+
+    const normalizedPhone = normalizeIndianPhone(formData.phone);
+    if (!normalizedPhone) {
+      toast.error('Please enter a valid Indian phone number');
       return;
     }
 
     setIsLoading(true);
     try {
       const response = await membersService.invite({
-        isMuqtadi: formData.isMuqtadi,
-        email: formData.email,
+        phone: normalizedPhone,
         role: formData.role as UserRole,
       });
 
@@ -88,11 +92,7 @@ export default function InviteMemberPage() {
         setInviteLink(link);
       }
 
-      if (response.emailSent) {
-        toast.success('Invite sent successfully');
-      } else {
-        toast.warning('Invite link created. Email failed — share manually');
-      }
+      toast.success('Invite link created successfully');
     } catch (error) {
       toast.error(getErrorMessage(error, 'Failed to send invitation. Please try again.'));
     } finally {
@@ -156,7 +156,7 @@ export default function InviteMemberPage() {
             <div>
               <CardTitle className="text-foreground">Member Details</CardTitle>
               <CardDescription className="text-muted-foreground">
-                The invitee will receive an email to set up their account.
+                Send a trusted staff invite for Admin, Treasurer, or Viewer access.
               </CardDescription>
             </div>
           </div>
@@ -165,35 +165,26 @@ export default function InviteMemberPage() {
           <form onSubmit={handleSubmit} className="space-y-5">
             <div className="space-y-2">
               <label
-                htmlFor="email"
+                htmlFor="phone"
                 className="text-sm font-medium text-foreground"
               >
-                Email Address <span className="text-destructive">*</span>
+                Phone Number <span className="text-destructive">*</span>
               </label>
               <Input
-                id="email"
-                type="email"
-                placeholder="member@email.com"
-                value={formData.email}
+                id="phone"
+                type="tel"
+                placeholder="+91 98765 43210"
+                value={formData.phone}
                 onChange={(e) =>
-                  setFormData({ ...formData, email: e.target.value })
+                  setFormData({ ...formData, phone: e.target.value })
                 }
                 disabled={isLoading}
                 required
               />
+              <p className="text-xs text-muted-foreground">
+                Trusted invite flow does not require OTP. Phone is required for login.
+              </p>
             </div>
-
-            <label className="flex items-center gap-2 text-sm text-foreground">
-              <input
-                type="checkbox"
-                checked={formData.isMuqtadi || false}
-                onChange={(e) =>
-                  setFormData({ ...formData, isMuqtadi: e.target.checked })
-                }
-                disabled={isLoading}
-              />
-              Also contributes (Muqtadi)
-            </label>
 
             <div className="space-y-2">
               <label

@@ -2,6 +2,7 @@
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useState } from 'react';
+import { isTransientServiceError } from '@/src/utils/error';
 
 export function QueryProvider({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
@@ -14,7 +15,13 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
             refetchOnWindowFocus: false,
             refetchOnMount: true,
             refetchOnReconnect: true,
-            retry: 1,
+            retry: (failureCount, error) => {
+              if (isTransientServiceError(error)) {
+                return failureCount < 2;
+              }
+              return failureCount < 1;
+            },
+            retryDelay: (attemptIndex) => (attemptIndex === 1 ? 300 : 800),
           },
           mutations: {
             retry: 1,

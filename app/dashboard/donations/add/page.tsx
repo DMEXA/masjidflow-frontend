@@ -40,9 +40,9 @@ export default function AddDonationPage() {
   }
 
   const [isLoading, setIsLoading] = useState(false);
+  const [uploadStage, setUploadStage] = useState<'compressing' | 'uploading' | null>(null);
   const [formData, setFormData] = useState({
     donorName: '',
-    donorEmail: '',
     donorPhone: '',
     amount: '',
     paymentType: '' as PaymentType | '',
@@ -99,14 +99,13 @@ export default function AddDonationPage() {
       // 1. Upload receipt file first if one is selected
       let receiptUrl: string | undefined;
       if (formData.receipt) {
-        const { url } = await donationsService.uploadReceipt(formData.receipt);
+        const { url } = await donationsService.uploadReceipt(formData.receipt, setUploadStage);
         receiptUrl = url;
       }
 
       // 2. Create the donation record
       const createdDonation = await donationsService.create({
         donorName: formData.donorName,
-        donorEmail: formData.donorEmail || undefined,
         donorPhone: formData.donorPhone || undefined,
         amount,
         paymentType: formData.paymentType as PaymentType,
@@ -153,6 +152,7 @@ export default function AddDonationPage() {
     } catch (error) {
       toast.error(getErrorMessage(error, 'Failed to add donation'));
     } finally {
+      setUploadStage(null);
       setIsLoading(false);
     }
   };
@@ -206,19 +206,6 @@ export default function AddDonationPage() {
                   onChange={(e) => setFormData((p) => ({ ...p, donorName: e.target.value }))}
                   disabled={isLoading}
                   required
-                />
-              </div>
-              <div className="space-y-2">
-                <label htmlFor="donorEmail" className="text-sm font-medium text-foreground">
-                  Email (Optional)
-                </label>
-                <Input
-                  id="donorEmail"
-                  type="email"
-                  placeholder="donor@email.com"
-                  value={formData.donorEmail}
-                  onChange={(e) => setFormData((p) => ({ ...p, donorEmail: e.target.value }))}
-                  disabled={isLoading}
                 />
               </div>
             </div>
@@ -384,7 +371,11 @@ export default function AddDonationPage() {
                 {isLoading ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Saving...
+                    {uploadStage === 'compressing'
+                      ? 'Compressing receipt...'
+                      : uploadStage === 'uploading'
+                        ? 'Uploading receipt...'
+                        : 'Saving...'}
                   </>
                 ) : (
                   'Add Donation'

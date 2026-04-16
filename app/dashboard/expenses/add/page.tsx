@@ -38,6 +38,7 @@ export default function AddExpensePage() {
   }
 
   const [isLoading, setIsLoading] = useState(false);
+  const [uploadStage, setUploadStage] = useState<'compressing' | 'uploading' | null>(null);
   const [formData, setFormData] = useState({
     category: '',
     amount: '',
@@ -83,7 +84,7 @@ export default function AddExpensePage() {
     try {
       let receiptUrl: string | undefined;
       if (formData.receipt) {
-        const { url } = await expensesService.uploadReceipt(formData.receipt);
+        const { url } = await expensesService.uploadReceipt(formData.receipt, setUploadStage);
         receiptUrl = url;
       }
 
@@ -129,6 +130,7 @@ export default function AddExpensePage() {
     } catch (error) {
       toast.error(getErrorMessage(error));
     } finally {
+      setUploadStage(null);
       setIsLoading(false);
     }
   };
@@ -309,7 +311,11 @@ export default function AddExpensePage() {
                 {isLoading ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Adding...
+                    {uploadStage === 'compressing'
+                      ? 'Compressing receipt...'
+                      : uploadStage === 'uploading'
+                        ? 'Uploading receipt...'
+                        : 'Adding...'}
                   </>
                 ) : (
                   'Add Expense'

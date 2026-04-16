@@ -309,7 +309,7 @@ export default function DonationsPage() {
         columns: [
           { header: 'Date', value: (row) => formatDate(row.createdAt) },
           { header: 'Donor', value: (row) => row.donorName?.trim() || 'Anonymous' },
-          { header: 'Email', value: (row) => row.donorEmail ?? '-' },
+          { header: 'Contact', value: (row) => row.donorPhone ?? row.donorEmail ?? '-' },
           { header: 'Amount', value: (row) => formatCurrency(row.amount, row.currency ?? '₹') },
           { header: 'Payment Type', value: (row) => formatPaymentType(row.paymentType) },
           { header: 'Status', value: (row) => row.donationStatus },
@@ -585,6 +585,9 @@ export default function DonationsPage() {
                   </p>
                   <Badge className={`text-xs ${statusClass}`}>{donation.donationStatus}</Badge>
                 </div>
+                <p className="text-xs text-muted-foreground">
+                  Contact: {donation.donorPhone || donation.donorEmail || '-'}
+                </p>
                 <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
                   <p>{donation.fund?.name ?? '-'}</p>
                   <Badge variant="secondary" className={`h-5 rounded-md px-2 text-[10px] ${roleClass}`}>{roleText}</Badge>
@@ -900,7 +903,7 @@ export default function DonationsPage() {
                           className="h-105 w-full rounded-md border"
                         />
                       ) : (
-                        // eslint-disable-next-line @next/next/no-img-element
+                         
                         <img
                           src={url}
                           alt="Receipt"

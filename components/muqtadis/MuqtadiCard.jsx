@@ -78,6 +78,10 @@ export default function MuqtadiCard({
         <p>Joined {formatDate(item.createdAt)}</p>
       </div>
 
+      <p className="text-xs text-muted-foreground">
+        Contact: {item.phone || item.whatsappNumber || item.email || '-'}
+      </p>
+
       <div className="flex flex-wrap items-center gap-2 pt-1">
         {!item.isVerified ? (
           <div className="flex items-center gap-2">

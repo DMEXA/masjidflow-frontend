@@ -73,7 +73,7 @@ export default function DashboardPage() {
         <CardHeader>
           <CardTitle className="text-foreground">Unable to load dashboard</CardTitle>
           <CardDescription className="text-muted-foreground">
-            Some data failed to load. Please retry.
+            {dashboardQuery.isFetching ? 'Retrying...' : 'Some data failed to load. Please retry.'}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -102,18 +102,21 @@ export default function DashboardPage() {
           </p>
         </div>
         <div className="flex gap-3">
-          <Button variant="outline" asChild>
-            <Link href="/dashboard/expenses/add">
-              <Plus className="mr-2 h-4 w-4" />
-              Add Expense
-            </Link>
-          </Button>
+          
           <Button asChild>
             <Link href="/dashboard/donations/add">
               <Plus className="mr-2 h-4 w-4" />
               Add Donation
             </Link>
           </Button>
+
+          <Button variant="outline" asChild>
+            <Link href="/dashboard/expenses/add">
+              <Plus className="mr-2 h-4 w-4" />
+              Add Expense
+            </Link>
+          </Button>
+
         </div>
       </div>
 

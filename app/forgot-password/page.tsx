@@ -16,17 +16,18 @@ export default function ForgotPasswordPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
     if (!email.trim()) {
-      toast.error('Please enter your email');
+      toast.error('Please enter your recovery email address');
       return;
     }
 
     setIsLoading(true);
     try {
       const result = await authService.forgotPassword(email.trim());
-      toast.success(result.message || 'Password reset email sent if account exists');
+      toast.success(result.message || 'If that email exists, a reset link has been sent');
     } catch (error) {
-      toast.error(getErrorMessage(error, 'Failed to request password reset'));
+      toast.error(getErrorMessage(error, 'Failed to send password reset email'));
     } finally {
       setIsLoading(false);
     }
@@ -39,7 +40,7 @@ export default function ForgotPasswordPage() {
           <CardHeader className="text-center">
             <CardTitle className="text-2xl text-foreground">Forgot Password</CardTitle>
             <CardDescription className="text-muted-foreground">
-              Enter your email to receive a reset link.
+              Super admin accounts recover password by email reset link.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -56,12 +57,15 @@ export default function ForgotPasswordPage() {
                 {isLoading ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Sending...
+                    Please wait...
                   </>
                 ) : (
                   'Send Reset Link'
                 )}
               </Button>
+              <p className="text-sm text-muted-foreground">
+                If your account was invited by a mosque, contact your admin for a secure reset link.
+              </p>
             </form>
           </CardContent>
           <CardFooter className="justify-center">

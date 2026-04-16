@@ -1,30 +1,36 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { Suspense, useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Building2, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import type { AxiosError } from 'axios';
 import { getErrorMessage } from '@/src/utils/error';
 import { authService } from '@/services/auth.service';
 import { muqtadisService } from '@/services/muqtadis.service';
 import { useAuthStore } from '@/src/store/auth.store';
 import { markTwoFactorPending } from '@/services/auth-session';
 
-export default function LoginPage() {
+function LoginPageContent() {
+  const RESEND_COOLDOWN_SECONDS = 45;
   const router = useRouter();
+  const searchParams = useSearchParams();
   const setAuth = useAuthStore((state) => state.setAuth);
   const authStatus = useAuthStore((state) => state.authStatus);
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const currentUser = useAuthStore((state) => state.user);
   const [isLoading, setIsLoading] = useState(false);
+  const [isResendingVerification, setIsResendingVerification] = useState(false);
+  const [resendCooldownSeconds, setResendCooldownSeconds] = useState(0);
+  const [unverifiedEmail, setUnverifiedEmail] = useState('');
   const [verificationStep, setVerificationStep] = useState<'none' | 'email-otp' | 'totp'>('none');
   const [challengeToken, setChallengeToken] = useState('');
   const [formData, setFormData] = useState({
-    email: '',
+    identifier: '',
     password: '',
     verificationCode: '',
   });
@@ -72,10 +78,61 @@ export default function LoginPage() {
     };
   }, [authStatus, isAuthenticated, currentUser, resolvePostLoginPath, router]);
 
+  useEffect(() => {
+    const queuedEmail = searchParams.get('unverifiedEmail')?.trim().toLowerCase();
+    if (!queuedEmail) {
+      return;
+    }
+
+    setUnverifiedEmail(queuedEmail);
+    setFormData((prev) => ({
+      ...prev,
+      identifier: prev.identifier || queuedEmail,
+    }));
+
+    if (searchParams.get('registrationEmailFailed') === '1') {
+      toast.error('Account created, but verification email could not be sent. Please resend below.');
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (resendCooldownSeconds <= 0) {
+      return;
+    }
+
+    const timer = window.setInterval(() => {
+      setResendCooldownSeconds((prev) => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [resendCooldownSeconds]);
+
+  const handleResendVerification = async () => {
+    if (!unverifiedEmail) {
+      toast.error('Please enter your email to resend verification.');
+      return;
+    }
+
+    if (resendCooldownSeconds > 0) {
+      return;
+    }
+
+    setIsResendingVerification(true);
+    try {
+      const response = await authService.resendVerificationEmail(unverifiedEmail);
+      toast.success(response.message || 'Verification email sent.');
+      setResendCooldownSeconds(RESEND_COOLDOWN_SECONDS);
+    } catch (error) {
+      toast.error(getErrorMessage(error, 'Unable to resend verification email right now.'));
+    } finally {
+      setIsResendingVerification(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!formData.email || !formData.password) {
+    if (!formData.identifier || !formData.password) {
       toast.error('Please fill in all fields');
       return;
     }
@@ -105,10 +162,15 @@ export default function LoginPage() {
         return;
       }
 
-      const response = await authService.login({
-        email: formData.email,
-        password: formData.password,
-      });
+      const response = formData.identifier.includes('@')
+        ? await authService.login({
+            email: formData.identifier,
+            password: formData.password,
+          })
+        : await authService.loginWithPhone({
+            phone: formData.identifier,
+            password: formData.password,
+          });
 
       if ('requires2FASetup' in response && response.requires2FASetup) {
         markTwoFactorPending();
@@ -150,7 +212,23 @@ export default function LoginPage() {
 
       toast.error('Login response is incomplete. Please try again.');
     } catch (error) {
-      toast.error(getErrorMessage(error, 'Invalid email or password'));
+      const axiosError = error as AxiosError<{ message?: string; code?: string }>;
+      const status = axiosError.response?.status;
+      const errorCode = axiosError.response?.data?.code;
+      const errorMessage = (axiosError.response?.data?.message || '').toLowerCase();
+      const identifier = formData.identifier.trim().toLowerCase();
+
+      if (
+        status === 403
+        && (errorCode === 'UNVERIFIED_ACCOUNT' || errorMessage.includes('not verified'))
+        && identifier.includes('@')
+      ) {
+        setUnverifiedEmail(identifier);
+        toast.error('Your email is not verified yet. You can resend verification below.');
+        return;
+      }
+
+      toast.error(getErrorMessage(error, 'Invalid phone/email or password'));
     } finally {
       setIsLoading(false);
     }
@@ -177,17 +255,46 @@ export default function LoginPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
+            {unverifiedEmail && verificationStep === 'none' && (
+              <div className="mb-5 space-y-3 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+                <p className="font-semibold">Your email isn&apos;t verified yet.</p>
+                <p>Check your inbox (and spam folder) for the verification link we sent after registration.</p>
+                <p>Didn&apos;t receive it? You can resend the email below.</p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full sm:w-auto"
+                  onClick={handleResendVerification}
+                  disabled={isResendingVerification || resendCooldownSeconds > 0}
+                >
+                  {isResendingVerification ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Sending...
+                    </>
+                  ) : resendCooldownSeconds > 0 ? (
+                    `Resend verification email (${resendCooldownSeconds}s)`
+                  ) : (
+                    'Resend verification email'
+                  )}
+                </Button>
+                {resendCooldownSeconds > 0 && (
+                  <p className="text-xs text-amber-800/90">Please wait {resendCooldownSeconds}s before requesting another email.</p>
+                )}
+              </div>
+            )}
             <form onSubmit={handleSubmit} className="ds-stack">
               <div className="space-y-2">
-                <label htmlFor="email" className="text-sm font-medium text-foreground">
-                  Email
+                <label htmlFor="identifier" className="text-sm font-medium text-foreground">
+                  Phone number or email
                 </label>
                 <Input
-                  id="email"
-                  type="email"
-                  placeholder="admin@mosque.com"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  id="identifier"
+                  type="text"
+                  inputMode="tel"
+                  placeholder="+91 9876543210"
+                  value={formData.identifier}
+                  onChange={(e) => setFormData({ ...formData, identifier: e.target.value })}
                   disabled={isLoading || verificationStep !== 'none'}
                   required
                 />
@@ -262,6 +369,33 @@ export default function LoginPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center bg-muted/30 px-4 py-12">
+          <Card className="w-full max-w-md border-border">
+            <CardHeader className="text-center">
+              <CardTitle className="text-2xl text-foreground">Welcome back</CardTitle>
+              <CardDescription className="text-muted-foreground">
+                Sign in to your account to continue
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span>Loading login...</span>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      }
+    >
+      <LoginPageContent />
+    </Suspense>
   );
 }
 

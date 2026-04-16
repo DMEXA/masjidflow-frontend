@@ -17,8 +17,6 @@ export default function RegisterPage() {
   const router = useRouter();
   const setAuth = useAuthStore((state) => state.setAuth);
   const [isLoading, setIsLoading] = useState(false);
-  const [isResendingEmail, setIsResendingEmail] = useState(false);
-  const [showResendVerification, setShowResendVerification] = useState(false);
   const [step, setStep] = useState(1);
   const [formData, setFormData] = useState({
     // Mosque Info
@@ -46,8 +44,8 @@ export default function RegisterPage() {
       return;
     }
 
-    if (!formData.adminName || !formData.adminEmail || !formData.adminPassword) {
-      toast.error('Please fill in all admin details');
+    if (!formData.adminName || !formData.adminPassword || !formData.adminPhone || !formData.adminEmail) {
+      toast.error('Please fill in all required admin details');
       return;
     }
 
@@ -57,38 +55,42 @@ export default function RegisterPage() {
     }
 
     setIsLoading(true);
-    setShowResendVerification(false);
     try {
-      const response = await authService.register(formData);
-      if (response.requiresEmailVerification) {
-        if (response.emailDeliveryFailed) {
-          toast.warning(
-            response.message ||
-              'Account created, but email could not be sent. Please click "Resend Verification Email".',
-          );
-          setShowResendVerification(true);
-          return;
-        }
+      const response = await authService.register({
+        mosqueName: formData.mosqueName,
+        mosqueAddress: formData.mosqueAddress,
+        mosqueCity: formData.mosqueCity,
+        mosqueState: formData.mosqueState,
+        mosqueCountry: formData.mosqueCountry,
+        adminName: formData.adminName,
+        adminPassword: formData.adminPassword,
+        adminPhone: formData.adminPhone,
+        adminEmail: formData.adminEmail.trim(),
+      });
 
-        toast.success(
-          response.message || 'Registration successful. Please verify your email before logging in.',
-        );
-        router.push(`/login?email=${encodeURIComponent(formData.adminEmail)}`);
+      if (response.accessToken && response.user && response.mosque) {
+        setAuth(response.user, response.mosque, response.accessToken);
+        toast.success('Registration successful! Welcome to MasjidFlow.');
+        router.push('/dashboard');
         return;
       }
 
-      if (!response.user || !response.mosque || !response.accessToken) {
-        throw new Error('Invalid register response');
+      toast.success(response.message || 'Registration successful. Please verify your email to continue.');
+      const params = new URLSearchParams({
+        registered: '1',
+      });
+      if (response.requiresEmailVerification) {
+        params.set('unverifiedEmail', formData.adminEmail.trim().toLowerCase());
       }
-
-      setAuth(response.user, response.mosque, response.accessToken);
-      toast.success('Registration successful! Welcome to MasjidFlow.');
-      router.push('/dashboard');
+      if (response.emailDeliveryFailed) {
+        params.set('registrationEmailFailed', '1');
+      }
+      router.push(`/login?${params.toString()}`);
     } catch (error) {
       const axiosError = error as AxiosError<{ message?: string | string[] }>;
       const status = axiosError.response?.status;
       if (status === 409) {
-        toast.error('This email is already registered. Please login instead.');
+        toast.error('This phone or email is already registered. Please login instead.');
       } else if (status === 400) {
         toast.error(getErrorMessage(error, 'Please check the entered details.'));
       } else if (status && status >= 500) {
@@ -98,20 +100,6 @@ export default function RegisterPage() {
       }
     } finally {
       setIsLoading(false);
-    }
-  };
-
-  const handleResendVerificationEmail = async () => {
-    setIsResendingEmail(true);
-    try {
-      const response = await authService.resendVerificationEmail(formData.adminEmail);
-      toast.success(response.message || 'Verification email resent successfully.');
-      setShowResendVerification(false);
-      router.push(`/login?email=${encodeURIComponent(formData.adminEmail)}`);
-    } catch (error) {
-      toast.error(getErrorMessage(error, 'Failed to resend verification email. Please try again later.'));
-    } finally {
-      setIsResendingEmail(false);
     }
   };
 
@@ -141,29 +129,6 @@ export default function RegisterPage() {
             </div>
           </CardHeader>
           <CardContent>
-            {showResendVerification && (
-              <div className="mb-4 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
-                <p>
-                  Account created, but email could not be sent. Please click "Resend Verification Email".
-                </p>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="mt-3"
-                  onClick={handleResendVerificationEmail}
-                  disabled={isResendingEmail || isLoading}
-                >
-                  {isResendingEmail ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Resending...
-                    </>
-                  ) : (
-                    'Resend Verification Email'
-                  )}
-                </Button>
-              </div>
-            )}
             <form onSubmit={handleSubmit} className="ds-stack">
               {step === 1 ? (
                 <>
@@ -246,8 +211,22 @@ export default function RegisterPage() {
                     />
                   </div>
                   <div className="space-y-2">
+                    <label htmlFor="adminPhone" className="text-sm font-medium text-foreground">
+                      Phone (Primary Login)
+                    </label>
+                    <Input
+                      id="adminPhone"
+                      type="tel"
+                      placeholder="+91 9876543210"
+                      value={formData.adminPhone}
+                      onChange={(e) => setFormData({ ...formData, adminPhone: e.target.value })}
+                      disabled={isLoading}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
                     <label htmlFor="adminEmail" className="text-sm font-medium text-foreground">
-                      Email
+                      Email (Recovery Required)
                     </label>
                     <Input
                       id="adminEmail"
@@ -258,19 +237,9 @@ export default function RegisterPage() {
                       disabled={isLoading}
                       required
                     />
-                  </div>
-                  <div className="space-y-2">
-                    <label htmlFor="adminPhone" className="text-sm font-medium text-foreground">
-                      Phone (Optional)
-                    </label>
-                    <Input
-                      id="adminPhone"
-                      type="tel"
-                      placeholder="+91 9876543210"
-                      value={formData.adminPhone}
-                      onChange={(e) => setFormData({ ...formData, adminPhone: e.target.value })}
-                      disabled={isLoading}
-                    />
+                    <p className="text-xs text-muted-foreground">
+                      Phone is used for login. Email is required for password recovery.
+                    </p>
                   </div>
                   <div className="space-y-2">
                     <label htmlFor="adminPassword" className="text-sm font-medium text-foreground">
@@ -295,7 +264,7 @@ export default function RegisterPage() {
                     type="button" 
                     variant="outline" 
                     className="flex-1"
-                    onClick={() => setStep(1)}
+                    onClick={() => setStep(step - 1)}
                     disabled={isLoading}
                   >
                     Back

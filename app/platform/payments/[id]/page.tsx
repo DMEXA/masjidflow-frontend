@@ -134,7 +134,7 @@ export default function PlatformPaymentDetailsPage() {
                 <Link href={details.proofUrl} className="text-sm text-primary underline">
                   Open Proof Image
                 </Link>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
+                { }
                 <img
                   src={details.proofUrl}
                   alt="Subscription proof"

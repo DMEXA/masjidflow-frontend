@@ -14,3 +14,19 @@ export function isRequestCanceled(error: unknown): boolean {
   const axiosError = error as AxiosError;
   return axiosError?.code === 'ERR_CANCELED';
 }
+
+export function isTransientServiceError(error: unknown): boolean {
+  const axiosError = error as AxiosError<{ message?: string | string[] }>;
+  const status = axiosError?.response?.status;
+  if (status === 503 || status === 502 || status === 504) {
+    return true;
+  }
+
+  const code = axiosError?.code ?? '';
+  if (code === 'ECONNABORTED' || code === 'ERR_NETWORK') {
+    return true;
+  }
+
+  const message = getErrorMessage(error, '').toLowerCase();
+  return message.includes('temporarily unavailable') || message.includes('temporary issue');
+}

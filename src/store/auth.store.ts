@@ -11,10 +11,49 @@ import {
   isTwoFactorFlowActive,
   markLogoutInProgress,
 } from '@/services/auth-session';
+import { isTransientServiceError } from '@/src/utils/error';
 
 type AuthStatus = 'loading' | 'authenticated' | 'unauthenticated';
 
 let bootstrapPromise: Promise<void> | null = null;
+
+const getHttpStatus = (error: unknown): number | undefined => {
+  if (
+    typeof error === 'object' &&
+    error !== null &&
+    'response' in error &&
+    typeof (error as { response?: { status?: unknown } }).response?.status === 'number'
+  ) {
+    return (error as { response?: { status?: number } }).response?.status;
+  }
+
+  return undefined;
+};
+
+const isHardAuthFailure = (status: number | undefined): boolean => status === 401 || status === 403;
+
+const wait = (ms: number): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, ms));
+
+async function retryTransientBootstrap<T>(
+  operation: () => Promise<T>,
+  maxRetries = 2,
+): Promise<T> {
+  const delays = [250, 600];
+
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      const canRetry = attempt < maxRetries && isTransientServiceError(error);
+      if (!canRetry) {
+        throw error;
+      }
+
+      await wait(delays[attempt] ?? delays[delays.length - 1]);
+    }
+  }
+}
 
 interface AuthState {
   user: User | null;
@@ -87,6 +126,9 @@ export const useAuthStore = create<AuthState>()(
         }
 
         bootstrapPromise = (async () => {
+          const snapshot = get();
+          const hasSessionSnapshot = Boolean(snapshot.isAuthenticated && snapshot.user && snapshot.mosque);
+
           if (isLogoutInProgress()) {
             set({
               user: null,
@@ -129,21 +171,25 @@ export const useAuthStore = create<AuthState>()(
 
           let token: string;
           try {
-            const refreshed = await authService.refreshToken();
+            const refreshed = await retryTransientBootstrap(() => authService.refreshToken(), 1);
             token = refreshed.accessToken;
           } catch (error) {
-            const status =
-              typeof error === 'object' &&
-              error !== null &&
-              'response' in error &&
-              typeof (error as { response?: { status?: unknown } }).response?.status === 'number'
-                ? (error as { response?: { status?: number } }).response?.status
-                : undefined;
+            const status = getHttpStatus(error);
+            if (!isHardAuthFailure(status) && hasSessionSnapshot) {
+              set({
+                isAuthenticated: true,
+                isLoading: false,
+                authStatus: 'authenticated',
+                hasTriedBootstrap: true,
+              });
+              return;
+            }
 
-            if (status !== 401 && status !== 403) {
+            if (!isHardAuthFailure(status)) {
               console.warn('Refresh failed during bootstrap, falling back to unauthenticated state');
             }
 
+            authService.removeToken();
             set({
               user: null,
               mosque: null,
@@ -157,7 +203,7 @@ export const useAuthStore = create<AuthState>()(
           }
 
           try {
-            const { user, mosque } = await authService.getCurrentUser();
+            const { user, mosque } = await retryTransientBootstrap(() => authService.getCurrentUser(), 1);
             set({
               user,
               mosque,
@@ -168,7 +214,16 @@ export const useAuthStore = create<AuthState>()(
               hasTriedBootstrap: true,
             });
           } catch (error) {
-            console.error('getCurrentUser ERROR:', error);
+            const status = getHttpStatus(error);
+            if (!isHardAuthFailure(status) && hasSessionSnapshot) {
+              set({
+                isAuthenticated: true,
+                isLoading: false,
+                authStatus: 'authenticated',
+                hasTriedBootstrap: true,
+              });
+              return;
+            }
 
             authService.removeToken();
             set({
@@ -204,7 +259,11 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'auth-storage',
-      partialize: () => ({}),
+      partialize: (state) => ({
+        user: state.user,
+        mosque: state.mosque,
+        isAuthenticated: state.isAuthenticated,
+      }),
     }
   )
 );

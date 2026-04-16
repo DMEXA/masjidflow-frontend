@@ -2,9 +2,9 @@ import api from './api';
 import type { Donation, PaginatedResponse } from '@/types';
 import type { PaymentType } from '@/src/constants';
 import { DEFAULT_PAGE_LIMIT, getSafeLimit } from '@/src/utils/pagination';
-import { compressImage } from '@/utils/compressImage';
+import { prepareProofUploadFile, type UploadStage } from '@/utils/compressImage';
 
-const MAX_DONATION_SCREENSHOT_BYTES = 5 * 1024 * 1024;
+const MAX_DONATION_SCREENSHOT_BYTES = 10 * 1024 * 1024;
 const ALLOWED_DONATION_SCREENSHOT_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
 export type DonationStatus = 'INITIATED' | 'PENDING' | 'VERIFIED' | 'REJECTED';
@@ -218,8 +218,12 @@ export const donationsService = {
     await api.delete(`/donations/${id}/permanent`);
   },
 
-  async uploadReceipt(file: File): Promise<{ url: string }> {
-    const compressedFile = await compressImage(file);
+  async uploadReceipt(
+    file: File,
+    onStageChange?: (stage: UploadStage) => void,
+  ): Promise<{ url: string }> {
+    const compressedFile = await prepareProofUploadFile(file, { onStageChange });
+    onStageChange?.('uploading');
     const formData = new FormData();
     formData.append('receipt', compressedFile, compressedFile.name);
     const response = await api.post<{ url: string }>(
@@ -281,23 +285,18 @@ export const donationsService = {
     return response.data;
   },
 
-  async uploadDonationScreenshot(file: File, mosqueId?: string): Promise<{ url: string }> {
-    if (!ALLOWED_DONATION_SCREENSHOT_TYPES.has(file.type)) {
-      throw new Error('Only JPG, PNG, or WEBP images are allowed.');
-    }
-    if (file.size > MAX_DONATION_SCREENSHOT_BYTES) {
-      throw new Error('Screenshot must be 5MB or smaller.');
-    }
+  async uploadDonationScreenshot(
+    file: File,
+    mosqueId?: string,
+    onStageChange?: (stage: UploadStage) => void,
+  ): Promise<{ url: string }> {
+    const compressedFile = await prepareProofUploadFile(file, {
+      maxBytes: MAX_DONATION_SCREENSHOT_BYTES,
+      allowedImageTypes: [...ALLOWED_DONATION_SCREENSHOT_TYPES],
+      onStageChange,
+    });
 
-    const compressedFile = await compressImage(file);
-
-    if (!ALLOWED_DONATION_SCREENSHOT_TYPES.has(compressedFile.type)) {
-      throw new Error('Unsupported image type after compression.');
-    }
-    if (compressedFile.size > MAX_DONATION_SCREENSHOT_BYTES) {
-      throw new Error('Compressed screenshot exceeds 5MB limit.');
-    }
-
+    onStageChange?.('uploading');
     const formData = new FormData();
     formData.append('screenshot', compressedFile, compressedFile.name);
     const params = mosqueId ? `?mosqueId=${encodeURIComponent(mosqueId)}` : '';

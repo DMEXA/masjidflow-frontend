@@ -43,6 +43,7 @@ type MemberRow = {
   name: string;
   fatherName?: string | null;
   isMuqtadi?: boolean;
+  phone?: string | null;
   email: string;
   role: UserRole;
   createdAt: string;
@@ -51,7 +52,9 @@ type MemberRow = {
 type InviteRow = {
   id: string;
   name: string;
-  email: string;
+  contact: string;
+  email?: string | null;
+  phone?: string | null;
   role: UserRole;
   status: InviteRecord['status'];
   createdAt: string;
@@ -72,13 +75,17 @@ function mapInviteRole(role: InviteRecord['role']): UserRole {
   return role.toLowerCase() as UserRole;
 }
 
-function buildInviteDisplayName(email: string): string {
-  const local = email.split('@')[0] ?? 'Invited User';
+function buildInviteDisplayName(email?: string | null): string {
+  if (!email) {
+    return 'Invited Member';
+  }
+
+  const local = email.split('@')[0] ?? 'Invited Member';
   return local
     .split(/[._-]/)
     .filter(Boolean)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(' ');
+    .join(' ') || 'Invited Member';
 }
 
 function getInviteStatusDisplay(status: InviteRecord['status']): { label: string; className: string } {
@@ -169,6 +176,7 @@ export default function MembersPage() {
         name: member.name,
         fatherName: member.fatherName ?? null,
         isMuqtadi: Boolean(member.isMuqtadi),
+        phone: member.phone ?? null,
         email: member.email,
         role: member.role,
         createdAt: member.joinedAt,
@@ -177,6 +185,7 @@ export default function MembersPage() {
         const matchesSearch =
           normalizedQuery.length === 0 ||
           member.name.toLowerCase().includes(normalizedQuery) ||
+          (member.phone ?? '').toLowerCase().includes(normalizedQuery) ||
           member.email.toLowerCase().includes(normalizedQuery);
         const matchesRole = roleFilter === 'all' || member.role === roleFilter;
         return matchesSearch && matchesRole;
@@ -187,22 +196,27 @@ export default function MembersPage() {
     const normalizedQuery = debouncedSearch.trim().toLowerCase();
 
     return invitesData
-      .map((invite) => ({
-        id: invite.id,
-        name: buildInviteDisplayName(invite.email),
-        email: invite.email,
-        role: mapInviteRole(invite.role),
-        status: invite.status,
-        createdAt: invite.createdAt,
-        expiresAt: invite.expiresAt,
-        usedCount: invite.usedCount ?? 0,
-        maxUses: invite.maxUses ?? null,
-      }))
+      .map((invite) => {
+        const contact = invite.phone || invite.email || 'Unknown contact';
+        return {
+          id: invite.id,
+          name: buildInviteDisplayName(invite.email),
+          contact,
+          email: invite.email,
+          phone: invite.phone,
+          role: mapInviteRole(invite.role),
+          status: invite.status,
+          createdAt: invite.createdAt,
+          expiresAt: invite.expiresAt,
+          usedCount: invite.usedCount ?? 0,
+          maxUses: invite.maxUses ?? null,
+        };
+      })
       .filter((invite) => {
         const matchesSearch =
           normalizedQuery.length === 0 ||
           invite.name.toLowerCase().includes(normalizedQuery) ||
-          invite.email.toLowerCase().includes(normalizedQuery);
+          invite.contact.toLowerCase().includes(normalizedQuery);
         const matchesRole = roleFilter === 'all' || invite.role === roleFilter;
         return matchesSearch && matchesRole;
       });
@@ -297,7 +311,7 @@ export default function MembersPage() {
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
-                placeholder="Search by name or email"
+                placeholder="Search by name, phone, or email"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-9"
@@ -340,8 +354,13 @@ export default function MembersPage() {
                       </div>
 
                       <p className="text-sm text-muted-foreground">
-                        {row.memberType === 'offline' ? 'No account email' : row.email}
+                        {row.phone || row.email || 'No contact available'}
                       </p>
+                      {row.email ? (
+                        <p className="text-xs text-muted-foreground">
+                          Email: {row.email}
+                        </p>
+                      ) : null}
                       <p className="text-xs text-muted-foreground">
                         {row.fatherName && row.fatherName !== 'N/A' ? `S/O ${row.fatherName}` : ''}
                       </p>
@@ -355,9 +374,11 @@ export default function MembersPage() {
                       </div>
 
                       <div className="flex flex-wrap items-center gap-2 pt-1">
-                        <Button size="sm" variant="outline" asChild>
-                          <Link href={`mailto:${row.email}`}>View</Link>
-                        </Button>
+                        {row.email ? (
+                          <Button size="sm" variant="outline" asChild>
+                            <Link href={`mailto:${row.email}`}>View</Link>
+                          </Button>
+                        ) : null}
                         <ActionOverflowMenu
                           items={[
                             ...assignableRoleOptions
@@ -387,7 +408,7 @@ export default function MembersPage() {
                           {getInviteStatusDisplay(invite.status).label}
                         </Badge>
                       </div>
-                      <p className="text-sm text-muted-foreground">{invite.email}</p>
+                      <p className="text-sm text-muted-foreground">{invite.contact}</p>
                       <div className="flex items-center justify-between gap-2 text-sm text-muted-foreground">
                         <p className="bg-emerald-500 rounded-2xl px-2 py-1 text-white">{formatRole(invite.role)}</p>
                         <p>{formatDate(invite.createdAt)}</p>
@@ -396,9 +417,11 @@ export default function MembersPage() {
                         Uses: {invite.usedCount}/{invite.maxUses ?? '∞'} · Expires: {formatDate(invite.expiresAt)}
                       </p>
                       <div className="flex flex-wrap items-center gap-2 pt-1">
-                        <Button size="sm" variant="outline" asChild>
-                          <Link href={`mailto:${invite.email}`}>View</Link>
-                        </Button>
+                        {invite.email ? (
+                          <Button size="sm" variant="outline" asChild>
+                            <Link href={`mailto:${invite.email}`}>View</Link>
+                          </Button>
+                        ) : null}
                         <ActionOverflowMenu
                           items={[
                             {

@@ -64,13 +64,43 @@ export function useDashboardOverviewQuery(options: {
   return useQuery<DashboardOverviewResponse>({
     queryKey: [...queryKeys.dashboardOverview(mosqueId), { chartsLimit }],
     enabled,
+    placeholderData: (previous) => previous,
     queryFn: async () => {
-      const [yearlyResponse, membersResponse, donationsRes, expensesRes] = await Promise.all([
+      const [yearlyResult, membersResult, donationsResult, expensesResult] = await Promise.allSettled([
         api.get<YearlyReportResponse>('/reports/yearly').then((r) => r.data),
         membersService.getAll({ page: 1, pageSize: 1 }),
         api.get(`/donations?limit=${chartsLimit}`).then((r) => r.data),
         api.get(`/expenses?limit=${chartsLimit}`).then((r) => r.data),
       ]);
+
+      if (
+        yearlyResult.status === 'rejected'
+        && membersResult.status === 'rejected'
+        && donationsResult.status === 'rejected'
+        && expensesResult.status === 'rejected'
+      ) {
+        throw yearlyResult.reason;
+      }
+
+      const yearlyResponse: YearlyReportResponse =
+        yearlyResult.status === 'fulfilled'
+          ? yearlyResult.value
+          : { totalDonations: 0, totalExpenses: 0, net: 0 };
+
+      const membersResponse =
+        membersResult.status === 'fulfilled'
+          ? membersResult.value
+          : { total: 0 };
+
+      const donationsRes =
+        donationsResult.status === 'fulfilled'
+          ? donationsResult.value
+          : { data: [] as Array<unknown> };
+
+      const expensesRes =
+        expensesResult.status === 'fulfilled'
+          ? expensesResult.value
+          : { data: [] as Array<unknown> };
 
       const stats: DashboardStats = {
         totalDonations: yearlyResponse.totalDonations || 0,

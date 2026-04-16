@@ -66,6 +66,7 @@ import {
   useMuqtadis,
 } from '@/hooks/useMuqtadis';
 import { parseStrictAmountInput, parseStrictIntegerInput } from '@/src/utils/numeric-input';
+import { isValidIndianPhone, normalizeIndianPhone } from '@/src/utils/phone';
 
 const EMPTY_FORM = {
   name: '',
@@ -95,7 +96,7 @@ export default function MuqtadisPage() {
   const [selectedMuqtadi, setSelectedMuqtadi] = useState<Muqtadi | null>(null);
   const [selectedDetails, setSelectedDetails] = useState<MuqtadiDetails | null>(null);
   const [createAccountTarget, setCreateAccountTarget] = useState<Muqtadi | null>(null);
-  const [createAccountForm, setCreateAccountForm] = useState({ email: '', password: '' });
+  const [createAccountForm, setCreateAccountForm] = useState({ phone: '', password: '' });
 
   const [form, setForm] = useState(EMPTY_FORM);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
@@ -246,7 +247,7 @@ export default function MuqtadisPage() {
 
   const openCreateAccount = (item: Muqtadi) => {
     setCreateAccountTarget(item);
-    setCreateAccountForm({ email: item.email || '', password: '' });
+    setCreateAccountForm({ phone: item.phone || item.whatsappNumber || '', password: '' });
     setIsCreateAccountOpen(true);
   };
 
@@ -342,8 +343,12 @@ export default function MuqtadisPage() {
 
   const handleCreateAccount = async () => {
     if (!createAccountTarget) return;
-    if (!createAccountForm.email.trim() || !createAccountForm.password.trim()) {
-      toast.error('Email and password are required');
+    if (!createAccountForm.phone.trim() || !createAccountForm.password.trim()) {
+      toast.error('Phone and password are required');
+      return;
+    }
+    if (!isValidIndianPhone(createAccountForm.phone)) {
+      toast.error('Please enter a valid Indian phone number');
       return;
     }
     if (createAccountForm.password.trim().length < 8) {
@@ -351,11 +356,17 @@ export default function MuqtadisPage() {
       return;
     }
 
+    const normalizedPhone = normalizeIndianPhone(createAccountForm.phone);
+    if (!normalizedPhone) {
+      toast.error('Please enter a valid Indian phone number');
+      return;
+    }
+
     setSubmitting(true);
     setCreateAccountLoadingId(createAccountTarget.id);
     try {
       const result = await muqtadisService.createAccount(createAccountTarget.id, {
-        email: createAccountForm.email.trim(),
+        phone: normalizedPhone,
         password: createAccountForm.password.trim(),
       });
 
@@ -366,6 +377,7 @@ export default function MuqtadisPage() {
                 ...item,
                 userId: result.userId,
                 email: result.email,
+                phone: result.phone || normalizedPhone,
               }
             : item,
         ),
@@ -374,7 +386,7 @@ export default function MuqtadisPage() {
       toast.success('Account created and linked successfully');
       setIsCreateAccountOpen(false);
       setCreateAccountTarget(null);
-      setCreateAccountForm({ email: '', password: '' });
+      setCreateAccountForm({ phone: '', password: '' });
       await actions.fetchItems();
       if (selectedDetails?.id === createAccountTarget.id) {
         await refreshDetails(createAccountTarget.id);
@@ -813,7 +825,7 @@ export default function MuqtadisPage() {
                     <CardContent className="flex items-center justify-between gap-3 pt-4">
                       <div>
                         <p className="text-sm font-medium">{item.name}</p>
-                        <p className="text-xs text-muted-foreground">{item.whatsappNumber || item.email || '-'}</p>
+                        <p className="text-xs text-muted-foreground">{item.phone || item.whatsappNumber || item.email || '-'}</p>
                       </div>
                       <Button
                         size="sm"
@@ -906,11 +918,12 @@ export default function MuqtadisPage() {
           </DialogHeader>
           <div className="space-y-3">
             <div className="space-y-2">
-              <Label>Email</Label>
+              <Label>Phone</Label>
               <Input
-                type="email"
-                value={createAccountForm.email}
-                onChange={(e) => setCreateAccountForm((prev) => ({ ...prev, email: e.target.value }))}
+                type="tel"
+                value={createAccountForm.phone}
+                onChange={(e) => setCreateAccountForm((prev) => ({ ...prev, phone: e.target.value }))}
+                placeholder="+91 98765 43210"
               />
             </div>
             <div className="space-y-2">

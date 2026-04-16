@@ -22,6 +22,35 @@ export interface LoginCredentials {
   password: string;
 }
 
+export interface PhoneLoginCredentials {
+  phone: string;
+  password: string;
+}
+
+export interface RegisterPhoneStartData {
+  mosqueName: string;
+  mosqueAddress: string;
+  mosqueCity: string;
+  mosqueState: string;
+  mosqueCountry: string;
+  adminName: string;
+  adminPassword: string;
+  adminPhone: string;
+  adminEmail: string;
+}
+
+export interface RegisterPhoneStartResponse {
+  message: string;
+  challengeToken: string;
+  otpExpiresInMinutes: number;
+  retryAfterSeconds: number;
+}
+
+export interface RegisterPhoneCompleteData {
+  challengeToken: string;
+  code: string;
+}
+
 export interface LoginEmailOtpResponse {
   requiresEmailOtp: true;
   challengeToken: string;
@@ -60,8 +89,18 @@ export interface AcceptInviteData {
   name: string;
   fatherName?: string;
   phone: string;
-  email: string;
+  email?: string;
   password: string;
+}
+
+export interface AdminResetLinkPayload {
+  userId: string;
+}
+
+export interface AdminResetLinkResponse {
+  resetLink: string;
+  expiresInMinutes: number;
+  targetUserId: string;
 }
 
 export interface TwoFactorSetupResponse {
@@ -102,6 +141,11 @@ export const authService = {
     return response.data;
   },
 
+  async loginWithPhone(credentials: PhoneLoginCredentials): Promise<AuthResponse> {
+    const response = await api.post<AuthResponse>('/auth/login-phone', credentials);
+    return response.data;
+  },
+
   async verifyEmailOtp(payload: VerifySecondFactorPayload): Promise<AuthResponse> {
     const response = await api.post<AuthResponse>('/auth/verify-email-otp', payload);
     return response.data;
@@ -117,13 +161,23 @@ export const authService = {
     return response.data;
   },
 
+  async registerWithPhoneStart(data: RegisterPhoneStartData): Promise<RegisterPhoneStartResponse> {
+    const response = await api.post<RegisterPhoneStartResponse>('/auth/register-phone/start', data);
+    return response.data;
+  },
+
+  async registerWithPhoneComplete(data: RegisterPhoneCompleteData): Promise<AuthResponse> {
+    const response = await api.post<AuthResponse>('/auth/register-phone/complete', data);
+    return response.data;
+  },
+
   async verifyEmail(token: string): Promise<AuthResponse> {
     const response = await api.post<AuthResponse>('/auth/verify-email', { token });
     return response.data;
   },
 
   async resendVerificationEmail(email: string): Promise<{ message: string }> {
-    const response = await api.post<{ message: string }>('/auth/resend-verification', { email });
+    const response = await api.post<{ message: string }>('/auth/resend-verification-email', { email });
     return response.data;
   },
 
@@ -187,9 +241,23 @@ export const authService = {
     return response.data;
   },
 
+  async forgotPasswordPhone(phone: string): Promise<{ message: string }> {
+    const response = await api.post<{ message: string }>('/auth/forgot-password-phone', { phone });
+    return response.data;
+  },
+
   async resetPassword(token: string, password: string): Promise<{ message: string }> {
     const response = await api.post<{ message: string }>('/auth/reset-password', {
       token,
+      newPassword: password,
+    });
+    return response.data;
+  },
+
+  async resetPasswordPhone(phone: string, code: string, password: string): Promise<{ message: string }> {
+    const response = await api.post<{ message: string }>('/auth/reset-password-phone', {
+      phone,
+      code,
       newPassword: password,
     });
     return response.data;
@@ -200,6 +268,11 @@ export const authService = {
       currentPassword,
       newPassword,
     });
+    return response.data;
+  },
+
+  async generateAdminResetLink(payload: AdminResetLinkPayload): Promise<AdminResetLinkResponse> {
+    const response = await api.post<AdminResetLinkResponse>('/auth/admin-reset-link', payload);
     return response.data;
   },
 

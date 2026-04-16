@@ -133,6 +133,7 @@ export function getSidebarNavGroups(input: SidebarConfigInput): SidebarNavGroup[
       {
         title: 'System',
         items: [
+          { href: '/dashboard/profile', label: 'Profile', icon: UserPlus },
           { href: '/dashboard/subscription', label: 'Subscription', icon: ShieldCheck },
           { href: '/dashboard/settings', label: 'Settings', icon: Settings },
           { href: '/dashboard/audit-logs', label: 'Audit Logs', icon: ChartNoAxesCombined },
@@ -159,7 +160,10 @@ export function getSidebarNavGroups(input: SidebarConfigInput): SidebarNavGroup[
       },
       {
         title: 'System',
-        items: [{ href: '/dashboard/settings', label: 'Security', icon: ShieldCheck }],
+        items: [
+          { href: '/dashboard/profile', label: 'Profile', icon: UserPlus },
+          { href: '/dashboard/settings', label: 'Security', icon: ShieldCheck },
+        ],
       },
       buildPublicPages(isMuqtadi, mosqueSlug),
     ]);
@@ -185,7 +189,10 @@ export function getSidebarNavGroups(input: SidebarConfigInput): SidebarNavGroup[
       },
       {
         title: 'System',
-        items: [{ href: '/dashboard/settings', label: 'Security', icon: ShieldCheck }],
+        items: [
+          { href: '/dashboard/profile', label: 'Profile', icon: UserPlus },
+          { href: '/dashboard/settings', label: 'Security', icon: ShieldCheck },
+        ],
       },
       buildPublicPages(isMuqtadi, mosqueSlug),
     ]);
@@ -262,6 +269,12 @@ export function getMobileSidebarNavItems(role?: UserRole, mosqueSlug?: string): 
         icon: Wallet,
         active: (pathname) => pathname.startsWith('/dashboard/funds'),
       },
+      {
+        href: '/dashboard/profile',
+        label: 'Profile',
+        icon: UserPlus,
+        active: (pathname) => pathname.startsWith('/dashboard/profile'),
+      },
     ];
   }
 
@@ -297,6 +310,12 @@ export function getMobileSidebarNavItems(role?: UserRole, mosqueSlug?: string): 
         icon: Users,
         active: (pathname) => pathname.startsWith('/dashboard/muqtadis'),
       },
+      {
+        href: '/dashboard/profile',
+        label: 'Profile',
+        icon: UserPlus,
+        active: (pathname) => pathname.startsWith('/dashboard/profile'),
+      },
     ];
   }
 
@@ -312,6 +331,12 @@ export function getMobileSidebarNavItems(role?: UserRole, mosqueSlug?: string): 
       label: 'Donations',
       icon: HandCoins,
       active: (pathname) => pathname.startsWith('/dashboard/donations') || pathname === '/dashboard/reconciliation',
+    },
+    {
+      href: '/dashboard/profile',
+      label: 'Profile',
+      icon: UserPlus,
+      active: (pathname) => pathname.startsWith('/dashboard/profile'),
     },
     {
       href: '/dashboard/expenses',

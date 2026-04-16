@@ -107,6 +107,7 @@ export default function PayPage() {
 
   const [submitting, setSubmitting] = useState(false);
   const [uploadingScreenshot, setUploadingScreenshot] = useState(false);
+  const [compressingScreenshot, setCompressingScreenshot] = useState(false);
   const [sortOrder, setSortOrder] = useState<SortOrder>('newest');
   const [selectedCycleId, setSelectedCycleId] = useState('');
   const [isMonthSheetOpen, setIsMonthSheetOpen] = useState(false);
@@ -766,14 +767,14 @@ export default function PayPage() {
 
     const fileToUpload = screenshot;
     if (fileToUpload) {
-      const allowedTypes = ['image/jpeg', 'image/png'];
+      const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
       if (!allowedTypes.includes(fileToUpload.type)) {
-        toast.error('Screenshot must be JPG or PNG');
+        toast.error('Screenshot must be JPG, PNG, or WEBP');
         return;
       }
 
-      if (fileToUpload.size > 2 * 1024 * 1024) {
-        toast.error('Screenshot must be up to 2MB');
+      if (fileToUpload.size > 10 * 1024 * 1024) {
+        toast.error('Screenshot must be up to 10MB');
         return;
       }
     }
@@ -783,10 +784,19 @@ export default function PayPage() {
       let screenshotUrl = existingScreenshotUrl || undefined;
       if (fileToUpload) {
         setUploadingScreenshot(true);
-        const uploaded = await donationsService.uploadDonationScreenshot(fileToUpload, mosque?.id);
+        setCompressingScreenshot(true);
+        const uploaded = await donationsService.uploadDonationScreenshot(
+          fileToUpload,
+          mosque?.id,
+          (stage) => {
+            setCompressingScreenshot(stage === 'compressing');
+            setUploadingScreenshot(stage === 'uploading');
+          },
+        );
         if (!isMountedRef.current) {
           return;
         }
+        setCompressingScreenshot(false);
         setUploadingScreenshot(false);
         screenshotUrl = uploaded.url;
       }
@@ -815,6 +825,7 @@ export default function PayPage() {
       toast.error(getErrorMessage(error, 'Failed to submit payment'));
     } finally {
       if (isMountedRef.current) {
+        setCompressingScreenshot(false);
         setUploadingScreenshot(false);
         setSubmitting(false);
       }
@@ -1075,10 +1086,10 @@ export default function PayPage() {
           ) : (
             <div className="space-y-3 rounded-xl border p-3">
               <div className="space-y-2">
-                <Label>Screenshot (JPG/PNG, max 2MB)</Label>
+                <Label>Screenshot (JPG/PNG/WEBP, max 10MB)</Label>
                 <Input
                   type="file"
-                  accept="image/jpeg,image/png"
+                  accept="image/jpeg,image/png,image/webp"
                   onChange={(e) => setScreenshot(e.target.files?.[0] ?? null)}
                 />
                 {existingScreenshotUrl ? (
@@ -1099,8 +1110,12 @@ export default function PayPage() {
               </div>
 
               <Button onClick={onSubmitProof} disabled={submitting} className="h-11 w-full text-base font-semibold">
-                {submitting || uploadingScreenshot ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                {uploadingScreenshot ? 'Uploading Screenshot...' : 'Submit Payment'}
+                {submitting || uploadingScreenshot || compressingScreenshot ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                {compressingScreenshot
+                  ? 'Compressing Screenshot...'
+                  : uploadingScreenshot
+                    ? 'Uploading Screenshot...'
+                    : 'Submit Payment'}
               </Button>
             </div>
           )}

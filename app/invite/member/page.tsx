@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useState } from 'react';
+import { Suspense, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
@@ -11,6 +11,30 @@ import { toast } from 'sonner';
 import { getErrorMessage } from '@/src/utils/error';
 import { authService } from '@/services/auth.service';
 import { useAuthStore } from '@/src/store/auth.store';
+import { isValidIndianPhone, normalizeIndianPhone } from '@/src/utils/phone';
+
+type InvitePayload = {
+  email?: string;
+};
+
+function parseInvitePayload(token: string): InvitePayload | null {
+  const parts = token.split('.');
+  if (parts.length < 3 || parts[0] !== 'itk') {
+    return null;
+  }
+
+  try {
+    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
+    const decoded = atob(padded);
+    const parsed = JSON.parse(decoded) as InvitePayload;
+    return {
+      email: typeof parsed.email === 'string' ? parsed.email : undefined,
+    };
+  } catch {
+    return null;
+  }
+}
 
 function InviteForm() {
   const router = useRouter();
@@ -22,10 +46,16 @@ function InviteForm() {
     name: '',
     fatherName: '',
     phone: '',
-    email: '',
     password: '',
     confirmPassword: '',
   });
+
+  const invitePayload = useMemo(() => {
+    if (!token) return null;
+    return parseInvitePayload(token);
+  }, [token]);
+
+  const lockedInviteEmail = invitePayload?.email ?? null;
 
   if (!token) {
     return (
@@ -47,8 +77,15 @@ function InviteForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.name || !formData.phone || !formData.email || !formData.password || !formData.confirmPassword) {
+    if (!formData.name || !formData.password || !formData.confirmPassword) {
       toast.error('Please fill in all fields');
+      return;
+    }
+
+    const normalizedPhone = formData.phone.trim() ? normalizeIndianPhone(formData.phone) : null;
+
+    if (!formData.phone.trim() || !isValidIndianPhone(formData.phone)) {
+      toast.error('Please enter a valid Indian phone number');
       return;
     }
 
@@ -68,8 +105,8 @@ function InviteForm() {
         token,
         name: formData.name,
         fatherName: formData.fatherName.trim() || undefined,
-        phone: formData.phone,
-        email: formData.email,
+        phone: normalizedPhone || '',
+        email: lockedInviteEmail || undefined,
         password: formData.password,
       });
       setAuth(response.user, response.mosque, response.accessToken);
@@ -87,7 +124,7 @@ function InviteForm() {
       <CardHeader className="text-center">
         <CardTitle className="text-2xl text-foreground">Accept Invitation</CardTitle>
         <CardDescription className="text-muted-foreground">
-          Create your account to join the mosque team
+          Create your account to join the mosque staff team
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -123,27 +160,19 @@ function InviteForm() {
             </label>
             <Input
               id="phone"
-              placeholder="Your phone number"
+              placeholder="+91 98765 43210"
               value={formData.phone}
               onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
               disabled={isLoading}
               required
             />
+            <p className="text-xs text-muted-foreground">Enter the phone number this invite was sent for.</p>
           </div>
-          <div className="space-y-2">
-            <label htmlFor="email" className="text-sm font-medium text-foreground">
-              Email
-            </label>
-            <Input
-              id="email"
-              type="email"
-              placeholder="email@example.com"
-              value={formData.email}
-              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-              disabled={isLoading}
-              required
-            />
-          </div>
+          {lockedInviteEmail && (
+            <p className="text-xs text-muted-foreground">
+              Recovery email on file: {lockedInviteEmail}
+            </p>
+          )}
           <div className="space-y-2">
             <label htmlFor="password" className="text-sm font-medium text-foreground">
               Password

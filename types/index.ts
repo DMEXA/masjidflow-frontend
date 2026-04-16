@@ -3,12 +3,14 @@ import type { UserRole, PaymentType, ExpenseCategory } from '@/src/constants';
 export interface User {
   id: string;
   email: string;
+  phone?: string | null;
   name: string;
   fatherName?: string | null;
   isVerified?: boolean;
   role: UserRole;
   mosqueId: string;
   emailOtpEnabled?: boolean;
+  phoneVerified?: boolean;
   twoFactorEnabled?: boolean;
   isPlatformAdmin?: boolean;
   createdAt: string;
@@ -111,7 +113,8 @@ export interface Expense {
 
 export interface Invitation {
   id: string;
-  email: string;
+  phone?: string | null;
+  email?: string | null;
   role: 'SUPER_ADMIN' | 'ADMIN' | 'TREASURER' | 'MEMBER' | 'MUQTADI' | 'VIEWER';
   invitedBy?: string;
   status: 'PENDING' | 'ACCEPTED' | 'CANCELLED' | 'EXPIRED';
@@ -129,6 +132,7 @@ export interface Member {
   fatherName?: string | null;
   isMuqtadi?: boolean;
   email: string;
+  phone?: string | null;
   role: UserRole;
   status: 'active' | 'pending' | 'inactive';
   joinedAt: string;

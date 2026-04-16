@@ -96,10 +96,10 @@ export default function InvitesPage() {
   const columns = useMemo(
     () => [
       {
-        key: 'email',
-        header: 'Email',
+        key: 'contact',
+        header: 'Phone / Email',
         render: (invite: InviteRecord) => (
-          <span className="font-medium text-foreground">{invite.email}</span>
+          <span className="font-medium text-foreground">{invite.phone || invite.email || '-'}</span>
         ),
       },
       {

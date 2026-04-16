@@ -41,6 +41,7 @@ import {
 import { muqtadisService, type ContributionMode, type ImamSalaryCycle, type NextCycleInfo } from '@/services/muqtadis.service';
 import { paymentSettingsService } from '@/services/payment-settings.service';
 import { authService } from '@/services/auth.service';
+import { usersService } from '@/services/users.service';
 import { useAuthStore } from '@/src/store/auth.store';
 import { getErrorMessage } from '@/src/utils/error';
 import { formatCurrency, formatCycleLabel } from '@/src/utils/format';
@@ -112,7 +113,7 @@ function getRemainingTime(startsAtIso: string) {
 export default function SettingsPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { mosque: currentMosque, user } = useAuthStore();
+  const { mosque: currentMosque, user, token, setAuth } = useAuthStore();
   const { canManageSettings } = usePermission();
 
   const fieldClass = 'w-full rounded-xl px-4 py-3';
@@ -161,6 +162,10 @@ export default function SettingsPage() {
     currentPassword: '',
     newPassword: '',
     confirmPassword: '',
+  });
+  const [phoneCorrectionForm, setPhoneCorrectionForm] = useState({
+    phone: user?.phone ?? '',
+    currentPassword: '',
   });
   const [paymentSaving, setPaymentSaving] = useState(false);
   const [paymentForm, setPaymentForm] = useState({
@@ -238,6 +243,13 @@ export default function SettingsPage() {
   useEffect(() => {
     setEmailOtpEnabled(Boolean(user?.emailOtpEnabled));
   }, [user?.emailOtpEnabled]);
+
+  useEffect(() => {
+    setPhoneCorrectionForm((prev) => ({
+      ...prev,
+      phone: user?.phone ?? '',
+    }));
+  }, [user?.phone]);
 
   useEffect(() => {
     if (salarySettingsLoadedRef.current) {
@@ -830,6 +842,34 @@ export default function SettingsPage() {
     }
   };
 
+  const handleCorrectPhone = async () => {
+    if (!phoneCorrectionForm.phone.trim() || !phoneCorrectionForm.currentPassword) {
+      toast.error('Enter both phone number and current password');
+      return;
+    }
+
+    setSecurityLoading(true);
+    try {
+      const result = await usersService.correctMyPhone({
+        phone: phoneCorrectionForm.phone.trim(),
+        currentPassword: phoneCorrectionForm.currentPassword,
+      });
+
+      toast.success(result.message || 'Phone updated successfully');
+
+      if (token) {
+        const me = await authService.getCurrentUser();
+        setAuth(me.user, me.mosque, token);
+      }
+
+      setPhoneCorrectionForm((prev) => ({ ...prev, currentPassword: '' }));
+    } catch (error) {
+      toast.error(getErrorMessage(error, 'Failed to update phone number'));
+    } finally {
+      setSecurityLoading(false);
+    }
+  };
+
   const handleSavePaymentSettings = async () => {
     const mosqueId = currentMosque?.id;
     if (!mosqueId) {
@@ -984,8 +1024,21 @@ export default function SettingsPage() {
                     id="phone"
                     type="tel"
                     className={fieldClass}
+                    placeholder="+91 98765 43210"
                     value={formData.phone}
                     onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email (Secondary)</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    className={fieldClass}
+                    placeholder="admin@mosque.com"
+                    value={formData.email}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   />
                 </div>
 
@@ -1559,6 +1612,19 @@ export default function SettingsPage() {
                 <CardDescription className="text-muted-foreground">Manage your account security</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
+                <div className="space-y-3 rounded-xl border p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <Label className="text-foreground">Primary Contact</Label>
+                      <p className="text-sm text-muted-foreground">Phone: {user?.phone || 'Not set'}</p>
+                    </div>
+                    <Badge variant={user?.phoneVerified ? 'default' : 'secondary'}>
+                      {user?.phoneVerified ? 'Phone verified' : 'Phone not verified'}
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground">Email fallback: {user?.email || 'Not set'}</p>
+                </div>
+
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <Label className="text-foreground">Email OTP</Label>
@@ -1643,6 +1709,41 @@ export default function SettingsPage() {
                   <div className="flex justify-end">
                     <Button variant="outline" onClick={handleChangePassword} disabled={securityLoading}>
                       Change Password
+                    </Button>
+                  </div>
+                </div>
+
+                <Separator />
+
+                <div className="space-y-3">
+                  <div>
+                    <Label className="text-foreground">Phone Number</Label>
+                    <p className="text-sm text-muted-foreground">Update your primary phone contact</p>
+                    <p className="text-xs text-muted-foreground">You can correct your phone one time with password confirmation.</p>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <Input
+                      className={fieldClass}
+                      type="tel"
+                      placeholder="New phone number"
+                      value={phoneCorrectionForm.phone}
+                      onChange={(e) =>
+                        setPhoneCorrectionForm((prev) => ({ ...prev, phone: e.target.value }))
+                      }
+                    />
+                    <Input
+                      className={fieldClass}
+                      type="password"
+                      placeholder="Current password"
+                      value={phoneCorrectionForm.currentPassword}
+                      onChange={(e) =>
+                        setPhoneCorrectionForm((prev) => ({ ...prev, currentPassword: e.target.value }))
+                      }
+                    />
+                  </div>
+                  <div className="flex justify-end">
+                    <Button variant="outline" onClick={handleCorrectPhone} disabled={securityLoading}>
+                      Save Phone Correction
                     </Button>
                   </div>
                 </div>

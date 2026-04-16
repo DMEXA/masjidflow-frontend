@@ -27,7 +27,6 @@ export default function MuqtadiInvitePage() {
     whatsappNumber: '',
     householdMembers: '1',
     memberNames: [''],
-    email: '',
     password: '',
     confirmPassword: '',
   });
@@ -68,7 +67,7 @@ export default function MuqtadiInvitePage() {
 
     const whatsappNumber = form.whatsappNumber.trim();
 
-    if (!token || !form.name.trim() || !form.fatherName.trim() || !whatsappNumber || !form.email || !form.password || !form.confirmPassword) {
+    if (!token || !form.name.trim() || !form.fatherName.trim() || !whatsappNumber || !form.password || !form.confirmPassword) {
       toast.error('Please fill in all required fields');
       return;
     }
@@ -107,7 +106,6 @@ export default function MuqtadiInvitePage() {
         fatherName: form.fatherName.trim(),
         phone: whatsappNumber,
         whatsappNumber,
-        email: form.email,
         password: form.password,
         householdMembers: householdMembersCount,
         memberNames,
@@ -213,12 +211,6 @@ export default function MuqtadiInvitePage() {
                     );
                   })}
 
-                  <Input
-                    type="email"
-                    placeholder="Email"
-                    value={form.email}
-                    onChange={(e) => setForm((prev) => ({ ...prev, email: e.target.value }))}
-                  />
                   <Input
                     type="password"
                     placeholder="Password"

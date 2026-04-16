@@ -319,7 +319,7 @@ export interface MuqtadiDetails {
 }
 
 export interface EnableMuqtadiLoginPayload {
-  email: string;
+  phone: string;
   password?: string;
   autoGeneratePassword?: boolean;
 }
@@ -328,12 +328,13 @@ export interface EnableMuqtadiLoginResponse {
   muqtadiId: string;
   userId: string;
   email: string;
+  phone?: string;
   generatedPassword: string | null;
   message: string;
 }
 
 export interface CreateMuqtadiAccountPayload {
-  email: string;
+  phone: string;
   password: string;
 }
 
@@ -341,6 +342,7 @@ export interface CreateMuqtadiAccountResponse {
   muqtadiId: string;
   userId: string;
   email: string;
+  phone?: string;
   message: string;
 }
 
@@ -425,7 +427,6 @@ export interface RegisterMuqtadiPayload {
   fatherName: string;
   phone: string;
   whatsappNumber?: string;
-  email: string;
   password: string;
   householdMembers: number;
   memberNames: string[];

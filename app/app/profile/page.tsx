@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
 import { MuqtadiBackButton } from '@/components/muqtadi/back-button';
 import { muqtadisService } from '@/services/muqtadis.service';
 import { useProfileQuery } from '@/hooks/useProfileQuery';
@@ -160,11 +161,6 @@ export default function MuqtadiProfilePage() {
           />
         </div>
 
-        <div className="space-y-2">
-          <Label>Email</Label>
-          <Input value={profile.email} onChange={(e) => setProfile((prev) => ({ ...prev, email: e.target.value }))} />
-        </div>
-
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="space-y-2">
             <Label>Household Members</Label>
@@ -173,7 +169,12 @@ export default function MuqtadiProfilePage() {
           </div>
 
         <div className="space-y-2">
-          <Label>Phone</Label>
+          <div className="flex items-center justify-between gap-2">
+            <Label>Phone (Primary)</Label>
+            <Badge variant={profileQuery.data?.phoneVerified ? 'default' : 'secondary'}>
+              {profileQuery.data?.phoneVerified ? 'Verified' : 'Not verified'}
+            </Badge>
+          </div>
           <Input value={profile.phone} onChange={(e) => setProfile((prev) => ({ ...prev, phone: e.target.value }))} />
         </div>
 
@@ -183,6 +184,11 @@ export default function MuqtadiProfilePage() {
             value={profile.whatsappNumber}
             onChange={(e) => setProfile((prev) => ({ ...prev, whatsappNumber: e.target.value }))}
           />
+        </div>
+
+        <div className="space-y-2">
+          <Label>Email (Secondary)</Label>
+          <Input value={profile.email} onChange={(e) => setProfile((prev) => ({ ...prev, email: e.target.value }))} />
         </div>
 
         <div className="space-y-2">

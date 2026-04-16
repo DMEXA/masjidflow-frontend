@@ -25,6 +25,7 @@ export default function DonationStatusPage() {
   const [donation, setDonation] = useState<Donation | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [uploadStage, setUploadStage] = useState<'compressing' | 'uploading' | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [screenshot, setScreenshot] = useState<File | null>(null);
   const [upiTransactionId, setUpiTransactionId] = useState('');
@@ -84,7 +85,7 @@ export default function DonationStatusPage() {
 
     let uploadedScreenshotUrl: string | undefined;
     if (screenshot) {
-      const allowedTypes = ['image/jpeg', 'image/png'];
+      const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
       if (!allowedTypes.includes(screenshot.type)) {
         toast.error('Unsupported file type');
         return;
@@ -97,6 +98,7 @@ export default function DonationStatusPage() {
         const upload = await donationsService.uploadDonationScreenshot(
           screenshot,
           donation.mosqueId,
+          setUploadStage,
         );
         uploadedScreenshotUrl = upload.url;
       }
@@ -118,6 +120,7 @@ export default function DonationStatusPage() {
         toast.error(message);
       }
     } finally {
+      setUploadStage(null);
       setIsUpdating(false);
     }
   };
@@ -296,7 +299,11 @@ export default function DonationStatusPage() {
                   {isUpdating ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Updating...
+                      {uploadStage === 'compressing'
+                        ? 'Compressing screenshot...'
+                        : uploadStage === 'uploading'
+                          ? 'Uploading screenshot...'
+                          : 'Updating...'}
                     </>
                   ) : (
                     <>
