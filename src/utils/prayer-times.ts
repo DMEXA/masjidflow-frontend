@@ -24,7 +24,7 @@ const PRAYER_LABELS: Record<PrayerKey, string> = {
   asr: 'Asr',
   maghrib: 'Maghrib',
   isha: 'Isha',
-  jumuah: 'Jumuah',
+  jumuah: 'Jummah',
   zawal: 'Zawal',
 };
 

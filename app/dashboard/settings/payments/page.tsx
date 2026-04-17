@@ -1,5 +1,5 @@
-import { redirect } from 'next/navigation';
+import { PaymentsSettings } from '../_components/PaymentsSettings';
 
-export default function LegacyPaymentSettingsPage() {
-  redirect('/dashboard/settings');
+export default function SettingsPaymentsPage() {
+  return <PaymentsSettings />;
 }

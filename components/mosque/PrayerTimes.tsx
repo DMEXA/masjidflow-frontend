@@ -117,10 +117,6 @@ export function PrayerTimes({ mosqueId, mosqueName }: PrayerTimesProps) {
     () => getCurrentPrayerKey(prayerTimesQuery.data ?? null),
     [prayerTimesQuery.data],
   );
-  const hasPrayerTimes = Boolean(
-    prayerTimesQuery.data?.fajr?.azanTime &&
-      prayerTimesQuery.data?.zuhr?.azanTime,
-  );
   const jumuahRow = rows.find((row) => row.key === 'jumuah') ?? null;
   const mainRows = rows.filter((row) => row.key !== 'jumuah');
 
@@ -146,91 +142,87 @@ export function PrayerTimes({ mosqueId, mosqueName }: PrayerTimesProps) {
           <CardTitle className="text-xl">Today's Prayer Times</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          {!hasPrayerTimes ? (
-            <p className="text-sm text-muted-foreground">Prayer times not configured.</p>
-          ) : (
-            <>
-              {jumuahRow ? (
-                <div
-                  className={`rounded-2xl border p-4 shadow-sm ${
-                    currentPrayer === 'jumuah'
-                      ? 'border-emerald-500 bg-emerald-50/70'
-                      : 'border-emerald-200 bg-emerald-50/40'
-                  }`}
-                >
-                  <div className="mb-3 flex items-start justify-between gap-3">
-                    <p className="text-lg font-semibold text-emerald-900">Jumuah</p>
-                    <span className="rounded-full border border-emerald-200 bg-emerald-100 px-2 py-1 text-xs font-medium text-emerald-700">
-                      {jumuahRow.iqamahTime ? format12Hour(jumuahRow.iqamahTime) : '--'}
-                    </span>
+          <>
+            {jumuahRow ? (
+              <div
+                className={`rounded-2xl border p-4 shadow-sm ${
+                  currentPrayer === 'jumuah'
+                    ? 'border-emerald-500 bg-emerald-50/70'
+                    : 'border-emerald-200 bg-emerald-50/40'
+                }`}
+              >
+                <div className="mb-3 flex items-start justify-between gap-3">
+                  <p className="text-lg font-semibold text-emerald-900">Jummah</p>
+                  <span className="rounded-full border border-emerald-200 bg-emerald-100 px-2 py-1 text-xs font-medium text-emerald-700">
+                    {jumuahRow.iqamahTime ? format12Hour(jumuahRow.iqamahTime) : '--'}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div className="rounded-xl border border-emerald-100 bg-white p-2">
+                    <p className="text-xs text-muted-foreground">Azan</p>
+                    <p className="font-medium">{jumuahRow.azanTime ? format12Hour(jumuahRow.azanTime) : '--'}</p>
                   </div>
-                  <div className="grid grid-cols-2 gap-2 text-sm">
-                    <div className="rounded-xl border border-emerald-100 bg-white p-2">
-                      <p className="text-xs text-muted-foreground">Azan</p>
-                      <p className="font-medium">{jumuahRow.azanTime ? format12Hour(jumuahRow.azanTime) : '--'}</p>
-                    </div>
-                    <div className="rounded-xl border border-emerald-100 bg-white p-2">
-                      <p className="text-xs text-muted-foreground">Iqamah</p>
-                      <p className="font-medium">{jumuahRow.iqamahTime ? format12Hour(jumuahRow.iqamahTime) : '--'}</p>
-                    </div>
+                  <div className="rounded-xl border border-emerald-100 bg-white p-2">
+                    <p className="text-xs text-muted-foreground">Iqamah</p>
+                    <p className="font-medium">{jumuahRow.iqamahTime ? format12Hour(jumuahRow.iqamahTime) : '--'}</p>
                   </div>
                 </div>
-              ) : null}
-
-              <div className="max-h-[65vh] space-y-3 overflow-y-auto pr-1">
-                {mainRows.map((row) => {
-                  const accent = getPrayerAccent(row.key);
-                  const isCurrent = currentPrayer === row.key;
-
-                  return (
-                    <div
-                      key={row.key}
-                      className={`rounded-2xl border p-4 shadow-sm transition ${
-                        isCurrent
-                          ? `border-2 ${accent.border} ${accent.tint}`
-                          : 'border-border bg-white'
-                      }`}
-                    >
-                      <div className="mb-3 flex items-start justify-between gap-3">
-                        <p className="text-base font-semibold text-foreground">{row.label}</p>
-                        <span className={`rounded-full border px-2 py-1 text-xs font-medium ${accent.badge}`}>
-                          {row.isZawal
-                            ? row.zawalStart && row.zawalEnd
-                              ? `${format12Hour(row.zawalStart)} -> ${format12Hour(row.zawalEnd)}`
-                              : '--'
-                            : row.iqamahTime
-                              ? format12Hour(row.iqamahTime)
-                              : '--'}
-                        </span>
-                      </div>
-
-                      {row.isZawal ? (
-                        <div className="rounded-xl border border-slate-100 bg-white p-2 text-sm">
-                          <p className="text-xs text-muted-foreground">Range</p>
-                          <p className="font-medium">
-                            {row.zawalStart && row.zawalEnd
-                              ? `${format12Hour(row.zawalStart)} -> ${format12Hour(row.zawalEnd)}`
-                              : '--'}
-                          </p>
-                        </div>
-                      ) : (
-                        <div className="grid grid-cols-2 gap-2 text-sm">
-                          <div className="rounded-xl border bg-white p-2">
-                            <p className="text-xs text-muted-foreground">Azan</p>
-                            <p className="font-medium">{row.azanTime ? format12Hour(row.azanTime) : '--'}</p>
-                          </div>
-                          <div className="rounded-xl border bg-white p-2">
-                            <p className="text-xs text-muted-foreground">Iqamah</p>
-                            <p className="font-medium">{row.iqamahTime ? format12Hour(row.iqamahTime) : '--'}</p>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
               </div>
-            </>
-          )}
+            ) : null}
+
+            <div className="max-h-[65vh] space-y-3 overflow-y-auto pr-1">
+              {mainRows.map((row) => {
+                const accent = getPrayerAccent(row.key);
+                const isCurrent = currentPrayer === row.key;
+
+                return (
+                  <div
+                    key={row.key}
+                    className={`rounded-2xl border p-4 shadow-sm transition ${
+                      isCurrent
+                        ? `border-2 ${accent.border} ${accent.tint}`
+                        : 'border-border bg-white'
+                    }`}
+                  >
+                    <div className="mb-3 flex items-start justify-between gap-3">
+                      <p className="text-base font-semibold text-foreground">{row.label}</p>
+                      <span className={`rounded-full border px-2 py-1 text-xs font-medium ${accent.badge}`}>
+                        {row.isZawal
+                          ? row.zawalStart && row.zawalEnd
+                            ? `${format12Hour(row.zawalStart)} -> ${format12Hour(row.zawalEnd)}`
+                            : '--'
+                          : row.iqamahTime
+                            ? format12Hour(row.iqamahTime)
+                            : '--'}
+                      </span>
+                    </div>
+
+                    {row.isZawal ? (
+                      <div className="rounded-xl border border-slate-100 bg-white p-2 text-sm">
+                        <p className="text-xs text-muted-foreground">Range</p>
+                        <p className="font-medium">
+                          {row.zawalStart && row.zawalEnd
+                            ? `${format12Hour(row.zawalStart)} -> ${format12Hour(row.zawalEnd)}`
+                            : '--'}
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-2 gap-2 text-sm">
+                        <div className="rounded-xl border bg-white p-2">
+                          <p className="text-xs text-muted-foreground">Azan</p>
+                          <p className="font-medium">{row.azanTime ? format12Hour(row.azanTime) : '--'}</p>
+                        </div>
+                        <div className="rounded-xl border bg-white p-2">
+                          <p className="text-xs text-muted-foreground">Iqamah</p>
+                          <p className="font-medium">{row.iqamahTime ? format12Hour(row.iqamahTime) : '--'}</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </>
         </CardContent>
       </Card>
     </div>

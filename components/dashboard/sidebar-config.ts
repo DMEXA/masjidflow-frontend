@@ -162,7 +162,7 @@ export function getSidebarNavGroups(input: SidebarConfigInput): SidebarNavGroup[
         title: 'System',
         items: [
           { href: '/dashboard/profile', label: 'Profile', icon: UserPlus },
-          { href: '/dashboard/settings', label: 'Security', icon: ShieldCheck },
+          { href: '/dashboard/settings/security', label: 'Security', icon: ShieldCheck },
         ],
       },
       buildPublicPages(isMuqtadi, mosqueSlug),
@@ -191,7 +191,7 @@ export function getSidebarNavGroups(input: SidebarConfigInput): SidebarNavGroup[
         title: 'System',
         items: [
           { href: '/dashboard/profile', label: 'Profile', icon: UserPlus },
-          { href: '/dashboard/settings', label: 'Security', icon: ShieldCheck },
+          { href: '/dashboard/settings/security', label: 'Security', icon: ShieldCheck },
         ],
       },
       buildPublicPages(isMuqtadi, mosqueSlug),

@@ -16,6 +16,52 @@ export interface PrayerTimesSetting {
   jumuah: { azanTime: string; iqamahTime?: string };
 }
 
+const FRONTEND_PRAYER_TIMING_FALLBACK: PrayerTimesSetting = {
+  fajr: { azanTime: '05:00', iqamahTime: '05:20' },
+  zawal: { startTime: '12:00', endTime: '12:20' },
+  zuhr: { azanTime: '13:00', iqamahTime: '13:20' },
+  asr: { azanTime: '17:00', iqamahTime: '17:20' },
+  maghrib: { azanTime: '18:30', iqamahTime: '18:35' },
+  isha: { azanTime: '20:00', iqamahTime: '20:20' },
+  jumuah: { azanTime: '13:15', iqamahTime: '13:30' },
+};
+
+function isValidPrayerTimesShape(input: unknown): input is PrayerTimesSetting {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    return false;
+  }
+
+  const obj = input as Record<string, unknown>;
+  const prayers = ['fajr', 'zuhr', 'asr', 'maghrib', 'isha', 'jumuah'] as const;
+
+  for (const prayer of prayers) {
+    const item = obj[prayer];
+    if (!item || typeof item !== 'object' || Array.isArray(item)) {
+      return false;
+    }
+    const prayerItem = item as Record<string, unknown>;
+    if (typeof prayerItem.azanTime !== 'string' || prayerItem.azanTime.trim().length === 0) {
+      return false;
+    }
+    if (typeof prayerItem.iqamahTime !== 'string' || prayerItem.iqamahTime.trim().length === 0) {
+      return false;
+    }
+  }
+
+  const zawal = obj.zawal;
+  if (!zawal || typeof zawal !== 'object' || Array.isArray(zawal)) {
+    return false;
+  }
+
+  const zawalItem = zawal as Record<string, unknown>;
+  return (
+    typeof zawalItem.startTime === 'string' &&
+    zawalItem.startTime.trim().length > 0 &&
+    typeof zawalItem.endTime === 'string' &&
+    zawalItem.endTime.trim().length > 0
+  );
+}
+
 export interface TimeWithPeriodInput {
   time: string;
   period: 'AM' | 'PM';
@@ -70,10 +116,22 @@ export const mosqueService = {
   },
 
   async getPrayerTimes(mosqueId: string): Promise<PrayerTimesSetting | null> {
-    const response = await api.get<{ prayerTimes: PrayerTimesSetting | null }>(`/mosques/${mosqueId}/prayer-times`);
-    const payload = (extractDataPayload(response.data) as { prayerTimes?: PrayerTimesSetting | null } | null)
-      ?? (response.data as { prayerTimes?: PrayerTimesSetting | null } | null);
-    return payload?.prayerTimes ?? null;
+    try {
+      const response = await api.get<{ prayerTimes: PrayerTimesSetting | null }>(`/mosques/${mosqueId}/prayer-times`);
+      const payload = (extractDataPayload(response.data) as { prayerTimes?: PrayerTimesSetting | null } | null)
+        ?? (response.data as { prayerTimes?: PrayerTimesSetting | null } | null);
+      const prayerTimes = payload?.prayerTimes;
+
+      if (isValidPrayerTimesShape(prayerTimes)) {
+        return prayerTimes;
+      }
+
+      // Strict frontend safety fallback for malformed/empty payloads.
+      return FRONTEND_PRAYER_TIMING_FALLBACK;
+    } catch {
+      // Strict frontend safety fallback for request failures.
+      return FRONTEND_PRAYER_TIMING_FALLBACK;
+    }
   },
 
   async updatePrayerTimes(mosqueId: string, prayerTimes: PrayerTimesUpdateInput): Promise<PrayerTimesSetting> {

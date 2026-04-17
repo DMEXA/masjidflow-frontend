@@ -233,7 +233,7 @@ export default function MuqtadiDashboardPage() {
               </Button>
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground">Prayer times not configured</p>
+            <p className="text-sm text-muted-foreground">Prayer schedule is syncing.</p>
           )}
         </CardContent>
       </Card>

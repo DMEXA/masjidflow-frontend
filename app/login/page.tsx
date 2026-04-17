@@ -129,6 +129,16 @@ function LoginPageContent() {
     }
   };
 
+  const isEmailIdentifier = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+
+  const isPhoneIdentifier = (value: string) => {
+    if (!value || /[a-z]/i.test(value)) {
+      return false;
+    }
+    const digits = value.replace(/\D/g, '');
+    return digits.length >= 10 && digits.length <= 15;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -162,15 +172,16 @@ function LoginPageContent() {
         return;
       }
 
-      const response = formData.identifier.includes('@')
-        ? await authService.login({
-            email: formData.identifier,
-            password: formData.password,
-          })
-        : await authService.loginWithPhone({
-            phone: formData.identifier,
-            password: formData.password,
-          });
+      const identifier = formData.identifier.trim();
+      if (!isEmailIdentifier(identifier) && !isPhoneIdentifier(identifier)) {
+        toast.error('Enter a valid phone number or email');
+        return;
+      }
+
+      const response = await authService.login({
+        identifier,
+        password: formData.password,
+      });
 
       if ('requires2FASetup' in response && response.requires2FASetup) {
         markTwoFactorPending();
@@ -291,8 +302,7 @@ function LoginPageContent() {
                 <Input
                   id="identifier"
                   type="text"
-                  inputMode="tel"
-                  placeholder="+91 9876543210"
+                  placeholder="Phone number or email"
                   value={formData.identifier}
                   onChange={(e) => setFormData({ ...formData, identifier: e.target.value })}
                   disabled={isLoading || verificationStep !== 'none'}

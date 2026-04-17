@@ -18,7 +18,8 @@ export interface RegisterResponse {
 }
 
 export interface LoginCredentials {
-  email: string;
+  email?: string;
+  identifier?: string;
   password: string;
 }
 
