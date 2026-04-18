@@ -40,7 +40,7 @@ export default function AnalyticsPage() {
     }
   }, [analyticsQuery.data?.charts.funds, selectedFundId]);
 
-  const baseChartData = analyticsQuery.data?.charts.chartData ?? [];
+  const baseChartData = useMemo(() => analyticsQuery.data?.charts.chartData ?? [], [analyticsQuery.data?.charts.chartData]);
   const funds = analyticsQuery.data?.charts.funds ?? [];
   const selectedFund = funds.find((fund) => fund.fundId === selectedFundId) ?? null;
 

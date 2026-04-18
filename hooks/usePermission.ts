@@ -7,7 +7,7 @@ import type { UserRole } from '@/src/constants';
 type Permission = keyof typeof ROLE_PERMISSIONS[UserRole];
 
 export function usePermission(role?: UserRole) {
-  const { user, hasPermission, isRole } = useAuthStore();
+  const { user, hasPermission } = useAuthStore();
   const effectiveRole = role ?? user?.role;
 
   const canManageMembers = hasPermission('canManageMembers');

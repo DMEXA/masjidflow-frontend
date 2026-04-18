@@ -1,7 +1,7 @@
 'use client';
 
 import { useParams, useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { PageHeader } from '@/components/dashboard/page-header';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -23,7 +23,7 @@ export default function PlatformPaymentDetailsPage() {
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState(false);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     if (!paymentId) return;
 
     setLoading(true);
@@ -35,11 +35,11 @@ export default function PlatformPaymentDetailsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [paymentId]);
 
   useEffect(() => {
-    load();
-  }, [paymentId]);
+    void load();
+  }, [load]);
 
   const verify = async () => {
     if (!details) return;
@@ -56,7 +56,7 @@ export default function PlatformPaymentDetailsPage() {
     }
   };
 
-  const reject = async () => {
+  const reject = useCallback(async () => {
     if (!details) return;
 
     setActing(true);
@@ -69,7 +69,7 @@ export default function PlatformPaymentDetailsPage() {
     } finally {
       setActing(false);
     }
-  };
+  }, [details, load]);
 
   return (
     <div className="space-y-6">

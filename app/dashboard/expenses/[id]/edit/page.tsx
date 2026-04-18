@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -64,7 +64,7 @@ export default function EditExpensePage() {
 
   const fundsQuery = useFundsListQuery(mosque?.id);
   const fundsLoading = fundsQuery.isLoading;
-  const funds: Fund[] = fundsQuery.data ?? [];
+  const funds: Fund[] = useMemo(() => fundsQuery.data ?? [], [fundsQuery.data]);
   const selectedFund = funds.find((fund) => fund.id === formData.fundId);
   const categoryOptions = (() => {
     const allowed = selectedFund?.allowedCategories ?? [];

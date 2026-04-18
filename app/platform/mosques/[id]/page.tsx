@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { PageHeader } from '@/components/dashboard/page-header';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -19,7 +19,7 @@ export default function PlatformMosqueDetailsPage() {
   const [details, setDetails] = useState<PlatformMosqueDetails | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     if (!mosqueId) return;
 
     setLoading(true);
@@ -31,11 +31,11 @@ export default function PlatformMosqueDetailsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [mosqueId]);
 
   useEffect(() => {
-    load();
-  }, [mosqueId]);
+    void load();
+  }, [load]);
 
   return (
     <div className="space-y-6">

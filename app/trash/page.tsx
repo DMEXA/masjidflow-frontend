@@ -78,7 +78,6 @@ export default function TrashPage() {
   const data = trashQuery.data as TrashResponse<TrashMemberItem | TrashDonationItem | TrashExpenseItem> | undefined;
   const items = data?.data ?? [];
   const meta = data?.meta;
-  const currentPageIds = useMemo(() => items.map((item) => item.id), [items]);
 
   const totalPages = useMemo(() => {
     if (!meta) return 1;

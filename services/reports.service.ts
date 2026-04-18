@@ -1,5 +1,5 @@
 import api from './api';
-import type { DashboardStats, ReportData, AuditLog, PaginatedResponse, ChartDataPoint } from '@/types';
+import type { AuditLog, PaginatedResponse } from '@/types';
 
 export interface ReportFilters {
   startDate?: string;

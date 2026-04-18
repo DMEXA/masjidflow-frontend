@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { formatCurrency } from '@/src/utils/format';
 import { getErrorMessage } from '@/src/utils/error';
-import { Download, FileText, Calendar, Loader2 } from 'lucide-react';
+import { Download, FileText, Calendar } from 'lucide-react';
 import { toast } from 'sonner';
 import { reportsService } from '@/services/reports.service';
 import { donationsService } from '@/services/donations.service';

@@ -1,157 +1,156 @@
-import Link from 'next/link';
-import { Eye, Loader2, UserCheck, User } from 'lucide-react';
+import { User } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { ActionOverflowMenu } from '@/components/common/action-overflow-menu';
 
 export default function MuqtadiCard({
   item,
   paymentStatus,
   formatDate,
-  openEdit,
-  openPayment,
-  openCreateAccount,
   toggleStatus,
   actionLoadingId,
-  createAccountLoadingId,
-  submitting,
   pendingVerificationId,
   handleVerifyMuqtadi,
   handleRejectMuqtadi,
+  openPayment,
   openPaymentDetails,
 }) {
   const isDeleted = Boolean(item.isDeleted || item.isDisabled || item.status === 'DISABLED');
+  const isDisabled = Boolean(item.isDisabled || item.status === 'DISABLED');
+
+  const parseBooleanValue = (value) => {
+    if (typeof value === 'boolean') return value;
+    if (typeof value === 'number') return value === 1;
+    if (typeof value === 'string') {
+      const normalized = value.trim().toLowerCase();
+      if (normalized === 'true' || normalized === '1' || normalized === 'yes') return true;
+      if (normalized === 'false' || normalized === '0' || normalized === 'no' || normalized === '') return false;
+    }
+    return false;
+  };
+
+  const proofPendingRaw =
+    item.proofPending
+    ?? item.isProofPending
+    ?? item.paymentProofPending
+    ?? item.paymentVerificationStatus;
+  const isProofPending =
+    parseBooleanValue(proofPendingRaw)
+    || String(item.paymentVerificationStatus || '').trim().toUpperCase() === 'PENDING';
+  const isVerificationPending = item.isVerified === false;
+  const requiresPayment = paymentStatus === 'UNPAID' || isVerificationPending;
+  const hasPendingOrProof = isVerificationPending || isProofPending;
+
+  const statusPriority = {
+    UNPAID: 0,
+    PENDING: 1,
+    PENDING_PROOF: 2,
+  };
+
+  const statusItems = [
+    paymentStatus === 'UNPAID' ? 'UNPAID' : null,
+    isVerificationPending ? 'PENDING' : null,
+    isProofPending ? 'PENDING_PROOF' : null,
+  ]
+    .filter(Boolean)
+    .sort((left, right) => statusPriority[left] - statusPriority[right])
+    .slice(0, 2);
+
+  const statusClassMap = {
+    UNPAID: 'border-red-200 bg-red-100 text-red-700',
+    PENDING: 'border-yellow-200 bg-yellow-100 text-yellow-800',
+    PENDING_PROOF: 'border-orange-200 bg-orange-100 text-orange-800',
+  };
+
+  const accountState = item.accountState || 'OFFLINE';
+  const accountLabel = accountState === 'ACTIVE' ? 'Online' : accountState === 'PENDING_SETUP' ? 'Pending Setup' : 'Offline';
+  const accountDotClass =
+    accountState === 'ACTIVE'
+      ? 'bg-emerald-500'
+      : accountState === 'PENDING_SETUP'
+        ? 'bg-amber-500'
+        : 'bg-slate-400';
+  const joinedLabel = formatDate(item.createdAt);
+  const contactLabel = item.phone || item.whatsappNumber || item.email || '-';
+
+  const menuItems = [
+    requiresPayment
+      ? {
+          label: 'Make Payment',
+          onSelect: () => openPayment(item),
+          disabled: isDeleted,
+        }
+      : null,
+    hasPendingOrProof
+      ? {
+          label: pendingVerificationId === item.id ? 'Verifying...' : 'Verify',
+          onSelect: () => handleVerifyMuqtadi(item),
+          disabled: pendingVerificationId === item.id || Boolean(pendingVerificationId),
+        }
+      : null,
+    hasPendingOrProof
+      ? {
+          label: pendingVerificationId === item.id ? 'Rejecting...' : 'Reject',
+          onSelect: () => handleRejectMuqtadi(item),
+          disabled: pendingVerificationId === item.id || Boolean(pendingVerificationId),
+        }
+      : null,
+    {
+      label: actionLoadingId === item.id ? 'Deleting...' : 'Delete',
+      onSelect: () => toggleStatus(item, 'DISABLED'),
+      destructive: true,
+      separatorBefore: true,
+      disabled: isDisabled,
+    },
+  ].filter(Boolean);
 
   return (
     <div
-      className={`space-y-3 rounded-xl border p-4 shadow-sm ${
-        item.userId ? 'border-border bg-background' : 'border-amber-200 bg-amber-50/40'
-      }`}
+      className={`space-y-1.5 rounded-lg border px-3 py-2.5 shadow-sm ${
+        isDisabled ? 'opacity-80' : ''
+      } cursor-pointer`}
+      role="button"
+      tabIndex={0}
+      onClick={() => openPaymentDetails(item)}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          openPaymentDetails(item);
+        }
+      }}
     >
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            {item.userId ? (
-              <UserCheck className="h-4 w-4 text-green-700" />
-            ) : (
-              <User className="h-4 w-4 text-gray-500" />
-            )}
+            <User className="h-4 w-4 text-muted-foreground" />
             <p className="truncate text-base font-semibold text-foreground">{item.name}</p>
           </div>
-          <p className="mt-1 text-xs text-muted-foreground">{item.householdMembers || 0} members</p>
         </div>
-        <div className="flex flex-wrap items-center justify-end gap-1">
-          <Badge className={`whitespace-nowrap ${
-            item.userId ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
-          }`}>
-            {item.userId ? 'Account' : 'Offline'}
-          </Badge>
-          <Badge variant={item.isDisabled ? 'secondary' : 'default'} className="whitespace-nowrap">
-            {item.isDisabled ? 'Disabled' : 'Active'}
-          </Badge>
-          <Button
-            size="sm"
-            variant="outline"
-            className={`h-6 px-2 text-[10px] ${
-              paymentStatus === 'PAID'
-                ? 'border-green-200 bg-green-100 text-green-700 hover:bg-green-100'
-                : paymentStatus === 'PARTIAL'
-                  ? 'border-yellow-200 bg-yellow-100 text-yellow-800 hover:bg-yellow-100'
-                  : 'border-red-200 bg-red-100 text-red-700 hover:bg-red-100'
-            }`}
-            onClick={() => openPaymentDetails(item)}
-          >
-            {paymentStatus}
-          </Button>
-          <Badge className={`whitespace-nowrap ${
-            item.isVerified ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'
-          }`}>
-            {item.isVerified ? 'Verified' : 'Pending'}
-          </Badge>
-          {item.proofPending ? (
-            <Badge className="whitespace-nowrap bg-amber-100 text-amber-800">Proof Pending</Badge>
-          ) : null}
-        </div>
+        <ActionOverflowMenu items={menuItems} />
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 pt-3 text-xs text-muted-foreground">
-        <p>Joined {formatDate(item.createdAt)}</p>
+      <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+        <p>{item.householdMembers || 0} members</p>
+        <Badge variant={isDisabled ? 'secondary' : 'default'} className="whitespace-nowrap">
+          {isDisabled ? 'Disabled' : 'Active'}
+        </Badge>
       </div>
 
-      <p className="text-xs text-muted-foreground">
-        Contact: {item.phone || item.whatsappNumber || item.email || '-'}
-      </p>
+      <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+        <p className="truncate">{joinedLabel} • {contactLabel}</p>
+      </div>
 
-      <div className="flex flex-wrap items-center gap-2 pt-1">
-        {!item.isVerified ? (
-          <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => handleVerifyMuqtadi(item)}
-              disabled={pendingVerificationId === item.id || Boolean(pendingVerificationId)}
-            >
-              {pendingVerificationId === item.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Verify
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => handleRejectMuqtadi(item)}
-              disabled={pendingVerificationId === item.id || Boolean(pendingVerificationId)}
-            >
-              {pendingVerificationId === item.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Reject
-            </Button>
-          </div>
-        ) : null}
-
-        <Button size="sm" variant="outline" asChild>
-          <Link href={`/dashboard/muqtadis/${item.id}`}>
-            <Eye className="mr-2 h-4 w-4" />
-            View
-          </Link>
-        </Button>
-
-        <Button size="sm" variant="outline" onClick={() => openPaymentDetails(item)}>
-          View Payment
-        </Button>
-
-        {!item.userId ? (
-          <Button
-            size="sm"
-            className="w-full sm:w-auto bg-emerald-600 text-white hover:bg-emerald-700"
-            onClick={() => openCreateAccount(item)}
-            disabled={createAccountLoadingId === item.id || submitting}
-          >
-            {createAccountLoadingId === item.id ? 'Creating...' : 'Create Account'}
-          </Button>
-        ) : (
-          <div className="flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-1 text-xs text-green-700">
-            <UserCheck className="h-3.5 w-3.5" />
-            <span>Active</span>
-          </div>
-        )}
-
-        <ActionOverflowMenu
-          items={[
-            { label: 'Edit', onSelect: () => openEdit(item) },
-            {
-              label: 'Record Payment',
-              onSelect: () => openPayment(item),
-              disabled: isDeleted,
-            },
-            item.isDisabled
-              ? {
-                  label: actionLoadingId === item.id ? 'Enabling...' : 'Enable',
-                  onSelect: () => toggleStatus(item, 'ACTIVE'),
-                }
-              : {
-                  label: actionLoadingId === item.id ? 'Disabling...' : 'Disable',
-                  onSelect: () => toggleStatus(item, 'DISABLED'),
-                },
-          ]}
-        />
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-1.5">
+          {statusItems.map((status) => (
+            <Badge key={`${item.id}-${status}`} className={`whitespace-nowrap ${statusClassMap[status]}`}>
+              {status}
+            </Badge>
+          ))}
+        </div>
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <span className={`h-2 w-2 rounded-full ${accountDotClass}`} />
+          <span className="whitespace-nowrap">{accountLabel}</span>
+        </div>
       </div>
     </div>
   );

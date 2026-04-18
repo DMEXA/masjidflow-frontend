@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -12,7 +12,7 @@ import { ArrowLeft, Loader2, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 import { getErrorMessage } from '@/src/utils/error';
 import { donationsService } from '@/services/donations.service';
-import { fundsService, type Fund } from '@/services/funds.service';
+import { type Fund } from '@/services/funds.service';
 import { PAYMENT_TYPES } from '@/src/constants';
 import { formatPaymentType } from '@/src/utils/format';
 import type { PaymentType } from '@/src/constants';
@@ -54,7 +54,7 @@ export default function AddDonationPage() {
 
   const fundsQuery = useFundsListQuery(mosque?.id);
   const fundsLoading = fundsQuery.isLoading;
-  const funds: Fund[] = fundsQuery.data ?? [];
+  const funds: Fund[] = useMemo(() => fundsQuery.data ?? [], [fundsQuery.data]);
 
   useEffect(() => {
     const masjidFund = funds.find((fund) => fund.type === 'MASJID');

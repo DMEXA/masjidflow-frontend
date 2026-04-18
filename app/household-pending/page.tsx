@@ -8,7 +8,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { useAuthStore } from '@/src/store/auth.store';
 import { useProfileQuery } from '@/hooks/useProfileQuery';
-import { AppShellLoader } from '@/components/common/app-shell-loader';
 import { PendingApprovalSkeleton } from '@/components/common/loading-skeletons';
 
 export default function HouseholdPendingPage() {

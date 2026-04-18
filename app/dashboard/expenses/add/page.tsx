@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -49,7 +49,7 @@ export default function AddExpensePage() {
 
   const fundsQuery = useFundsListQuery(mosque?.id);
   const fundsLoading = fundsQuery.isLoading;
-  const funds: Fund[] = fundsQuery.data ?? [];
+  const funds: Fund[] = useMemo(() => fundsQuery.data ?? [], [fundsQuery.data]);
 
   const selectedFund = funds.find((fund) => fund.id === formData.fundId);
   const categoryOptions = selectedFund?.allowedCategories ?? [];

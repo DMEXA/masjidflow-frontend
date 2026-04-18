@@ -184,8 +184,9 @@ export function useMuqtadis(options: UseMuqtadisOptions) {
         if (!matches) return false;
       }
 
-      if (accountFilter === 'account' && !item.userId) return false;
-      if (accountFilter === 'offline' && item.userId) return false;
+      const accountState = item.accountState || 'OFFLINE';
+      if (accountFilter === 'account' && accountState === 'OFFLINE') return false;
+      if (accountFilter === 'offline' && accountState !== 'OFFLINE') return false;
 
       const isDisabled = Boolean((item as Muqtadi & { isDeleted?: boolean }).isDeleted || item.isDisabled || item.status === 'DISABLED');
       if (statusFilter === 'active' && isDisabled) return false;

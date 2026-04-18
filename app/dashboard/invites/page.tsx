@@ -1,6 +1,6 @@
 ﻿'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { PageHeader } from '@/components/dashboard/page-header';
 import { DataTable } from '@/components/dashboard/data-table';
@@ -79,7 +79,7 @@ export default function InvitesPage() {
     }
   };
 
-  const handleResend = async (id: string) => {
+  const handleResend = useCallback(async (id: string) => {
     if (loadingId || invitesQuery.isLoading) return;
     setLoadingId(id);
     try {
@@ -91,7 +91,7 @@ export default function InvitesPage() {
     } finally {
       setLoadingId(null);
     }
-  };
+  }, [invitesQuery.isLoading, loadingId, queryClient]);
 
   const columns = useMemo(
     () => [
@@ -164,7 +164,7 @@ export default function InvitesPage() {
         },
       },
     ],
-    [loadingId],
+    [handleResend, loadingId],
   );
 
   return (

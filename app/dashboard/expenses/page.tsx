@@ -36,18 +36,6 @@ import { invalidateMoneyQueries } from '@/lib/money-cache';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { ListEmptyState } from '@/components/common/list-empty-state';
 
-const categoryColors: Record<string, string> = {
-  utilities: 'bg-blue-100 text-blue-800',
-  maintenance: 'bg-yellow-100 text-yellow-800',
-  salaries: 'bg-green-100 text-green-800',
-  events: 'bg-purple-100 text-purple-800',
-  supplies: 'bg-orange-100 text-orange-800',
-  charity: 'bg-pink-100 text-pink-800',
-  education: 'bg-cyan-100 text-cyan-800',
-  construction: 'bg-gray-100 text-gray-800',
-  other: 'bg-slate-100 text-slate-800',
-};
-
 export default function ExpensesPage() {
   const router = useRouter();
   const { canManageExpenses, canDelete, isAdmin, isSuperAdmin, isTreasurer } = usePermission();
@@ -79,7 +67,7 @@ export default function ExpensesPage() {
   const debouncedSearch = useDebounce(searchQuery);
 
   const fundsQuery = useFundsListQuery(mosque?.id);
-  const funds = fundsQuery.data ?? [];
+  const funds = useMemo(() => fundsQuery.data ?? [], [fundsQuery.data]);
 
   const selectedFundId = useMemo(() => {
     if (fundTypeFilter === 'all') return undefined;

@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import {
@@ -95,7 +94,7 @@ export default function FundsPage() {
     enabled: Boolean(mosqueId) && Boolean(token),
   });
 
-  const funds = fundsQuery.data ?? [];
+  const funds = useMemo(() => fundsQuery.data ?? [], [fundsQuery.data]);
   const inactiveFunds = inactiveFundsQuery.data ?? [];
 
   useEffect(() => {
@@ -348,47 +347,45 @@ export default function FundsPage() {
         </div>
       </PageHeader>
 
-      <Card className="border-border">
-        <CardContent className="pt-6">
-          {fundsQuery.isLoading ? (
-            <div className="ds-stack">
-              <Skeleton className="h-8 w-48" />
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                <Skeleton className="h-28 w-full" />
-                <Skeleton className="h-28 w-full" />
-                <Skeleton className="h-28 w-full" />
-                <Skeleton className="h-28 w-full" />
-              </div>
-              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                <Skeleton className="h-56 w-full" />
-                <Skeleton className="h-56 w-full" />
-                <Skeleton className="h-56 w-full" />
-              </div>
-            </div>
-          ) : fundsQuery.error ? (
-            <div className="flex h-40 flex-col items-center justify-center gap-3 text-center">
-              <p className="text-sm text-red-600">{getErrorMessage(fundsQuery.error, 'Failed to load funds')}</p>
-              <Button size="sm" variant="outline" onClick={() => fundsQuery.refetch()}>
-                Retry
-              </Button>
-            </div>
-          ) : activeFunds.length === 0 ? (
-            <ListEmptyState
-              title="No funds found"
-              description="Create your first fund to get started."
-              actionLabel={canCreate ? 'Create Fund' : undefined}
-              onAction={
-                canCreate
-                  ? () => {
-                      resetForm();
-                      setIsCreateOpen(true);
-                    }
-                  : undefined
-              }
-              icon={<Wallet className="h-5 w-5" />}
-            />
-          ) : (
-            <>
+      {fundsQuery.isLoading ? (
+        <div className="ds-stack">
+          <Skeleton className="h-8 w-48" />
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <Skeleton className="h-28 w-full" />
+            <Skeleton className="h-28 w-full" />
+            <Skeleton className="h-28 w-full" />
+            <Skeleton className="h-28 w-full" />
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            <Skeleton className="h-56 w-full" />
+            <Skeleton className="h-56 w-full" />
+            <Skeleton className="h-56 w-full" />
+          </div>
+        </div>
+      ) : fundsQuery.error ? (
+        <div className="flex h-40 flex-col items-center justify-center gap-3 text-center">
+          <p className="text-sm text-red-600">{getErrorMessage(fundsQuery.error, 'Failed to load funds')}</p>
+          <Button size="sm" variant="outline" onClick={() => fundsQuery.refetch()}>
+            Retry
+          </Button>
+        </div>
+      ) : activeFunds.length === 0 ? (
+        <ListEmptyState
+          title="No funds found"
+          description="Create your first fund to get started."
+          actionLabel={canCreate ? 'Create Fund' : undefined}
+          onAction={
+            canCreate
+              ? () => {
+                  resetForm();
+                  setIsCreateOpen(true);
+                }
+              : undefined
+          }
+          icon={<Wallet className="h-5 w-5" />}
+        />
+      ) : (
+        <>
               <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 <div className="rounded-xl border border-violet-200 bg-violet-50/60 p-3 text-sm shadow-sm">
                   <div className="flex items-center justify-between">
@@ -562,7 +559,7 @@ export default function FundsPage() {
                 </p>
               ) : null}
 
-              <div className="mt-8 border-t pt-4">
+              <div className="mt-8 border-t pt-4 px-3 rounded-2xl pb-2">
                 <div className="mb-3 flex items-center justify-between gap-3">
                   <div>
                     <p className="text-sm font-semibold text-foreground">Inactive Funds</p>
@@ -612,10 +609,8 @@ export default function FundsPage() {
                 ) : null}
               </div>
 
-            </>
-          )}
-        </CardContent>
-      </Card>
+        </>
+      )}
 
       <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
         <DialogContent>

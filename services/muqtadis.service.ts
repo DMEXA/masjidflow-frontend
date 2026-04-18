@@ -6,6 +6,7 @@ export type ImamSalarySystem = 'EQUAL' | 'CATEGORY';
 export type MuqtadiDueStatus = 'PENDING' | 'PARTIAL' | 'PAID';
 export type MuqtadiStatus = 'ACTIVE' | 'DISABLED';
 export type ContributionMode = 'HOUSEHOLD' | 'PERSON';
+export type MuqtadiAccountState = 'OFFLINE' | 'PENDING_SETUP' | 'ACTIVE';
 
 export interface ImamSalarySettings {
   contributionMode: ContributionMode;
@@ -297,6 +298,9 @@ export interface MuqtadiDashboardApiResponse {
 export interface MuqtadiDetails {
   id: string;
   userId?: string | null;
+  accountState?: MuqtadiAccountState;
+  setupLinkExpiresAt?: string | null;
+  setupLinkExpiresInMinutes?: number | null;
   name: string;
   fatherName: string;
   email?: string | null;
@@ -320,8 +324,7 @@ export interface MuqtadiDetails {
 
 export interface EnableMuqtadiLoginPayload {
   phone: string;
-  password?: string;
-  autoGeneratePassword?: boolean;
+  email?: string;
 }
 
 export interface EnableMuqtadiLoginResponse {
@@ -329,7 +332,23 @@ export interface EnableMuqtadiLoginResponse {
   userId: string;
   email: string;
   phone?: string;
-  generatedPassword: string | null;
+  resetLink: string;
+  expiresInMinutes: number;
+  accountState: MuqtadiAccountState;
+  setupLinkExpiresAt?: string | null;
+  setupLinkExpiresInMinutes?: number | null;
+  message: string;
+}
+
+export interface MuqtadiResetLinkResponse {
+  muqtadiId: string;
+  userId: string;
+  email: string;
+  resetLink: string;
+  expiresInMinutes: number;
+  accountState: MuqtadiAccountState;
+  setupLinkExpiresAt?: string | null;
+  setupLinkExpiresInMinutes?: number | null;
   message: string;
 }
 
@@ -741,6 +760,11 @@ export const muqtadisService = {
 
   async enableLogin(id: string, payload: EnableMuqtadiLoginPayload): Promise<EnableMuqtadiLoginResponse> {
     const response = await api.post<EnableMuqtadiLoginResponse>(`/muqtadis/${id}/enable-login`, payload);
+    return response.data;
+  },
+
+  async generateResetPasswordLink(id: string): Promise<MuqtadiResetLinkResponse> {
+    const response = await api.post<MuqtadiResetLinkResponse>(`/muqtadis/${id}/reset-password-link`);
     return response.data;
   },
 

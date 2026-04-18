@@ -12,7 +12,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { ArrowLeft, Loader2, FileText, HandCoins, Copy } from 'lucide-react';
+import { ArrowLeft, FileText, HandCoins, Copy } from 'lucide-react';
 import { donationsService } from '@/services/donations.service';
 import { formatCurrency, formatDate, formatPaymentType } from '@/src/utils/format';
 import type { Donation } from '@/types';

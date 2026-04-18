@@ -13,7 +13,7 @@ export const queryKeys = {
     };
   }) => ['members', params] as const,
   invites: ['invites'] as const,
-  funds: (_mosqueId?: string) => ['funds'] as const,
+  funds: (mosqueId?: string) => ['funds', mosqueId ?? 'none'] as const,
   donations: (
     mosqueId: string | undefined,
     filters: {

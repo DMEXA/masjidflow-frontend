@@ -28,13 +28,6 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from '@/components/ui/sheet';
-import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -61,7 +54,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import MuqtadiStats from '@/components/muqtadis/MuqtadiStats';
 import MuqtadiFilters from '@/components/muqtadis/MuqtadiFilters';
 import MuqtadiList from '@/components/muqtadis/MuqtadiList';
-import { DrawerSkeleton } from '@/components/common/loading-skeletons';
+import MuqtadiDetailsModal from '@/components/muqtadis/MuqtadiDetailsModal';
 import {
   useMuqtadis,
 } from '@/hooks/useMuqtadis';
@@ -87,7 +80,6 @@ export default function MuqtadisPage() {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isPaymentOpen, setIsPaymentOpen] = useState(false);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
-  const [isCreateAccountOpen, setIsCreateAccountOpen] = useState(false);
   const [trashItems, setTrashItems] = useState<Muqtadi[]>([]);
   const [trashPage, setTrashPage] = useState(1);
   const [trashTotalPages, setTrashTotalPages] = useState(1);
@@ -95,13 +87,10 @@ export default function MuqtadisPage() {
 
   const [selectedMuqtadi, setSelectedMuqtadi] = useState<Muqtadi | null>(null);
   const [selectedDetails, setSelectedDetails] = useState<MuqtadiDetails | null>(null);
-  const [createAccountTarget, setCreateAccountTarget] = useState<Muqtadi | null>(null);
-  const [createAccountForm, setCreateAccountForm] = useState({ phone: '', password: '' });
 
   const [form, setForm] = useState(EMPTY_FORM);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [createAccountLoadingId, setCreateAccountLoadingId] = useState<string | null>(null);
 
   const [cycles, setCycles] = useState<ImamSalaryCycle[]>([]);
   const [paymentMode, setPaymentMode] = useState<'new' | 'adjustment'>('new');
@@ -111,6 +100,14 @@ export default function MuqtadisPage() {
   const [pendingPaymentRejectId, setPendingPaymentRejectId] = useState<string | null>(null);
   const [selectedPaymentDetailId, setSelectedPaymentDetailId] = useState<string | null>(null);
   const [paymentDetailImageFailed, setPaymentDetailImageFailed] = useState(false);
+  const [isUpdatingDependents, setIsUpdatingDependents] = useState(false);
+  const [isIncludingInCycle, setIsIncludingInCycle] = useState(false);
+  const [isRemovingFromCycle, setIsRemovingFromCycle] = useState(false);
+  const [isGeneratingLoginLink, setIsGeneratingLoginLink] = useState(false);
+  const [isSendingResetLink, setIsSendingResetLink] = useState(false);
+  const [authLinksByMuqtadiId, setAuthLinksByMuqtadiId] = useState<
+    Record<string, { link: string; expiresInMinutes: number; createdAt: string; mode: 'login' | 'reset' }>
+  >({});
   const [inviteLink, setInviteLink] = useState('');
   const [inviteUsageMeta, setInviteUsageMeta] = useState<{ maxUses?: number | null; usedCount?: number }>({});
   const [isInviteLinkDialogOpen, setIsInviteLinkDialogOpen] = useState(false);
@@ -245,12 +242,6 @@ export default function MuqtadisPage() {
     setIsEditOpen(true);
   };
 
-  const openCreateAccount = (item: Muqtadi) => {
-    setCreateAccountTarget(item);
-    setCreateAccountForm({ phone: item.phone || item.whatsappNumber || '', password: '' });
-    setIsCreateAccountOpen(true);
-  };
-
   const openPayment = (item: Muqtadi) => {
     setSelectedMuqtadi(item);
     setPaymentMode('new');
@@ -341,64 +332,6 @@ export default function MuqtadisPage() {
     }
   };
 
-  const handleCreateAccount = async () => {
-    if (!createAccountTarget) return;
-    if (!createAccountForm.phone.trim() || !createAccountForm.password.trim()) {
-      toast.error('Phone and password are required');
-      return;
-    }
-    if (!isValidIndianPhone(createAccountForm.phone)) {
-      toast.error('Please enter a valid Indian phone number');
-      return;
-    }
-    if (createAccountForm.password.trim().length < 8) {
-      toast.error('Password must be at least 8 characters');
-      return;
-    }
-
-    const normalizedPhone = normalizeIndianPhone(createAccountForm.phone);
-    if (!normalizedPhone) {
-      toast.error('Please enter a valid Indian phone number');
-      return;
-    }
-
-    setSubmitting(true);
-    setCreateAccountLoadingId(createAccountTarget.id);
-    try {
-      const result = await muqtadisService.createAccount(createAccountTarget.id, {
-        phone: normalizedPhone,
-        password: createAccountForm.password.trim(),
-      });
-
-      setItems((prev) =>
-        prev.map((item) =>
-          item.id === createAccountTarget.id
-            ? {
-                ...item,
-                userId: result.userId,
-                email: result.email,
-                phone: result.phone || normalizedPhone,
-              }
-            : item,
-        ),
-      );
-
-      toast.success('Account created and linked successfully');
-      setIsCreateAccountOpen(false);
-      setCreateAccountTarget(null);
-      setCreateAccountForm({ phone: '', password: '' });
-      await actions.fetchItems();
-      if (selectedDetails?.id === createAccountTarget.id) {
-        await refreshDetails(createAccountTarget.id);
-      }
-    } catch (error) {
-      toast.error(getErrorMessage(error, 'Failed to create account'));
-    } finally {
-      setSubmitting(false);
-      setCreateAccountLoadingId(null);
-    }
-  };
-
   const handleUpdateMuqtadi = async () => {
     if (!selectedMuqtadi) return;
 
@@ -478,6 +411,200 @@ export default function MuqtadisPage() {
       toast.error(getErrorMessage(error, 'Failed to record payment'));
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleAddDependent = async (name: string) => {
+    if (!selectedDetails) return;
+    const trimmed = name.trim();
+    if (!trimmed) {
+      toast.error('Dependent name is required');
+      return;
+    }
+
+    const currentMembers = Array.isArray(selectedDetails.memberNames) && selectedDetails.memberNames.length > 0
+      ? selectedDetails.memberNames.filter((entry) => Boolean(String(entry || '').trim()))
+      : [selectedDetails.name].filter(Boolean);
+    const nextMembers = [...currentMembers, trimmed];
+
+    setIsUpdatingDependents(true);
+    try {
+      await muqtadisService.update(selectedDetails.id, {
+        householdMembers: nextMembers.length,
+        memberNames: nextMembers,
+      });
+      toast.success('Dependent added');
+      await actions.fetchItems();
+      await refreshDetails(selectedDetails.id);
+    } catch (error) {
+      toast.error(getErrorMessage(error, 'Failed to add dependent'));
+    } finally {
+      setIsUpdatingDependents(false);
+    }
+  };
+
+  const handleRemoveDependent = async (index: number) => {
+    if (!selectedDetails) return;
+
+    const currentMembers = Array.isArray(selectedDetails.memberNames) && selectedDetails.memberNames.length > 0
+      ? selectedDetails.memberNames.filter((entry) => Boolean(String(entry || '').trim()))
+      : [selectedDetails.name].filter(Boolean);
+
+    if (currentMembers.length <= 1) {
+      toast.error('At least one household member is required');
+      return;
+    }
+
+    const nextMembers = currentMembers.filter((_, memberIndex) => memberIndex !== index);
+    if (nextMembers.length === 0) {
+      toast.error('At least one household member is required');
+      return;
+    }
+
+    setIsUpdatingDependents(true);
+    try {
+      await muqtadisService.update(selectedDetails.id, {
+        householdMembers: nextMembers.length,
+        memberNames: nextMembers,
+      });
+      toast.success('Dependent removed');
+      await actions.fetchItems();
+      await refreshDetails(selectedDetails.id);
+    } catch (error) {
+      toast.error(getErrorMessage(error, 'Failed to remove dependent'));
+    } finally {
+      setIsUpdatingDependents(false);
+    }
+  };
+
+  const handleIncludeInCycle = async () => {
+    if (!selectedDetails) return;
+
+    setIsIncludingInCycle(true);
+    try {
+      const result = await muqtadisService.includeInCurrentCycle(selectedDetails.id);
+      if (result.alreadyIncluded) {
+        toast.success('Household is already included in current cycle');
+      } else {
+        toast.success('Household included in current cycle');
+      }
+      await actions.fetchItems();
+      await refreshDetails(selectedDetails.id);
+    } catch (error) {
+      toast.error(getErrorMessage(error, 'Failed to include household in current cycle'));
+    } finally {
+      setIsIncludingInCycle(false);
+    }
+  };
+
+  const handleRemoveFromCycle = async () => {
+    if (!selectedDetails) return;
+
+    setIsRemovingFromCycle(true);
+    try {
+      const result = await muqtadisService.removeFromCurrentCycle(selectedDetails.id);
+      if (result.notFound) {
+        toast.success('Household is not included in current cycle');
+      } else if (result.removed) {
+        toast.success('Household removed from current cycle');
+      }
+      await actions.fetchItems();
+      await refreshDetails(selectedDetails.id);
+    } catch (error) {
+      toast.error(getErrorMessage(error, 'Failed to remove household from current cycle'));
+    } finally {
+      setIsRemovingFromCycle(false);
+    }
+  };
+
+  const handleGenerateLoginLink = async () => {
+    if (!selectedDetails) return;
+    const accountState = selectedDetails.accountState || 'OFFLINE';
+    if (accountState === 'ACTIVE') {
+      toast.error('Active accounts cannot generate login links. Use reset password instead.');
+      return;
+    }
+
+    const phone = selectedDetails.phone || selectedDetails.whatsappNumber;
+    if (!phone || !isValidIndianPhone(phone)) {
+      toast.error('Valid phone is required to generate login link');
+      return;
+    }
+
+    const normalizedPhone = normalizeIndianPhone(phone);
+    if (!normalizedPhone) {
+      toast.error('Valid phone is required to generate login link');
+      return;
+    }
+
+    const confirmed = window.confirm(`Generate secure login link for ${normalizedPhone}?`);
+    if (!confirmed) return;
+
+    setIsGeneratingLoginLink(true);
+    try {
+      const result = await muqtadisService.enableLogin(selectedDetails.id, {
+        phone: normalizedPhone,
+      });
+
+      setAuthLinksByMuqtadiId((prev) => ({
+        ...prev,
+        [selectedDetails.id]: {
+          link: result.resetLink,
+          expiresInMinutes: result.expiresInMinutes,
+          createdAt: new Date().toISOString(),
+          mode: 'login',
+        },
+      }));
+      toast.success('Login link generated');
+      await actions.fetchItems();
+      await refreshDetails(selectedDetails.id);
+    } catch (error) {
+      toast.error(getErrorMessage(error, 'Failed to generate login link'));
+    } finally {
+      setIsGeneratingLoginLink(false);
+    }
+  };
+
+  const handleSendResetLink = async () => {
+    if (!selectedDetails) return;
+
+    const accountState = selectedDetails.accountState || 'OFFLINE';
+    if (accountState !== 'ACTIVE') {
+      toast.error('Reset password is only available for active accounts');
+      return;
+    }
+
+    setIsSendingResetLink(true);
+    try {
+      const response = await muqtadisService.generateResetPasswordLink(selectedDetails.id);
+      setAuthLinksByMuqtadiId((prev) => ({
+        ...prev,
+        [selectedDetails.id]: {
+          link: response.resetLink,
+          expiresInMinutes: response.expiresInMinutes,
+          createdAt: new Date().toISOString(),
+          mode: 'reset',
+        },
+      }));
+      toast.success('Admin reset link generated');
+      await actions.fetchItems();
+      await refreshDetails(selectedDetails.id);
+    } catch (error) {
+      toast.error(getErrorMessage(error, 'Failed to generate admin reset link'));
+    } finally {
+      setIsSendingResetLink(false);
+    }
+  };
+
+  const handleCopyAuthLink = async () => {
+    if (!selectedDetails) return;
+    const value = authLinksByMuqtadiId[selectedDetails.id]?.link;
+    if (!value) return;
+    try {
+      await navigator.clipboard.writeText(value);
+      toast.success('Link copied');
+    } catch {
+      toast.error('Failed to copy link');
     }
   };
 
@@ -683,9 +810,8 @@ export default function MuqtadisPage() {
   }, [activeTab, setFilters]);
 
   return (
-    <div className="ds-stack">
-      <div className='mx-2'>
-        <PageHeader title="Households" description="Manage imam salary households and dues">
+    <div className="ds-section ds-stack">
+      <PageHeader title="Households" description="Manage imam salary households and dues">
         <div className="space-y-2">
           <div className="flex flex-wrap gap-2">
             <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
@@ -752,144 +878,141 @@ export default function MuqtadisPage() {
         </div>
 
       </PageHeader>
-      </div>
 
       <MuqtadiStats stats={stats} imamFundSummary={imamFundSummary} isLoading={loading.isLoading} />
 
-      <Card className="mx-2">
-        <CardContent className="space-y-4 pt-4">
-          {activeTab === 'active' ? (
-            <MuqtadiFilters
-              primaryFilter={primaryFilter}
-              setPrimaryFilter={applyPrimaryFilter}
-              search={filters.search}
-              setSearch={(value: string) => {
-                setFilters.setSearch(value);
-                setFilters.setPage(1);
-              }}
+      <div className="space-y-4">
+        {activeTab === 'active' ? (
+          <MuqtadiFilters
+            primaryFilter={primaryFilter}
+            setPrimaryFilter={applyPrimaryFilter}
+            search={filters.search}
+            setSearch={(value: string) => {
+              setFilters.setSearch(value);
+              setFilters.setPage(1);
+            }}
+            accountFilter={filters.accountFilter}
+            setAccountFilter={setFilters.setAccountFilter}
+            cycleFilter={filters.cycleFilter}
+            setCycleFilter={setFilters.setCycleFilter}
+            paymentFilter={filters.paymentFilter}
+            setPaymentFilter={setFilters.setPaymentFilter}
+            sortOrder={filters.sortOrder}
+            setSortOrder={setFilters.setSortOrder}
+            clearFilters={clearAllMuqtadiFilters}
+          />
+        ) : null}
+
+        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'active' | 'trash')}>
+          <TabsList>
+            <TabsTrigger value="active">Active</TabsTrigger>
+            <TabsTrigger value="trash">Trash</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="active" className="mt-4">
+            <MuqtadiList
+              isLoading={loading.isLoading}
+              items={activeItems}
               accountFilter={filters.accountFilter}
-              setAccountFilter={setFilters.setAccountFilter}
-              cycleFilter={filters.cycleFilter}
-              setCycleFilter={setFilters.setCycleFilter}
-              paymentFilter={filters.paymentFilter}
-              setPaymentFilter={setFilters.setPaymentFilter}
-              sortOrder={filters.sortOrder}
-              setSortOrder={setFilters.setSortOrder}
-              clearFilters={clearAllMuqtadiFilters}
+              onAdd={() => setIsAddOpen(true)}
+              resolvePaymentStatus={actions.resolvePaymentStatus}
+              formatDate={formatDate}
+              openEdit={openEdit}
+              openPayment={openPayment}
+              openCreateAccount={() => {}}
+              toggleStatus={toggleStatus}
+              actionLoadingId={actionLoadingId}
+              createAccountLoadingId={null}
+              submitting={submitting}
+              pendingVerificationId={loading.pendingVerificationId}
+              handleVerifyMuqtadi={actions.verifyMuqtadi}
+              handleRejectMuqtadi={actions.rejectMuqtadi}
+              openPaymentDetails={openPaymentDetails}
             />
-          ) : null}
+          </TabsContent>
 
-          <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'active' | 'trash')}>
-            <TabsList>
-              <TabsTrigger value="active">Active</TabsTrigger>
-              <TabsTrigger value="trash">Trash</TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="active" className="mt-4">
-              <MuqtadiList
-                isLoading={loading.isLoading}
-                items={activeItems}
-                accountFilter={filters.accountFilter}
-                onAdd={() => setIsAddOpen(true)}
-                resolvePaymentStatus={actions.resolvePaymentStatus}
-                formatDate={formatDate}
-                openEdit={openEdit}
-                openPayment={openPayment}
-                openCreateAccount={openCreateAccount}
-                toggleStatus={toggleStatus}
-                actionLoadingId={actionLoadingId}
-                createAccountLoadingId={createAccountLoadingId}
-                submitting={submitting}
-                pendingVerificationId={loading.pendingVerificationId}
-                handleVerifyMuqtadi={actions.verifyMuqtadi}
-                handleRejectMuqtadi={actions.rejectMuqtadi}
-                openPaymentDetails={openPaymentDetails}
+          <TabsContent value="trash" className="mt-4 space-y-3">
+            {isTrashLoading ? (
+              <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Loading trash...
+              </div>
+            ) : trashItems.length === 0 ? (
+              <ListEmptyState
+                title="Trash is empty"
+                description="Deleted households will appear here."
+                className="min-h-36"
               />
-            </TabsContent>
+            ) : (
+              trashItems.map((item) => (
+                <Card key={`trash-${item.id}`}>
+                  <CardContent className="flex items-center justify-between gap-3 pt-4">
+                    <div>
+                      <p className="text-sm font-medium">{item.name}</p>
+                      <p className="text-xs text-muted-foreground">{item.phone || item.whatsappNumber || item.email || '-'}</p>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => toggleStatus(item, 'ACTIVE')}
+                      disabled={submitting || actionLoadingId === item.id}
+                    >
+                      {actionLoadingId === item.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                      Restore
+                    </Button>
+                  </CardContent>
+                </Card>
+              ))
+            )}
+          </TabsContent>
+        </Tabs>
 
-            <TabsContent value="trash" className="mt-4 space-y-3">
-              {isTrashLoading ? (
-                <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Loading trash...
-                </div>
-              ) : trashItems.length === 0 ? (
-                <ListEmptyState
-                  title="Trash is empty"
-                  description="Deleted households will appear here."
-                  className="min-h-36"
-                />
-              ) : (
-                trashItems.map((item) => (
-                  <Card key={`trash-${item.id}`}>
-                    <CardContent className="flex items-center justify-between gap-3 pt-4">
-                      <div>
-                        <p className="text-sm font-medium">{item.name}</p>
-                        <p className="text-xs text-muted-foreground">{item.phone || item.whatsappNumber || item.email || '-'}</p>
-                      </div>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => toggleStatus(item, 'ACTIVE')}
-                        disabled={submitting || actionLoadingId === item.id}
-                      >
-                        {actionLoadingId === item.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                        Restore
-                      </Button>
-                    </CardContent>
-                  </Card>
-                ))
-              )}
-            </TabsContent>
-          </Tabs>
-
-          <div className="flex items-center justify-between gap-3">
-            <p className="text-xs text-muted-foreground">
-              {activeTab === 'active'
-                ? `Page ${filters.page} of ${filters.totalPages || 1}`
-                : `Page ${trashPage} of ${trashTotalPages || 1}`}
-            </p>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  if (activeTab === 'active') {
-                    setFilters.setPage((current) => Math.max(current - 1, 1));
-                    return;
-                  }
-                  setTrashPage((current) => Math.max(current - 1, 1));
-                }}
-                disabled={
-                  activeTab === 'active'
-                    ? filters.page <= 1 || loading.isLoading
-                    : trashPage <= 1 || isTrashLoading
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-xs text-muted-foreground">
+            {activeTab === 'active'
+              ? `Page ${filters.page} of ${filters.totalPages || 1}`
+              : `Page ${trashPage} of ${trashTotalPages || 1}`}
+          </p>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                if (activeTab === 'active') {
+                  setFilters.setPage((current) => Math.max(current - 1, 1));
+                  return;
                 }
-              >
-                Previous
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  if (activeTab === 'active') {
-                    setFilters.setPage((current) => Math.min(current + 1, filters.totalPages || 1));
-                    return;
-                  }
-                  setTrashPage((current) => Math.min(current + 1, trashTotalPages || 1));
-                }}
-                disabled={
-                  activeTab === 'active'
-                    ? filters.page >= (filters.totalPages || 1) || loading.isLoading
-                    : trashPage >= (trashTotalPages || 1) || isTrashLoading
+                setTrashPage((current) => Math.max(current - 1, 1));
+              }}
+              disabled={
+                activeTab === 'active'
+                  ? filters.page <= 1 || loading.isLoading
+                  : trashPage <= 1 || isTrashLoading
+              }
+            >
+              Previous
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                if (activeTab === 'active') {
+                  setFilters.setPage((current) => Math.min(current + 1, filters.totalPages || 1));
+                  return;
                 }
-              >
-                Next
-              </Button>
-            </div>
+                setTrashPage((current) => Math.min(current + 1, trashTotalPages || 1));
+              }}
+              disabled={
+                activeTab === 'active'
+                  ? filters.page >= (filters.totalPages || 1) || loading.isLoading
+                  : trashPage >= (trashTotalPages || 1) || isTrashLoading
+              }
+            >
+              Next
+            </Button>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
         <DialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-lg">
@@ -904,49 +1027,6 @@ export default function MuqtadisPage() {
           <DialogFooter>
             <Button className="w-full sm:w-auto" variant="outline" onClick={() => setIsEditOpen(false)}>Cancel</Button>
             <Button className="w-full sm:w-auto" onClick={handleUpdateMuqtadi} disabled={submitting}>{submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}Save</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={isCreateAccountOpen} onOpenChange={setIsCreateAccountOpen}>
-        <DialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Create Account</DialogTitle>
-            <DialogDescription>
-              Link an account to this offline household member.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3">
-            <div className="space-y-2">
-              <Label>Phone</Label>
-              <Input
-                type="tel"
-                value={createAccountForm.phone}
-                onChange={(e) => setCreateAccountForm((prev) => ({ ...prev, phone: e.target.value }))}
-                placeholder="+91 98765 43210"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Password</Label>
-              <Input
-                type="password"
-                value={createAccountForm.password}
-                onChange={(e) => setCreateAccountForm((prev) => ({ ...prev, password: e.target.value }))}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button className="w-full sm:w-auto" variant="outline" onClick={() => setIsCreateAccountOpen(false)} disabled={submitting}>
-              Cancel
-            </Button>
-            <Button
-              className="w-full sm:w-auto"
-              onClick={handleCreateAccount}
-              disabled={submitting || createAccountLoadingId === createAccountTarget?.id}
-            >
-              {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Create Account
-            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -997,144 +1077,43 @@ export default function MuqtadisPage() {
         </DialogContent>
       </Dialog>
 
-      <Sheet open={isDrawerOpen} onOpenChange={setIsDrawerOpen}>
-        <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-2xl">
-          <SheetHeader>
-            <SheetTitle>{selectedDetails?.name || 'Muqtadi Details'}</SheetTitle>
-            <SheetDescription>Overview, dues, payments and household history</SheetDescription>
-          </SheetHeader>
-
-          {!selectedDetails ? (
-            <DrawerSkeleton />
-          ) : (
-            <Tabs defaultValue="overview" className="mt-4 ds-stack">
-              <TabsList className="grid w-full grid-cols-4">
-                <TabsTrigger value="overview">Overview</TabsTrigger>
-                <TabsTrigger value="dues">Dues</TabsTrigger>
-                <TabsTrigger value="payments">Payments</TabsTrigger>
-                <TabsTrigger value="history">History</TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="overview" className="space-y-3">
-                <Card>
-                  <CardContent className="space-y-2 pt-4 text-sm">
-                    <p><span className="text-muted-foreground">Name:</span> {selectedDetails.name}</p>
-                    <p>
-                      <span className="text-muted-foreground">Father Name:</span>{' '}
-                      {selectedDetails.fatherName && selectedDetails.fatherName !== 'N/A' ? selectedDetails.fatherName : ''}
-                    </p>
-                    <p><span className="text-muted-foreground">WhatsApp:</span> {selectedDetails.whatsappNumber || '-'}</p>
-                    <p><span className="text-muted-foreground">Household Members:</span> {selectedDetails.householdMembers}</p>
-                    <p><span className="text-muted-foreground">Total Due:</span> {formatCurrency(selectedDetails.overview.totalDue)}</p>
-                    <p><span className="text-muted-foreground">Total Paid:</span> {formatCurrency(selectedDetails.overview.totalPaid)}</p>
-                  </CardContent>
-                </Card>
-              </TabsContent>
-
-              <TabsContent value="dues" className="space-y-3">
-                {selectedDetails.dues.length === 0 ? (
-                  <ListEmptyState
-                    title="No dues generated yet"
-                    description="Start a salary month to generate dues for members."
-                    actionLabel="Open Salary Months"
-                    actionHref="/dashboard/imam-salary/cycles"
-                    className="min-h-36"
-                  />
-                ) : (
-                  selectedDetails.dues.map((due) => (
-                    <Card key={due.id}>
-                      <CardContent className="flex flex-wrap items-center justify-between gap-2 pt-4 text-sm">
-                        <div>
-                          <p className="font-medium">{formatCycleLabel(due.month, due.year)}</p>
-                          <p className="text-muted-foreground">Expected {formatCurrency(due.expectedAmount)}</p>
-                        </div>
-                        <div className="text-right">
-                          <p>{formatCurrency(due.paidAmount)} paid</p>
-                          <div className="flex items-center justify-end gap-2">
-                            <Badge variant={getCycleStatus(due.month, due.year) === 'Active' ? 'default' : 'secondary'}>{getCycleStatus(due.month, due.year)}</Badge>
-                            <Badge variant={due.status === 'PAID' ? 'default' : 'secondary'}>{due.status}</Badge>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))
-                )}
-              </TabsContent>
-
-              <TabsContent value="payments" className="space-y-3">
-                {selectedDetails.payments.length === 0 ? (
-                  <ListEmptyState
-                    title="No payment records yet"
-                    description="Record the first payment to start this history."
-                    actionLabel="Record Payment"
-                    onAction={() => {
-                      if (selectedMuqtadi) {
-                        openPayment(selectedMuqtadi);
-                      }
-                    }}
-                    className="min-h-36"
-                  />
-                ) : (
-                  selectedDetails.payments.map((entry) => (
-                    <Card key={entry.id}>
-                      <CardContent className="space-y-2 pt-4 text-sm">
-                        <div className="flex items-center justify-between gap-2">
-                          <p className="font-medium">{formatDate(entry.createdAt, 'MMM dd, yyyy hh:mm a')}</p>
-                          <Badge
-                            className={
-                              (entry.details?.status as string) === 'VERIFIED'
-                                ? 'bg-emerald-100 text-emerald-700'
-                                : (entry.details?.status as string) === 'REJECTED'
-                                  ? 'bg-red-100 text-red-700'
-                                  : 'bg-amber-100 text-amber-700'
-                            }
-                          >
-                            {(entry.details?.status as string) || '-'}
-                          </Badge>
-                        </div>
-                        <div className="flex items-center justify-between gap-2">
-                          <p>{formatCurrency(Number(entry.details?.amount || 0))} • {(entry.details?.method as string) || '-'}</p>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              setSelectedPaymentDetailId(entry.id);
-                              setPaymentDetailImageFailed(false);
-                            }}
-                          >
-                            View Payment
-                          </Button>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))
-                )}
-              </TabsContent>
-
-              <TabsContent value="history" className="space-y-3">
-                {selectedDetails.history.length === 0 ? (
-                  <ListEmptyState
-                    title="No history entries"
-                    description="Profile and payment updates will be listed here."
-                    actionLabel="Back to Overview"
-                    onAction={() => setIsDrawerOpen(false)}
-                    className="min-h-36"
-                  />
-                ) : (
-                  selectedDetails.history.map((entry) => (
-                    <Card key={entry.id}>
-                      <CardContent className="space-y-1 pt-4 text-sm">
-                        <p className="font-medium">{entry.action}</p>
-                        <p className="text-muted-foreground">{formatDate(entry.createdAt, 'MMM dd, yyyy hh:mm a')}</p>
-                      </CardContent>
-                    </Card>
-                  ))
-                )}
-              </TabsContent>
-            </Tabs>
-          )}
-        </SheetContent>
-      </Sheet>
+      <MuqtadiDetailsModal
+        open={isDrawerOpen}
+        onOpenChange={setIsDrawerOpen}
+        details={selectedDetails}
+        selectedMuqtadi={selectedMuqtadi}
+        formatDate={formatDate}
+        formatCurrency={formatCurrency}
+        formatCycleLabel={formatCycleLabel}
+        getCycleStatus={getCycleStatus}
+        onOpenRecordPayment={() => {
+          if (selectedMuqtadi) {
+            openPayment(selectedMuqtadi);
+          }
+        }}
+        onOpenEditDetails={() => {
+          if (selectedMuqtadi) {
+            openEdit(selectedMuqtadi);
+          }
+        }}
+        onOpenPaymentDetail={(paymentId: string) => {
+          setSelectedPaymentDetailId(paymentId);
+          setPaymentDetailImageFailed(false);
+        }}
+        onAddDependent={handleAddDependent}
+        onRemoveDependent={handleRemoveDependent}
+        onIncludeInCycle={handleIncludeInCycle}
+        onRemoveFromCycle={handleRemoveFromCycle}
+        onGenerateLoginLink={handleGenerateLoginLink}
+        onSendResetLink={handleSendResetLink}
+        onCopyAuthLink={handleCopyAuthLink}
+        isUpdatingDependents={isUpdatingDependents}
+        isIncludingInCycle={isIncludingInCycle}
+        isRemovingFromCycle={isRemovingFromCycle}
+        isGeneratingLoginLink={isGeneratingLoginLink}
+        isSendingResetLink={isSendingResetLink}
+        authLinkState={selectedDetails ? authLinksByMuqtadiId[selectedDetails.id] ?? null : null}
+      />
 
       <Dialog open={isInviteLinkDialogOpen} onOpenChange={setIsInviteLinkDialogOpen}>
         <DialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-lg">

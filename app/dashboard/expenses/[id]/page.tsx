@@ -12,7 +12,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { ArrowLeft, Loader2, FileText, Receipt } from 'lucide-react';
+import { ArrowLeft, Receipt } from 'lucide-react';
 import { expensesService } from '@/services/expenses.service';
 import { formatCurrency, formatDate, formatExpenseCategory } from '@/src/utils/format';
 import type { Expense } from '@/types';

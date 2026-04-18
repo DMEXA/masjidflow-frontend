@@ -142,6 +142,9 @@ export interface Member {
 export interface Muqtadi {
   id: string;
   userId?: string | null;
+  accountState?: 'OFFLINE' | 'PENDING_SETUP' | 'ACTIVE';
+  setupLinkExpiresAt?: string | null;
+  setupLinkExpiresInMinutes?: number | null;
   name: string;
   fatherName: string;
   email?: string | null;

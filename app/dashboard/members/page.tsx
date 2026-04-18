@@ -167,8 +167,8 @@ export default function MembersPage() {
     setPage(1);
   }, [debouncedSearch, roleFilter]);
 
-  const membersData = (membersQuery.data?.data ?? []) as Member[];
-  const invitesData = invitesQuery.data ?? [];
+  const membersData = useMemo(() => (membersQuery.data?.data ?? []) as Member[], [membersQuery.data?.data]);
+  const invitesData = useMemo(() => invitesQuery.data ?? [], [invitesQuery.data]);
 
   const filteredMembers: MemberRow[] = useMemo(() => {
     const normalizedQuery = debouncedSearch.trim().toLowerCase();

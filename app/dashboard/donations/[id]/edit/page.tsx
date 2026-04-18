@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -105,7 +105,7 @@ export default function EditDonationPage() {
 
   const fundsQuery = useFundsListQuery(mosque?.id);
   const fundsLoading = fundsQuery.isLoading;
-  const funds: Fund[] = fundsQuery.data ?? [];
+  const funds: Fund[] = useMemo(() => fundsQuery.data ?? [], [fundsQuery.data]);
 
   useEffect(() => {
     const masjidFund = funds.find((fund) => fund.type === 'MASJID');

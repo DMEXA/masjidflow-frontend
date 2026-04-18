@@ -94,8 +94,8 @@ export default function FundDetailPage() {
 
   const fund = fundQuery.data?.fund as Fund | undefined;
   const fundSummary = fundQuery.data?.summary;
-  const donations = (fundQuery.data?.recentDonations ?? []) as Donation[];
-  const expenses = (fundQuery.data?.recentExpenses ?? []) as Expense[];
+  const donations = useMemo(() => (fundQuery.data?.recentDonations ?? []) as Donation[], [fundQuery.data?.recentDonations]);
+  const expenses = useMemo(() => (fundQuery.data?.recentExpenses ?? []) as Expense[], [fundQuery.data?.recentExpenses]);
 
   useEffect(() => {
     if (!fundQuery.error) return;

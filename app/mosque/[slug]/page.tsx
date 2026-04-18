@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { PublicHeader } from '@/components/public/header';
 import { PublicFooter } from '@/components/public/footer';
-import { Building2, MapPin, Loader2, Heart } from 'lucide-react';
+import { Building2, MapPin, Heart } from 'lucide-react';
 import { mosqueService } from '@/services/mosque.service';
 
 interface MosquePublicInfo {

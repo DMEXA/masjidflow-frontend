@@ -23,7 +23,7 @@ export default function MuqtadiStats({ stats, imamFundSummary, isLoading = false
   }
 
   return (
-    <div className="grid grid-cols-2 gap-4 px-4 lg:grid-cols-3 -mx-2">
+    <div className="grid grid-cols-2 gap-4 px-4 lg:grid-cols-3 -mx-4">
       <StatCard title="Total Households" value={String(stats.totalHouseholds || 0)} description="Active verified households" icon={House} tone="blue" />
       <StatCard title="Total Muqtadies" value={String(stats.totalMuqtadies || 0)} description="Members in verified households" icon={Users} tone="purple" />
       <StatCard title="Imam Fund Balance" value={money.format(imamFundBalance)} description="Actual cash balance" icon={Wallet} tone="green" />
