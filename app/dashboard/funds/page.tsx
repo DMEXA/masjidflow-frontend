@@ -384,7 +384,7 @@ export default function FundsPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 px-2">
       <PageHeader
         title="Funds"
         description="Manage donation categories for your mosque."

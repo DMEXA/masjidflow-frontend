@@ -247,7 +247,7 @@ export default function TrashPage() {
 
   return (
     <DashboardLayout>
-      <div className="p-4 md:p-6 space-y-4">
+      <div className="p-2 md:p-6 space-y-4">
         <div className="space-y-2">
           <h1 className="text-xl font-semibold text-foreground">Trash</h1>
           <p className="text-sm text-muted-foreground">Review deleted records, restore them, or permanently remove them.</p>
