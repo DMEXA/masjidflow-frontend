@@ -214,6 +214,8 @@ export interface MuqtadiDue {
   year: number;
   expectedAmount: number;
   paidAmount: number;
+  creditAmount: number;
+  remainingAmount: number;
   status: MuqtadiDueStatus;
   createdAt: string;
 }
@@ -623,6 +625,11 @@ export const muqtadisService = {
   async getDetailPayments(id: string): Promise<MuqtadiDetails['payments']> {
     const detail = await this.getById(id);
     return Array.isArray(detail.payments) ? detail.payments : [];
+  },
+
+  async getDetailDues(id: string): Promise<MuqtadiDetails['dues']> {
+    const detail = await this.getById(id);
+    return Array.isArray(detail.dues) ? detail.dues : [];
   },
 
   async getDetailHistory(id: string): Promise<MuqtadiDetails['history']> {

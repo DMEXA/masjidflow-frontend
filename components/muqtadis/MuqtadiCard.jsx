@@ -40,6 +40,9 @@ function MuqtadiCard({
   const isVerificationPending = item.isVerified === false;
   const requiresPayment = paymentStatus === 'UNPAID' || isVerificationPending;
   const hasPendingOrProof = isVerificationPending || isProofPending;
+  const remainingAmount = Math.max(Number(item.remainingAmount ?? 0), 0);
+  const creditAmount = Math.max(Number(item.creditAmount ?? 0), 0);
+  const hasDueSummary = Number.isFinite(Number(item.remainingAmount));
 
   const statusPriority = {
     UNPAID: 0,
@@ -164,6 +167,16 @@ function MuqtadiCard({
               {status}
             </Badge>
           ))}
+          {hasDueSummary ? (
+            <Badge variant={remainingAmount > 0 ? 'secondary' : 'default'}>
+              {remainingAmount > 0 ? `₹${remainingAmount.toFixed(2)} pending` : 'Paid'}
+            </Badge>
+          ) : null}
+          {creditAmount > 0 ? (
+            <Badge className="border-emerald-200 bg-emerald-100 text-emerald-800">
+              {`Credit ₹${creditAmount.toFixed(2)}`}
+            </Badge>
+          ) : null}
         </div>
         <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
           <span className={`h-2 w-2 rounded-full ${accountDotClass}`} />

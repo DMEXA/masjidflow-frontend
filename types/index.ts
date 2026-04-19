@@ -157,6 +157,10 @@ export interface Muqtadi {
   notes?: string | null;
   totalDue?: number;
   totalPaid?: number;
+  expectedAmount?: number;
+  paidAmount?: number;
+  creditAmount?: number;
+  remainingAmount?: number;
   paymentStatus?: 'PENDING' | 'PARTIAL' | 'PAID';
   status?: 'ACTIVE' | 'DISABLED';
   createdAt: string;

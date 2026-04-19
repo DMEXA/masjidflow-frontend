@@ -51,7 +51,7 @@ import { queryKeys } from '@/lib/queryKeys';
 import { formatCurrency, formatDate, formatCycleLabel, getCycleStatus } from '@/src/utils/format';
 import { ActionOverflowMenu } from '@/components/common/action-overflow-menu';
 import { ListEmptyState } from '@/components/common/list-empty-state';
-import { useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import MuqtadiStats from '@/components/muqtadis/MuqtadiStats';
 import MuqtadiFilters from '@/components/muqtadis/MuqtadiFilters';
 import MuqtadiList from '@/components/muqtadis/MuqtadiList';
@@ -101,7 +101,6 @@ export default function MuqtadisPage() {
   const [pendingPaymentRejectId, setPendingPaymentRejectId] = useState<string | null>(null);
   const [selectedPaymentDetailId, setSelectedPaymentDetailId] = useState<string | null>(null);
   const [paymentDetailImageFailed, setPaymentDetailImageFailed] = useState(false);
-  const [isUpdatingDependents, setIsUpdatingDependents] = useState(false);
   const [isIncludingInCycle, setIsIncludingInCycle] = useState(false);
   const [isRemovingFromCycle, setIsRemovingFromCycle] = useState(false);
   const [isGeneratingLoginLink, setIsGeneratingLoginLink] = useState(false);
@@ -209,6 +208,119 @@ export default function MuqtadisPage() {
       queryClient.invalidateQueries({ queryKey: queryKeys.muqtadiHistory(id), exact: true }),
     ]);
   }, [queryClient]);
+
+  const getCurrentCycleDueFromDetails = useCallback((details: MuqtadiDetails | null | undefined) => {
+    if (!details?.dues?.length) return null;
+    const now = new Date();
+    const currentMonth = now.getMonth() + 1;
+    const currentYear = now.getFullYear();
+    return details.dues.find((due) => due.month === currentMonth && due.year === currentYear) ?? null;
+  }, []);
+
+  const dependentMutation = useMutation({
+    mutationFn: async ({
+      muqtadiId,
+      memberNames,
+      householdMembers,
+    }: {
+      muqtadiId: string;
+      memberNames: string[];
+      householdMembers: number;
+    }) => {
+      await muqtadisService.update(muqtadiId, {
+        householdMembers,
+        memberNames,
+      });
+      return muqtadisService.getById(muqtadiId);
+    },
+    onMutate: async ({ muqtadiId, memberNames, householdMembers }) => {
+      await Promise.all([
+        queryClient.cancelQueries({ queryKey: queryKeys.muqtadiDetail(muqtadiId), exact: true }),
+        queryClient.cancelQueries({ queryKey: queryKeys.muqtadiDetailDues(muqtadiId), exact: true }),
+      ]);
+
+      const previousDetail = queryClient.getQueryData<MuqtadiDetails>(queryKeys.muqtadiDetail(muqtadiId));
+      const previousDues = queryClient.getQueryData<MuqtadiDetails['dues']>(queryKeys.muqtadiDetailDues(muqtadiId));
+      const previousItems = items;
+
+      queryClient.setQueryData(queryKeys.muqtadiDetail(muqtadiId), (old: MuqtadiDetails | undefined) => {
+        if (!old) return old;
+        return {
+          ...old,
+          memberNames,
+          householdMembers,
+        };
+      });
+
+      setSelectedDetails((old) => {
+        if (!old || old.id !== muqtadiId) return old;
+        return {
+          ...old,
+          memberNames,
+          householdMembers,
+        };
+      });
+
+      setItems((prev) => prev.map((entry) => (
+        entry.id === muqtadiId
+          ? {
+              ...entry,
+              memberNames,
+              householdMembers,
+            }
+          : entry
+      )));
+
+      return { previousDetail, previousDues, previousItems, muqtadiId };
+    },
+    onError: (_error, _variables, context) => {
+      if (context?.muqtadiId) {
+        queryClient.setQueryData(queryKeys.muqtadiDetail(context.muqtadiId), context.previousDetail);
+        queryClient.setQueryData(queryKeys.muqtadiDetailDues(context.muqtadiId), context.previousDues ?? []);
+      }
+      if (context?.previousItems) {
+        setItems(context.previousItems);
+      }
+      const previousDetail = context?.previousDetail ?? null;
+      if (previousDetail) {
+        setSelectedDetails((old) => {
+          if (!old || old.id !== previousDetail.id) {
+            return old;
+          }
+          return previousDetail;
+        });
+      }
+      toast.error('Failed to update household. Please try again.');
+    },
+    onSuccess: (updatedDetail, variables) => {
+      queryClient.setQueryData(queryKeys.muqtadiDetail(variables.muqtadiId), updatedDetail);
+      queryClient.setQueryData(queryKeys.muqtadiDetailDues(variables.muqtadiId), updatedDetail.dues ?? []);
+      setSelectedDetails((old) => (old?.id === variables.muqtadiId ? updatedDetail : old));
+
+      const currentDue = getCurrentCycleDueFromDetails(updatedDetail);
+      setItems((prev) => prev.map((entry) => (
+        entry.id === variables.muqtadiId
+          ? {
+              ...entry,
+              memberNames: updatedDetail.memberNames,
+              householdMembers: updatedDetail.householdMembers,
+              expectedAmount: Number(currentDue?.expectedAmount ?? entry.expectedAmount ?? 0),
+              paidAmount: Number(currentDue?.paidAmount ?? entry.paidAmount ?? 0),
+              creditAmount: Number(currentDue?.creditAmount ?? entry.creditAmount ?? 0),
+              remainingAmount: Number(currentDue?.remainingAmount ?? entry.remainingAmount ?? 0),
+            }
+          : entry
+      )));
+    },
+    onSettled: async (_data, _error, variables) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.muqtadiDetail(variables.muqtadiId), exact: true }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.muqtadiDetailDues(variables.muqtadiId), exact: true }),
+      ]);
+    },
+  });
+
+  const isUpdatingDependents = dependentMutation.isPending;
 
   const {
     items,
@@ -510,33 +622,23 @@ export default function MuqtadisPage() {
       return;
     }
 
+    const confirmed = window.confirm('Are you sure? This will update current dues for this household.');
+    if (!confirmed) return;
+
     const currentMembers = Array.isArray(selectedDetails.memberNames) && selectedDetails.memberNames.length > 0
       ? selectedDetails.memberNames.filter((entry) => Boolean(String(entry || '').trim()))
       : [selectedDetails.name].filter(Boolean);
     const nextMembers = [...currentMembers, trimmed];
-    patchDetailCache(selectedDetails.id, (old) => {
-      if (!old) return old;
-      return {
-        ...old,
-        memberNames: nextMembers,
-        householdMembers: nextMembers.length,
-      };
-    });
 
-    setIsUpdatingDependents(true);
     try {
-      await muqtadisService.update(selectedDetails.id, {
+      await dependentMutation.mutateAsync({
+        muqtadiId: selectedDetails.id,
         householdMembers: nextMembers.length,
         memberNames: nextMembers,
       });
       toast.success('Dependent added');
-      await actions.fetchItems();
-      await invalidateDetailQueries(selectedDetails.id);
-    } catch (error) {
-      await invalidateDetailQueries(selectedDetails.id);
-      toast.error(getErrorMessage(error, 'Failed to add dependent'));
-    } finally {
-      setIsUpdatingDependents(false);
+    } catch {
+      // Error toast handled in mutation onError.
     }
   };
 
@@ -558,29 +660,18 @@ export default function MuqtadisPage() {
       return;
     }
 
-    patchDetailCache(selectedDetails.id, (old) => {
-      if (!old) return old;
-      return {
-        ...old,
-        memberNames: nextMembers,
-        householdMembers: nextMembers.length,
-      };
-    });
+    const confirmed = window.confirm('Are you sure? This will update current dues for this household.');
+    if (!confirmed) return;
 
-    setIsUpdatingDependents(true);
     try {
-      await muqtadisService.update(selectedDetails.id, {
+      await dependentMutation.mutateAsync({
+        muqtadiId: selectedDetails.id,
         householdMembers: nextMembers.length,
         memberNames: nextMembers,
       });
       toast.success('Dependent removed');
-      await actions.fetchItems();
-      await invalidateDetailQueries(selectedDetails.id);
-    } catch (error) {
-      await invalidateDetailQueries(selectedDetails.id);
-      toast.error(getErrorMessage(error, 'Failed to remove dependent'));
-    } finally {
-      setIsUpdatingDependents(false);
+    } catch {
+      // Error toast handled in mutation onError.
     }
   };
 
@@ -1028,13 +1119,7 @@ export default function MuqtadisPage() {
             <MuqtadiList
               isLoading={loading.isLoading}
               items={activeItems}
-              page={filters.page}
-              search={filters.search}
               accountFilter={filters.accountFilter}
-              verificationFilter={filters.verificationFilter}
-              cycleFilter={filters.cycleFilter}
-              paymentFilter={filters.paymentFilter}
-              sortOrder={filters.sortOrder}
               onAdd={openAddDialog}
               resolvePaymentStatus={actions.resolvePaymentStatus}
               formatDate={formatDate}

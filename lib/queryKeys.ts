@@ -67,6 +67,7 @@ export const queryKeys = {
       cycleStatus: 'all',
     }] as const,
   muqtadiDetail: (muqtadiId?: string) => ['muqtadi-detail', muqtadiId ?? 'none'] as const,
+  muqtadiDetailDues: (muqtadiId?: string) => ['muqtadi-detail-dues', muqtadiId ?? 'none'] as const,
   muqtadiPayments: (muqtadiId?: string) => ['muqtadi-payments', muqtadiId ?? 'none'] as const,
   muqtadiHistory: (muqtadiId?: string) => ['muqtadi-history', muqtadiId ?? 'none'] as const,
   platformMosques: (filters: { page: number; limit: number; search: string; status: string }) =>

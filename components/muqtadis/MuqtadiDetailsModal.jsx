@@ -88,6 +88,7 @@ export default function MuqtadiDetailsModal({
     initialData: () => buildInitialDetails(selectedMuqtadi, details),
     staleTime: 60_000,
     refetchOnWindowFocus: false,
+    refetchOnMount: 'always',
   });
 
   const paymentsQuery = useQuery({
@@ -101,6 +102,21 @@ export default function MuqtadiDetailsModal({
     },
     enabled: activeTab === 'payments' && Boolean(muqtadiId),
     initialData: () => detailQuery.data?.payments ?? [],
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
+  });
+
+  const duesQuery = useQuery({
+    queryKey: queryKeys.muqtadiDetailDues(muqtadiId),
+    queryFn: async () => {
+      const cachedDetail = queryClient.getQueryData(queryKeys.muqtadiDetail(muqtadiId));
+      if (cachedDetail && Array.isArray(cachedDetail.dues)) {
+        return cachedDetail.dues;
+      }
+      return muqtadisService.getDetailDues(muqtadiId);
+    },
+    enabled: activeTab === 'dues' && Boolean(muqtadiId),
+    initialData: () => detailQuery.data?.dues ?? [],
     staleTime: 60_000,
     refetchOnWindowFocus: false,
   });
@@ -127,6 +143,9 @@ export default function MuqtadiDetailsModal({
   const history = activeTab === 'history'
     ? (historyQuery.data ?? detailsData?.history ?? [])
     : (detailsData?.history ?? []);
+  const dues = activeTab === 'dues'
+    ? (duesQuery.data ?? detailsData?.dues ?? [])
+    : (detailsData?.dues ?? []);
 
   useEffect(() => {
     if (!open) {
@@ -386,13 +405,13 @@ export default function MuqtadiDetailsModal({
             </TabsContent>
 
             <TabsContent value="dues" className="space-y-3">
-              {!detailsData ? (
+              {!detailsData || (activeTab === 'dues' && duesQuery.isFetching && dues.length === 0) ? (
                 <Card>
                   <CardContent className="pt-4">
                     <div className="h-4 w-40 animate-pulse rounded bg-muted" />
                   </CardContent>
                 </Card>
-              ) : detailsData.dues.length === 0 ? (
+                      ) : dues.length === 0 ? (
                 <ListEmptyState
                   title="No dues generated yet"
                   description="Start a salary month to generate dues for members."
@@ -401,21 +420,39 @@ export default function MuqtadiDetailsModal({
                   className="min-h-36"
                 />
               ) : (
-                detailsData.dues.map((due) => (
+                        dues.map((due) => {
+                          const expectedAmount = Math.max(Number(due.expectedAmount ?? 0), 0);
+                          const paidAmount = Math.max(Number(due.paidAmount ?? 0), 0);
+                          const creditAmount = Math.max(Number(due.creditAmount ?? 0), 0);
+                          const remainingAmount = Math.max(Number(due.remainingAmount ?? 0), 0);
+                          return (
                   <Card key={due.id}>
                     <CardContent className="space-y-2 pt-4 text-sm">
                       <div className="flex items-center justify-between gap-2">
                         <p className="font-medium">{formatCycleLabel(due.month, due.year)}</p>
-                        <Badge variant={due.status === 'PAID' ? 'default' : 'secondary'}>{due.status}</Badge>
+                                <Badge variant={remainingAmount > 0 ? 'secondary' : 'default'}>
+                                  {remainingAmount > 0 ? 'PENDING' : 'PAID'}
+                                </Badge>
                       </div>
-                      <div className="grid gap-1 sm:grid-cols-3">
-                        <p><span className="text-muted-foreground">Expected:</span> {formatCurrency(due.expectedAmount)}</p>
-                        <p><span className="text-muted-foreground">Paid:</span> {formatCurrency(due.paidAmount)}</p>
-                        <p><span className="text-muted-foreground">Cycle:</span> {getCycleStatus(due.month, due.year)}</p>
+                              <div className="grid gap-1 sm:grid-cols-2">
+                                <p><span className="text-muted-foreground">Total:</span> {formatCurrency(expectedAmount)}</p>
+                                <p><span className="text-muted-foreground">Paid:</span> {formatCurrency(paidAmount)}</p>
+                                {creditAmount > 0 ? (
+                                  <p className="text-emerald-700">
+                                    <span className="text-muted-foreground">Credit:</span> {formatCurrency(creditAmount)}
+                                  </p>
+                                ) : (
+                                  <p><span className="text-muted-foreground">Cycle:</span> {getCycleStatus(due.month, due.year)}</p>
+                                )}
+                                <p className={remainingAmount > 0 ? 'text-red-600' : 'text-emerald-700'}>
+                                  <span className="text-muted-foreground">Remaining:</span>{' '}
+                                  {remainingAmount > 0 ? formatCurrency(remainingAmount) : 'Paid'}
+                                </p>
                       </div>
                     </CardContent>
                   </Card>
-                ))
+                          );
+                        })
               )}
             </TabsContent>
 
