@@ -513,11 +513,24 @@ export const muqtadisService = {
     return response.data;
   },
 
-  async getAll(params?: { page?: number; limit?: number; search?: string; isDeleted?: boolean }): Promise<MuqtadiListResponse> {
+  async getAll(params?: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    isDeleted?: boolean;
+    accountStatus?: 'all' | 'account' | 'offline';
+    paymentStatus?: 'all' | 'paid' | 'partial' | 'unpaid' | 'proof_pending';
+    verificationStatus?: 'all' | 'verified' | 'pending';
+    cycleStatus?: 'all' | 'included' | 'not_included';
+  }): Promise<MuqtadiListResponse> {
     const query = new URLSearchParams();
     if (params?.page) query.append('page', String(params.page));
     if (params?.limit) query.append('limit', String(params.limit));
     if (params?.search) query.append('search', params.search);
+    if (params?.accountStatus && params.accountStatus !== 'all') query.append('accountStatus', params.accountStatus);
+    if (params?.paymentStatus && params.paymentStatus !== 'all') query.append('paymentStatus', params.paymentStatus);
+    if (params?.verificationStatus && params.verificationStatus !== 'all') query.append('verificationStatus', params.verificationStatus);
+    if (params?.cycleStatus && params.cycleStatus !== 'all') query.append('cycleStatus', params.cycleStatus);
     if (params?.isDeleted !== undefined) query.append('isDeleted', String(params.isDeleted));
 
     const suffix = query.toString();
@@ -605,6 +618,16 @@ export const muqtadisService = {
   async getById(id: string): Promise<MuqtadiDetails> {
     const response = await api.get<MuqtadiDetails>(`/muqtadis/${id}`);
     return response.data;
+  },
+
+  async getDetailPayments(id: string): Promise<MuqtadiDetails['payments']> {
+    const detail = await this.getById(id);
+    return Array.isArray(detail.payments) ? detail.payments : [];
+  },
+
+  async getDetailHistory(id: string): Promise<MuqtadiDetails['history']> {
+    const detail = await this.getById(id);
+    return Array.isArray(detail.history) ? detail.history : [];
   },
 
   async getSettings(): Promise<ImamSalarySettings> {

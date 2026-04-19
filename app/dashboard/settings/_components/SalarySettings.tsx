@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { queryKeys } from '@/lib/query-keys';
 import { CalendarDays, Loader2, Settings } from 'lucide-react';
 import { toast } from 'sonner';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -144,11 +145,11 @@ export function SalarySettings() {
   }, []);
 
   const nextCycleInfoQuery = useQuery<NextCycleInfo>({
-    queryKey: ['muqtadi-next-cycle-info'],
+    queryKey: queryKeys.muqtadiNextCycleInfo,
     queryFn: () => muqtadisService.getNextCycleInfo(),
     staleTime: 30_000,
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
     retry: false,
   });
 

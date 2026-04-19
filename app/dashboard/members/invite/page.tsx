@@ -28,6 +28,8 @@ import type { UserRole } from '@/src/constants';
 import { usePermission } from '@/hooks/usePermission';
 import { openExternalUrl } from '@/src/utils/open-external-url';
 import { isValidIndianPhone, normalizeIndianPhone } from '@/src/utils/phone';
+import { useQueryClient } from '@tanstack/react-query';
+import { queryKeys } from '@/lib/query-keys';
 
 const INVITABLE_ROLES: { value: UserRole; label: string }[] = [
   { value: USER_ROLES.ADMIN, label: 'Admin' },
@@ -37,6 +39,7 @@ const INVITABLE_ROLES: { value: UserRole; label: string }[] = [
 
 export default function InviteMemberPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { canManageMembers } = usePermission();
 
   useEffect(() => {
@@ -76,7 +79,24 @@ export default function InviteMemberPage() {
     }
 
     setIsLoading(true);
+    const previousInvites = queryClient.getQueryData<any[]>(queryKeys.invites);
     try {
+      const optimisticId = `optimistic-invite-${Date.now()}`;
+      queryClient.setQueryData<any[]>(queryKeys.invites, (prev = []) => [
+        {
+          id: optimisticId,
+          phone: normalizedPhone,
+          email: null,
+          role: formData.role,
+          status: 'PENDING',
+          createdAt: new Date().toISOString(),
+          expiresAt: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(),
+          usedCount: 0,
+          maxUses: 1,
+        },
+        ...prev,
+      ]);
+
       const response = await membersService.invite({
         phone: normalizedPhone,
         role: formData.role as UserRole,
@@ -92,8 +112,10 @@ export default function InviteMemberPage() {
         setInviteLink(link);
       }
 
+      await queryClient.invalidateQueries({ queryKey: queryKeys.invites });
       toast.success('Invite link created successfully');
     } catch (error) {
+      queryClient.setQueryData(queryKeys.invites, previousInvites);
       toast.error(getErrorMessage(error, 'Failed to send invitation. Please try again.'));
     } finally {
       setIsLoading(false);

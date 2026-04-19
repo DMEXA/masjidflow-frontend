@@ -28,6 +28,7 @@ import type { Donation, Expense } from '@/types';
 import { getErrorMessage } from '@/src/utils/error';
 import { formatCurrency, formatDate } from '@/src/utils/format';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
+import { queryKeys } from '@/lib/query-keys';
 
 const fundTypeLabels: Record<Fund['type'], string> = {
   MASJID: 'Masjid',
@@ -83,13 +84,11 @@ export default function FundDetailPage() {
   };
 
   const fundQuery = useQuery({
-    queryKey: ['fund', fundId],
+    queryKey: queryKeys.fundDetail(fundId),
     queryFn: fetchFund,
     enabled: Boolean(fundId),
     staleTime: 30_000,
     placeholderData: keepPreviousData,
-    refetchOnWindowFocus: false,
-    refetchOnMount: false,
   });
 
   const fund = fundQuery.data?.fund as Fund | undefined;
@@ -125,7 +124,7 @@ export default function FundDetailPage() {
       setIsCategoryEditorOpen(false);
       await Promise.all([
         fundQuery.refetch(),
-        queryClient.invalidateQueries({ queryKey: ['funds'] }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.funds(), exact: false }),
       ]);
       toast.success('Category added successfully');
     } catch (error) {

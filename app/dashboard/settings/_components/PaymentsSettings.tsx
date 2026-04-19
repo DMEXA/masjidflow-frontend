@@ -13,6 +13,7 @@ import { paymentSettingsService } from '@/services/payment-settings.service';
 import { useAuthStore } from '@/src/store/auth.store';
 import { getErrorMessage } from '@/src/utils/error';
 import { invalidateMosqueLiveQueries } from '@/lib/realtime-invalidation';
+import { queryKeys } from '@/lib/query-keys';
 
 export function PaymentsSettings() {
   const queryClient = useQueryClient();
@@ -33,12 +34,12 @@ export function PaymentsSettings() {
   const [snapshotPaymentForm, setSnapshotPaymentForm] = useState(paymentForm);
 
   const paymentSettingsQuery = useQuery({
-    queryKey: ['payment-settings', currentMosque?.id ?? 'none'],
+    queryKey: queryKeys.paymentSettings(currentMosque?.id),
     queryFn: () => paymentSettingsService.get(),
     enabled: Boolean(currentMosque?.id),
     staleTime: 30_000,
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
     retry: false,
   });
 
@@ -124,6 +125,7 @@ export function PaymentsSettings() {
       });
 
       toast.success('Payment settings updated');
+      await queryClient.invalidateQueries({ queryKey: queryKeys.paymentSettings(mosqueId) });
       await invalidateMosqueLiveQueries(queryClient, mosqueId);
       setSnapshotPaymentForm(paymentForm);
       setIsEditing(false);

@@ -1,8 +1,9 @@
+import { memo, useMemo } from 'react';
 import { User } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { ActionOverflowMenu } from '@/components/common/action-overflow-menu';
 
-export default function MuqtadiCard({
+function MuqtadiCard({
   item,
   paymentStatus,
   formatDate,
@@ -72,42 +73,59 @@ export default function MuqtadiCard({
   const joinedLabel = formatDate(item.createdAt);
   const contactLabel = item.phone || item.whatsappNumber || item.email || '-';
 
-  const menuItems = [
-    requiresPayment
-      ? {
-          label: 'Make Payment',
-          onSelect: () => openPayment(item),
-          disabled: isDeleted,
-        }
-      : null,
-    hasPendingOrProof
-      ? {
-          label: pendingVerificationId === item.id ? 'Verifying...' : 'Verify',
-          onSelect: () => handleVerifyMuqtadi(item),
-          disabled: pendingVerificationId === item.id || Boolean(pendingVerificationId),
-        }
-      : null,
-    hasPendingOrProof
-      ? {
-          label: pendingVerificationId === item.id ? 'Rejecting...' : 'Reject',
-          onSelect: () => handleRejectMuqtadi(item),
-          disabled: pendingVerificationId === item.id || Boolean(pendingVerificationId),
-        }
-      : null,
-    {
-      label: actionLoadingId === item.id ? 'Deleting...' : 'Delete',
-      onSelect: () => toggleStatus(item, 'DISABLED'),
-      destructive: true,
-      separatorBefore: true,
-      disabled: isDisabled,
-    },
-  ].filter(Boolean);
+  const menuItems = useMemo(
+    () => [
+      requiresPayment
+        ? {
+            label: 'Make Payment',
+            onSelect: () => openPayment(item),
+            disabled: isDeleted,
+          }
+        : null,
+      hasPendingOrProof
+        ? {
+            label: pendingVerificationId === item.id ? 'Verifying...' : 'Verify',
+            onSelect: () => handleVerifyMuqtadi(item),
+            disabled: pendingVerificationId === item.id || Boolean(pendingVerificationId),
+          }
+        : null,
+      hasPendingOrProof
+        ? {
+            label: pendingVerificationId === item.id ? 'Rejecting...' : 'Reject',
+            onSelect: () => handleRejectMuqtadi(item),
+            disabled: pendingVerificationId === item.id || Boolean(pendingVerificationId),
+          }
+        : null,
+      {
+        label: actionLoadingId === item.id ? 'Deleting...' : 'Delete',
+        onSelect: () => toggleStatus(item, 'DISABLED'),
+        destructive: true,
+        separatorBefore: true,
+        disabled: isDisabled,
+      },
+    ].filter(Boolean),
+    [
+      actionLoadingId,
+      handleRejectMuqtadi,
+      handleVerifyMuqtadi,
+      hasPendingOrProof,
+      isDeleted,
+      isDisabled,
+      item,
+      openPayment,
+      pendingVerificationId,
+      requiresPayment,
+      toggleStatus,
+    ],
+  );
 
   return (
     <div
       className={`space-y-1.5 rounded-lg border px-3 py-2.5 shadow-sm ${
         isDisabled ? 'opacity-80' : ''
       } cursor-pointer`}
+      data-row-kind="muqtadi"
+      data-row-id={item.id}
       role="button"
       tabIndex={0}
       onClick={() => openPaymentDetails(item)}
@@ -155,3 +173,5 @@ export default function MuqtadiCard({
     </div>
   );
 }
+
+export default memo(MuqtadiCard);

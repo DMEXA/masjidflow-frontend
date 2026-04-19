@@ -35,6 +35,8 @@ import { useAuthStore } from '@/src/store/auth.store';
 import { useFundsListQuery } from '@/hooks/useFundsListQuery';
 import { useQueryClient } from '@tanstack/react-query';
 import { parseStrictAmountInput } from '@/src/utils/numeric-input';
+import { queryKeys } from '@/lib/query-keys';
+import { invalidateDonationMutationQueries } from '@/lib/money-cache';
 
 function resolveReceiptUrl(receipt: string, baseOrigin: string): string | null {
   const raw = receipt.trim();
@@ -198,17 +200,8 @@ export default function EditDonationPage() {
         ...(receiptUrl ? { receipt: receiptUrl } : {}),
       });
 
-      await Promise.all([
-        queryClient.invalidateQueries({
-          predicate: (query) => query.queryKey.some((part) => String(part) === 'pending-count'),
-        }),
-        queryClient.invalidateQueries({
-          predicate: (query) => query.queryKey.some((part) => String(part) === 'donations'),
-        }),
-        queryClient.invalidateQueries({ queryKey: ['funds'] }),
-        queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
-        queryClient.invalidateQueries({ queryKey: ['reports'] }),
-      ]);
+      await invalidateDonationMutationQueries(queryClient, mosque?.id);
+      await queryClient.invalidateQueries({ queryKey: queryKeys.funds(mosque?.id), exact: false });
 
       toast.success('Donation updated successfully');
       router.push(`/dashboard/donations/${params.id}`);

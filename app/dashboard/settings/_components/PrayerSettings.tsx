@@ -73,8 +73,8 @@ export function PrayerSettings() {
     queryFn: () => mosqueService.getPrayerTimes(currentMosque!.id),
     enabled: Boolean(currentMosque?.id),
     staleTime: 30_000,
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
     retry: false,
   });
 

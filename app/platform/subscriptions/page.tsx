@@ -33,7 +33,7 @@ export default function PlatformSubscriptionsPage() {
     queryKey: queryKeys.platformSubscriptions({ page, limit: pageLimit, status: 'all' }),
     queryFn: () => platformAdminService.getMosqueBilling({ page, limit: pageLimit }),
     staleTime: 30_000,
-    refetchOnWindowFocus: false,
+    refetchOnWindowFocus: true,
   });
 
   const rows = subscriptionsQuery.data?.data ?? [];

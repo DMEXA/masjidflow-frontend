@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Loader2, Plus, Trash2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { ListEmptyState } from '@/components/common/list-empty-state';
-import { DrawerSkeleton } from '@/components/common/loading-skeletons';
 import {
   Sheet,
   SheetContent,
@@ -14,12 +14,47 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { queryKeys } from '@/lib/queryKeys';
+import { muqtadisService } from '@/services/muqtadis.service';
+
+function buildInitialDetails(selectedMuqtadi, details) {
+  if (details) return details;
+  if (!selectedMuqtadi) return undefined;
+
+  return {
+    id: selectedMuqtadi.id,
+    userId: selectedMuqtadi.userId ?? null,
+    accountState: selectedMuqtadi.accountState ?? 'OFFLINE',
+    setupLinkExpiresAt: selectedMuqtadi.setupLinkExpiresAt ?? null,
+    setupLinkExpiresInMinutes: selectedMuqtadi.setupLinkExpiresInMinutes ?? null,
+    name: selectedMuqtadi.name,
+    fatherName: selectedMuqtadi.fatherName ?? '',
+    email: selectedMuqtadi.email ?? null,
+    householdMembers: selectedMuqtadi.householdMembers ?? 1,
+    memberNames: Array.isArray(selectedMuqtadi.memberNames) ? selectedMuqtadi.memberNames : [selectedMuqtadi.name].filter(Boolean),
+    whatsappNumber: selectedMuqtadi.whatsappNumber ?? null,
+    isVerified: selectedMuqtadi.isVerified ?? false,
+    category: selectedMuqtadi.category ?? null,
+    phone: selectedMuqtadi.phone ?? null,
+    notes: selectedMuqtadi.notes ?? null,
+    status: selectedMuqtadi.status ?? 'ACTIVE',
+    overview: {
+      totalDue: 0,
+      totalPaid: 0,
+      outstandingAmount: 0,
+    },
+    dues: [],
+    payments: [],
+    history: [],
+  };
+}
 
 export default function MuqtadiDetailsModal({
   open,
   onOpenChange,
   details,
   selectedMuqtadi,
+  onDetailsChange,
   formatDate,
   formatCurrency,
   formatCycleLabel,
@@ -41,35 +76,92 @@ export default function MuqtadiDetailsModal({
   isSendingResetLink,
   authLinkState,
 }) {
+  const queryClient = useQueryClient();
   const [dependentName, setDependentName] = useState('');
+  const [activeTab, setActiveTab] = useState('overview');
+  const muqtadiId = selectedMuqtadi?.id;
+
+  const detailQuery = useQuery({
+    queryKey: queryKeys.muqtadiDetail(muqtadiId),
+    queryFn: () => muqtadisService.getById(muqtadiId),
+    enabled: Boolean(muqtadiId),
+    initialData: () => buildInitialDetails(selectedMuqtadi, details),
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
+  });
+
+  const paymentsQuery = useQuery({
+    queryKey: queryKeys.muqtadiPayments(muqtadiId),
+    queryFn: async () => {
+      const cachedDetail = queryClient.getQueryData(queryKeys.muqtadiDetail(muqtadiId));
+      if (cachedDetail && Array.isArray(cachedDetail.payments)) {
+        return cachedDetail.payments;
+      }
+      return muqtadisService.getDetailPayments(muqtadiId);
+    },
+    enabled: activeTab === 'payments' && Boolean(muqtadiId),
+    initialData: () => detailQuery.data?.payments ?? [],
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
+  });
+
+  const historyQuery = useQuery({
+    queryKey: queryKeys.muqtadiHistory(muqtadiId),
+    queryFn: async () => {
+      const cachedDetail = queryClient.getQueryData(queryKeys.muqtadiDetail(muqtadiId));
+      if (cachedDetail && Array.isArray(cachedDetail.history)) {
+        return cachedDetail.history;
+      }
+      return muqtadisService.getDetailHistory(muqtadiId);
+    },
+    enabled: activeTab === 'history' && Boolean(muqtadiId),
+    initialData: () => detailQuery.data?.history ?? [],
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
+  });
+
+  const detailsData = detailQuery.data ?? buildInitialDetails(selectedMuqtadi, details) ?? null;
+  const payments = activeTab === 'payments'
+    ? (paymentsQuery.data ?? detailsData?.payments ?? [])
+    : (detailsData?.payments ?? []);
+  const history = activeTab === 'history'
+    ? (historyQuery.data ?? detailsData?.history ?? [])
+    : (detailsData?.history ?? []);
 
   useEffect(() => {
     if (!open) {
       setDependentName('');
+      setActiveTab('overview');
     }
-  }, [open, details?.id]);
+  }, [open]);
+
+  useEffect(() => {
+    if (detailsData && onDetailsChange) {
+      onDetailsChange(detailsData);
+    }
+  }, [detailsData, onDetailsChange]);
 
   const memberNames = useMemo(() => {
-    if (!details) return [];
-    if (Array.isArray(details.memberNames) && details.memberNames.length > 0) {
-      return details.memberNames.filter((name) => Boolean(String(name || '').trim()));
+    if (!detailsData) return [];
+    if (Array.isArray(detailsData.memberNames) && detailsData.memberNames.length > 0) {
+      return detailsData.memberNames.filter((name) => Boolean(String(name || '').trim()));
     }
-    if (details.name) {
-      return [details.name];
+    if (detailsData.name) {
+      return [detailsData.name];
     }
     return [];
-  }, [details]);
+  }, [detailsData]);
 
-  const accountState = details?.accountState || 'OFFLINE';
-  const pendingExpiryMinutes = authLinkState?.expiresInMinutes ?? details?.setupLinkExpiresInMinutes ?? null;
+  const accountState = detailsData?.accountState || 'OFFLINE';
+  const pendingExpiryMinutes = authLinkState?.expiresInMinutes ?? detailsData?.setupLinkExpiresInMinutes ?? null;
   const activeLink = authLinkState?.link ?? '';
 
   const isAlreadyIncludedInCurrentCycle = useMemo(() => {
-    if (!details || details.dues.length === 0) {
+    if (!detailsData || detailsData.dues.length === 0) {
       return false;
     }
 
-    const latestDue = [...details.dues].sort((a, b) => {
+    const latestDue = [...detailsData.dues].sort((a, b) => {
       const ay = a.year ?? 0;
       const by = b.year ?? 0;
       if (ay !== by) return by - ay;
@@ -88,15 +180,15 @@ export default function MuqtadiDetailsModal({
     const currentYear = now.getFullYear();
 
     return latestDue.month === currentMonth && latestDue.year === currentYear;
-  }, [details]);
+  }, [detailsData]);
 
   const currentCycleDue = useMemo(() => {
-    if (!details) return null;
+    if (!detailsData) return null;
     const now = new Date();
     const currentMonth = now.getMonth() + 1;
     const currentYear = now.getFullYear();
-    return details.dues.find((due) => due.month === currentMonth && due.year === currentYear) ?? null;
-  }, [details]);
+    return detailsData.dues.find((due) => due.month === currentMonth && due.year === currentYear) ?? null;
+  }, [detailsData]);
 
   const removeBlockedByPayment = Number(currentCycleDue?.paidAmount ?? 0) > 0;
 
@@ -104,14 +196,11 @@ export default function MuqtadiDetailsModal({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-2xl">
         <SheetHeader>
-          <SheetTitle>{details?.name || 'Household Details'}</SheetTitle>
+          <SheetTitle>{detailsData?.name || selectedMuqtadi?.name || 'Household Details'}</SheetTitle>
           <SheetDescription>Overview, dues, payments, and full admin controls</SheetDescription>
         </SheetHeader>
 
-        {!details ? (
-          <DrawerSkeleton />
-        ) : (
-          <Tabs defaultValue="overview" className="mt-4 space-y-3">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-4 space-y-3">
             <TabsList className="grid w-full grid-cols-4">
               <TabsTrigger value="overview">Overview</TabsTrigger>
               <TabsTrigger value="dues">Dues</TabsTrigger>
@@ -122,13 +211,13 @@ export default function MuqtadiDetailsModal({
             <TabsContent value="overview" className="space-y-3">
               <Card>
                 <CardContent className="space-y-2 pt-4 text-sm">
-                  <p><span className="text-muted-foreground">Name:</span> {details.name}</p>
-                  <p><span className="text-muted-foreground">Phone:</span> {details.phone || details.whatsappNumber || '-'}</p>
+                  <p><span className="text-muted-foreground">Name:</span> {detailsData?.name || selectedMuqtadi?.name || '-'}</p>
+                  <p><span className="text-muted-foreground">Phone:</span> {detailsData?.phone || detailsData?.whatsappNumber || selectedMuqtadi?.phone || selectedMuqtadi?.whatsappNumber || '-'}</p>
                   <p>
                     <span className="text-muted-foreground">Account:</span>{' '}
                     {accountState === 'ACTIVE' ? 'Online' : accountState === 'PENDING_SETUP' ? 'Pending Setup' : 'Offline'}
                   </p>
-                  <p><span className="text-muted-foreground">Members:</span> {details.householdMembers}</p>
+                  <p><span className="text-muted-foreground">Members:</span> {detailsData?.householdMembers ?? selectedMuqtadi?.householdMembers ?? '-'}</p>
                   <p><span className="text-muted-foreground">Join Date:</span> {selectedMuqtadi?.createdAt ? formatDate(selectedMuqtadi.createdAt) : '-'}</p>
                 </CardContent>
               </Card>
@@ -165,7 +254,7 @@ export default function MuqtadiDetailsModal({
                   ) : (
                     <div className="space-y-2">
                       {memberNames.map((name, index) => (
-                        <div key={`${details.id}-member-${index}`} className="flex items-center justify-between rounded-md border px-2 py-1.5">
+                        <div key={`${detailsData?.id || selectedMuqtadi?.id || 'muqtadi'}-member-${index}`} className="flex items-center justify-between rounded-md border px-2 py-1.5">
                           <div className="flex items-center gap-2">
                             <p>{name}</p>
                             <Badge variant="secondary">{index === 0 ? 'Head' : 'Dependent'}</Badge>
@@ -297,7 +386,13 @@ export default function MuqtadiDetailsModal({
             </TabsContent>
 
             <TabsContent value="dues" className="space-y-3">
-              {details.dues.length === 0 ? (
+              {!detailsData ? (
+                <Card>
+                  <CardContent className="pt-4">
+                    <div className="h-4 w-40 animate-pulse rounded bg-muted" />
+                  </CardContent>
+                </Card>
+              ) : detailsData.dues.length === 0 ? (
                 <ListEmptyState
                   title="No dues generated yet"
                   description="Start a salary month to generate dues for members."
@@ -306,7 +401,7 @@ export default function MuqtadiDetailsModal({
                   className="min-h-36"
                 />
               ) : (
-                details.dues.map((due) => (
+                detailsData.dues.map((due) => (
                   <Card key={due.id}>
                     <CardContent className="space-y-2 pt-4 text-sm">
                       <div className="flex items-center justify-between gap-2">
@@ -325,7 +420,14 @@ export default function MuqtadiDetailsModal({
             </TabsContent>
 
             <TabsContent value="payments" className="space-y-3">
-              {details.payments.length === 0 ? (
+              {activeTab === 'payments' && paymentsQuery.isFetching && payments.length === 0 ? (
+                <Card>
+                  <CardContent className="space-y-2 pt-4 text-sm">
+                    <div className="h-4 w-40 animate-pulse rounded bg-muted" />
+                    <div className="h-4 w-28 animate-pulse rounded bg-muted" />
+                  </CardContent>
+                </Card>
+              ) : payments.length === 0 ? (
                 <ListEmptyState
                   title="No payment records yet"
                   description="Record the first payment to start this history."
@@ -334,7 +436,7 @@ export default function MuqtadiDetailsModal({
                   className="min-h-36"
                 />
               ) : (
-                details.payments.map((entry) => {
+                payments.map((entry) => {
                   const paymentStatus = String(entry.details?.status || 'PENDING').toLowerCase();
                   const paymentAmount = Number(entry.details?.amount || 0);
                   return (
@@ -362,7 +464,14 @@ export default function MuqtadiDetailsModal({
             </TabsContent>
 
             <TabsContent value="history" className="space-y-3">
-              {details.history.length === 0 ? (
+              {activeTab === 'history' && historyQuery.isFetching && history.length === 0 ? (
+                <Card>
+                  <CardContent className="space-y-2 pt-4 text-sm">
+                    <div className="h-4 w-40 animate-pulse rounded bg-muted" />
+                    <div className="h-4 w-52 animate-pulse rounded bg-muted" />
+                  </CardContent>
+                </Card>
+              ) : history.length === 0 ? (
                 <ListEmptyState
                   title="No history entries"
                   description="Profile and payment updates will be listed here."
@@ -371,7 +480,7 @@ export default function MuqtadiDetailsModal({
                   className="min-h-36"
                 />
               ) : (
-                details.history.map((entry) => (
+                history.map((entry) => (
                   <Card key={entry.id}>
                     <CardContent className="space-y-1 pt-4 text-sm">
                       <p className="font-medium">{entry.action}</p>
@@ -382,7 +491,6 @@ export default function MuqtadiDetailsModal({
               )}
             </TabsContent>
           </Tabs>
-        )}
       </SheetContent>
     </Sheet>
   );

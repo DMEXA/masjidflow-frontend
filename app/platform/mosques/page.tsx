@@ -31,6 +31,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { invalidatePlatformMosquesQueries } from '@/lib/money-cache';
 
 const EMPTY_META: PaginationMeta = {
   total: 0,
@@ -55,7 +56,7 @@ export default function PlatformMosquesPage() {
     queryKey: queryKeys.platformMosques({ page, limit: pageLimit, search: '', status: 'all' }),
     queryFn: () => platformAdminService.getMosques({ page, limit: pageLimit }),
     staleTime: 30_000,
-    refetchOnWindowFocus: false,
+    refetchOnWindowFocus: true,
   });
 
   const rows = mosquesQuery.data?.data ?? [];
@@ -63,7 +64,7 @@ export default function PlatformMosquesPage() {
   const loading = mosquesQuery.isLoading;
 
   const invalidateMosques = async () => {
-    await queryClient.invalidateQueries({ queryKey: ['platform-mosques'] });
+    await invalidatePlatformMosquesQueries(queryClient);
   };
 
   const bulkDeleteMutation = useMutation({

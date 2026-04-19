@@ -28,13 +28,13 @@ import { toast } from 'sonner';
 import { getErrorMessage } from '@/src/utils/error';
 import type { Donation } from '@/types';
 import { PAYMENT_TYPES } from '@/src/constants';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '@/lib/query-keys';
 import { getSafeLimit } from '@/src/utils/pagination';
 import { collectPaginatedExportRows, downloadPdfExport, EXPORT_MAX_ROWS } from '@/src/utils/export';
 import { useFundsListQuery } from '@/hooks/useFundsListQuery';
 import { useDebounce } from '@/hooks/useDebounce';
-import { invalidateMoneyQueries } from '@/lib/money-cache';
+import { invalidateDonationMutationQueries, invalidateMoneyQueries } from '@/lib/money-cache';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { ListEmptyState } from '@/components/common/list-empty-state';
 import { API_BASE_URL } from '@/src/constants';
@@ -95,7 +95,7 @@ export default function DonationsPage() {
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [bulkActionLoading, setBulkActionLoading] = useState<'approve' | 'reject' | 'delete' | null>(null);
   const [isBulkDeleteOpen, setIsBulkDeleteOpen] = useState(false);
-  const pageLimit = getSafeLimit(20);
+  const [limit] = useState(() => getSafeLimit(20));
   const debouncedSearch = useDebounce(searchQuery);
   const apiBaseUrl = API_BASE_URL ?? '';
   const apiOrigin = apiBaseUrl.replace('/api/v1', '');
@@ -113,7 +113,7 @@ export default function DonationsPage() {
   const donationsQuery = useQuery({
     queryKey: queryKeys.donations(mosqueId, {
       page,
-      limit: pageLimit,
+      limit,
       status: donationStatusFilter,
       paymentType: paymentTypeFilter,
       fundType: fundTypeFilter,
@@ -122,35 +122,83 @@ export default function DonationsPage() {
     queryFn: () =>
       donationsService.getAll({
         page,
-        limit: pageLimit,
+        limit,
         donationStatus: donationStatusFilter !== 'all' ? donationStatusFilter : undefined,
         paymentType: paymentTypeFilter !== 'all' ? (paymentTypeFilter as any) : undefined,
         fundId: selectedFundId,
         search: debouncedSearch || undefined,
       }),
     enabled: Boolean(mosqueId) && Boolean(token),
+    placeholderData: keepPreviousData,
     staleTime: 30_000,
     refetchOnMount: false,
-    refetchOnWindowFocus: false,
+    refetchOnWindowFocus: true,
     refetchOnReconnect: true,
   });
 
+  useEffect(() => {
+    if (!mosqueId || !token) return;
+    if (!donationsQuery.data) return;
+
+    const totalPages = donationsQuery.data.totalPages ?? 1;
+    if (page >= totalPages) return;
+
+    const nextPage = page + 1;
+    const nextQueryKey = queryKeys.donations(mosqueId, {
+      page: nextPage,
+      limit,
+      status: donationStatusFilter,
+      paymentType: paymentTypeFilter,
+      fundType: fundTypeFilter,
+      search: debouncedSearch,
+    });
+
+    if (queryClient.getQueryData(nextQueryKey)) return;
+
+    void queryClient.prefetchQuery({
+      queryKey: nextQueryKey,
+      queryFn: () =>
+        donationsService.getAll({
+          page: nextPage,
+          limit,
+          donationStatus: donationStatusFilter !== 'all' ? donationStatusFilter : undefined,
+          paymentType: paymentTypeFilter !== 'all' ? (paymentTypeFilter as any) : undefined,
+          fundId: selectedFundId,
+          search: debouncedSearch || undefined,
+        }),
+      staleTime: 30_000,
+    });
+  }, [
+    mosqueId,
+    token,
+    donationsQuery.data,
+    page,
+    limit,
+    donationStatusFilter,
+    paymentTypeFilter,
+    fundTypeFilter,
+    debouncedSearch,
+    selectedFundId,
+    queryClient,
+  ]);
+
   const pendingCountQuery = useQuery({
-    queryKey: ['pending-count', mosqueId],
+    queryKey: queryKeys.donationsPendingCount(mosqueId),
     queryFn: () => donationsService.getPendingCount(),
     enabled: false,
     staleTime: 30_000,
     refetchOnMount: false,
-    initialData: () => queryClient.getQueryData<{ count: number }>(['pending-count', mosqueId]),
+    initialData: () =>
+      queryClient.getQueryData<{ count: number }>(queryKeys.donationsPendingCount(mosqueId)),
   });
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => donationsService.delete(id),
     onMutate: async (id: string) => {
-      await queryClient.cancelQueries({ queryKey: ['donations', mosqueId ?? 'none'] });
+      await queryClient.cancelQueries({ queryKey: queryKeys.donationsRoot(mosqueId), exact: false });
       const queryKey = queryKeys.donations(mosqueId, {
         page,
-        limit: pageLimit,
+        limit,
         status: donationStatusFilter,
         paymentType: paymentTypeFilter,
         fundType: fundTypeFilter,
@@ -174,7 +222,8 @@ export default function DonationsPage() {
       }
     },
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['donations', mosqueId ?? 'none'] });
+      await invalidateDonationMutationQueries(queryClient, mosqueId);
+      await queryClient.invalidateQueries({ queryKey: queryKeys.funds(mosqueId), exact: false });
       await invalidateMoneyQueries(queryClient);
     },
   });
@@ -232,8 +281,7 @@ export default function DonationsPage() {
   };
 
   const invalidateDonationQueries = async () => {
-    await queryClient.invalidateQueries({ queryKey: ['donations', mosqueId ?? 'none'] });
-    await queryClient.invalidateQueries({ queryKey: ['pending-count', mosqueId] });
+    await invalidateDonationMutationQueries(queryClient, mosqueId);
   };
 
   const handleApprove = async (id: string) => {
@@ -336,7 +384,7 @@ export default function DonationsPage() {
 
   const donations = donationsQuery.data?.data ?? [];
   const currentPage = donationsQuery.data?.page ?? page;
-  const currentLimit = donationsQuery.data?.pageSize ?? pageLimit;
+  const currentLimit = donationsQuery.data?.pageSize ?? limit;
   const currentTotal = donationsQuery.data?.total ?? 0;
   const canGoPrevious = currentPage > 1;
   const canGoNext = currentPage * currentLimit < currentTotal;

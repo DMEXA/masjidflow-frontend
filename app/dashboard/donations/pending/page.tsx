@@ -39,6 +39,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { ActionOverflowMenu } from '@/components/common/action-overflow-menu';
 import { ListEmptyState } from '@/components/common/list-empty-state';
 import { invalidateMoneyQueries } from '@/lib/money-cache';
+import { queryKeys } from '@/lib/query-keys';
 
 function toWaLink(phone?: string) {
   if (!phone) return '';
@@ -79,12 +80,8 @@ export default function PendingDonationsPage() {
   const listCacheRef = useRef<{ key: string; at: number; data: Donation[] } | null>(null);
 
   const refreshDonationQueries = useCallback(async () => {
-    await queryClient.invalidateQueries({
-      predicate: (query) => query.queryKey.some((part) => String(part) === 'pending-count'),
-    });
-    await queryClient.invalidateQueries({
-      predicate: (query) => query.queryKey.some((part) => String(part) === 'donations'),
-    });
+    await queryClient.invalidateQueries({ queryKey: queryKeys.donationsPendingCount(), exact: false });
+    await queryClient.invalidateQueries({ queryKey: queryKeys.donationsRoot(), exact: false });
   }, [queryClient]);
 
   const fetchPending = useCallback(async () => {

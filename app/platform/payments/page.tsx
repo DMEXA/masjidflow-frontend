@@ -20,6 +20,7 @@ import { queryKeys } from '@/lib/query-keys';
 import { getSafeLimit } from '@/src/utils/pagination';
 import { ActionOverflowMenu } from '@/components/common/action-overflow-menu';
 import { ListEmptyState } from '@/components/common/list-empty-state';
+import { invalidatePlatformPaymentsQueries } from '@/lib/money-cache';
 
 const EMPTY_META: PaginationMeta = {
   total: 0,
@@ -53,7 +54,7 @@ export default function PlatformPaymentsPage() {
         ...(mosqueIdFilter ? { mosqueId: mosqueIdFilter } : {}),
       }),
     staleTime: 30_000,
-    refetchOnWindowFocus: false,
+    refetchOnWindowFocus: true,
   });
 
   const rows = paymentsQuery.data?.data ?? [];
@@ -61,7 +62,7 @@ export default function PlatformPaymentsPage() {
   const loading = paymentsQuery.isLoading;
 
   const invalidatePayments = async () => {
-    await queryClient.invalidateQueries({ queryKey: ['platform-payments'] });
+    await invalidatePlatformPaymentsQueries(queryClient);
   };
 
   const verifyMutation = useMutation({

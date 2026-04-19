@@ -52,6 +52,8 @@ import { downloadPdfExport, EXPORT_MAX_ROWS } from '@/src/utils/export';
 import { useDebounce } from '@/hooks/useDebounce';
 import { usePermission } from '@/hooks/usePermission';
 import { invalidateMosqueLiveQueries } from '@/lib/realtime-invalidation';
+import { queryKeys } from '@/lib/query-keys';
+import { invalidateFundsQueries } from '@/lib/money-cache';
 
 export default function FundsPage() {
   const router = useRouter();
@@ -81,17 +83,21 @@ export default function FundsPage() {
   const debouncedSearchTerm = useDebounce(searchTerm);
 
   const fetchInactiveFunds = () => fundsService.getInactive();
+  const fundsKey = queryKeys.funds(mosqueId);
+  const inactiveFundsKey = queryKeys.inactiveFunds(mosqueId);
 
   const fundsQuery = useQuery<FundSummary[]>({
-    queryKey: ['funds'],
+    queryKey: fundsKey,
     queryFn: () => fundsService.getSummary(),
     enabled: Boolean(mosqueId) && Boolean(token),
+    staleTime: 45_000,
   });
 
   const inactiveFundsQuery = useQuery({
-    queryKey: ['inactive-funds'],
+    queryKey: inactiveFundsKey,
     queryFn: fetchInactiveFunds,
     enabled: Boolean(mosqueId) && Boolean(token),
+    staleTime: 45_000,
   });
 
   const funds = useMemo(() => fundsQuery.data ?? [], [fundsQuery.data]);
@@ -167,6 +173,23 @@ export default function FundsPage() {
     }
 
     setIsSaving(true);
+    const previousFunds = queryClient.getQueryData<FundSummary[]>(fundsKey);
+    const optimisticId = `optimistic-fund-${Date.now()}`;
+    queryClient.setQueryData<FundSummary[]>(fundsKey, (prev = []) => [
+      {
+        id: optimisticId,
+        name: name.trim(),
+        description: description.trim() || null,
+        type: fundType,
+        totalDonations: 0,
+        totalExpenses: 0,
+        balance: 0,
+        donationCount: 0,
+        expenseCount: 0,
+        deletedAt: null,
+      },
+      ...prev,
+    ]);
     try {
       await fundsService.create({
         name: name.trim(),
@@ -177,13 +200,12 @@ export default function FundsPage() {
       toast.success('Fund created successfully');
       setIsCreateOpen(false);
       resetForm();
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['funds'] }),
-        invalidateMosqueLiveQueries(queryClient, mosqueId),
-      ]);
     } catch (error) {
+      queryClient.setQueryData(fundsKey, previousFunds);
       toast.error(getErrorMessage(error, 'Failed to create fund'));
     } finally {
+      await invalidateFundsQueries(queryClient, mosqueId);
+      await invalidateMosqueLiveQueries(queryClient, mosqueId);
       setIsSaving(false);
     }
   };
@@ -201,6 +223,18 @@ export default function FundsPage() {
     if (!editId || !validateForm()) return;
 
     setIsSaving(true);
+    const previousFunds = queryClient.getQueryData<FundSummary[]>(fundsKey);
+    queryClient.setQueryData<FundSummary[]>(fundsKey, (prev = []) =>
+      prev.map((item) =>
+        item.id === editId
+          ? {
+              ...item,
+              name: name.trim(),
+              description: description.trim() || null,
+            }
+          : item,
+      ),
+    );
     try {
       await fundsService.update(editId, {
         name: name.trim(),
@@ -210,13 +244,12 @@ export default function FundsPage() {
       setIsEditOpen(false);
       setEditId(null);
       resetForm();
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['funds'] }),
-        invalidateMosqueLiveQueries(queryClient, mosqueId),
-      ]);
     } catch (error) {
+      queryClient.setQueryData(fundsKey, previousFunds);
       toast.error(getErrorMessage(error, 'Failed to update fund'));
     } finally {
+      await invalidateFundsQueries(queryClient, mosqueId);
+      await invalidateMosqueLiveQueries(queryClient, mosqueId);
       setIsSaving(false);
     }
   };
@@ -226,15 +259,28 @@ export default function FundsPage() {
     if (!deleteTargetId) return;
 
     setIsDeleting(true);
+    const previousFunds = queryClient.getQueryData<FundSummary[]>(fundsKey);
+    const previousInactiveFunds = queryClient.getQueryData<any[]>(inactiveFundsKey);
+    const deletingFund = (previousFunds ?? []).find((item) => item.id === deleteTargetId);
+    queryClient.setQueryData<FundSummary[]>(fundsKey, (prev = []) =>
+      prev.filter((item) => item.id !== deleteTargetId),
+    );
+    if (deletingFund) {
+      queryClient.setQueryData<any[]>(inactiveFundsKey, (prev = []) => [
+        {
+          ...deletingFund,
+          deletedAt: new Date().toISOString(),
+        },
+        ...prev,
+      ]);
+    }
     try {
       await fundsService.delete(deleteTargetId);
       toast.success('Fund deactivated successfully');
       setDeleteTargetId(null);
-      await queryClient.invalidateQueries({ queryKey: ['inactive-funds'] });
-      await queryClient.invalidateQueries({ queryKey: ['funds'], exact: false });
-      await queryClient.refetchQueries({ queryKey: ['funds'] });
-      await invalidateMosqueLiveQueries(queryClient, mosqueId);
     } catch (error) {
+      queryClient.setQueryData(fundsKey, previousFunds);
+      queryClient.setQueryData(inactiveFundsKey, previousInactiveFunds);
       const message = getErrorMessage(error, 'Failed to deactivate fund');
       if (message.includes('transactions exist')) {
         toast.error('Fund could not be deactivated.');
@@ -242,22 +288,37 @@ export default function FundsPage() {
         toast.error(message);
       }
     } finally {
+      await invalidateFundsQueries(queryClient, mosqueId);
+      await invalidateMosqueLiveQueries(queryClient, mosqueId);
       setIsDeleting(false);
     }
   };
 
   const handleRestore = async (id: string) => {
     setRestoringFundId(id);
+    const previousFunds = queryClient.getQueryData<FundSummary[]>(fundsKey);
+    const previousInactiveFunds = queryClient.getQueryData<any[]>(inactiveFundsKey);
+    const restoringFund = (previousInactiveFunds ?? []).find((item) => item.id === id);
+    queryClient.setQueryData<any[]>(inactiveFundsKey, (prev = []) => prev.filter((item) => item.id !== id));
+    if (restoringFund) {
+      queryClient.setQueryData<FundSummary[]>(fundsKey, (prev = []) => [
+        {
+          ...restoringFund,
+          deletedAt: null,
+        },
+        ...prev,
+      ]);
+    }
     try {
       await fundsService.restore(id);
       toast.success('Fund restored successfully');
-      await queryClient.invalidateQueries({ queryKey: ['inactive-funds'] });
-      await queryClient.invalidateQueries({ queryKey: ['funds'], exact: false });
-      await queryClient.refetchQueries({ queryKey: ['funds'] });
-      await invalidateMosqueLiveQueries(queryClient, mosqueId);
     } catch (error) {
+      queryClient.setQueryData(fundsKey, previousFunds);
+      queryClient.setQueryData(inactiveFundsKey, previousInactiveFunds);
       toast.error(getErrorMessage(error, 'Failed to restore fund'));
     } finally {
+      await invalidateFundsQueries(queryClient, mosqueId);
+      await invalidateMosqueLiveQueries(queryClient, mosqueId);
       setRestoringFundId(null);
     }
   };

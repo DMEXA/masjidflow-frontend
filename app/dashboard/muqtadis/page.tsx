@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Loader2,
@@ -46,7 +46,8 @@ import {
 } from '@/services/muqtadis.service';
 import { usePermission } from '@/hooks/usePermission';
 import { getErrorMessage } from '@/src/utils/error';
-import { invalidateMoneyQueries } from '@/lib/money-cache';
+import { invalidateMoneyQueries, invalidateMuqtadiMutationQueries } from '@/lib/money-cache';
+import { queryKeys } from '@/lib/queryKeys';
 import { formatCurrency, formatDate, formatCycleLabel, getCycleStatus } from '@/src/utils/format';
 import { ActionOverflowMenu } from '@/components/common/action-overflow-menu';
 import { ListEmptyState } from '@/components/common/list-empty-state';
@@ -121,7 +122,6 @@ export default function MuqtadisPage() {
   const [paymentReference, setPaymentReference] = useState('');
   const [paymentNotes, setPaymentNotes] = useState('');
   const [imamFundSummary, setImamFundSummary] = useState({ totalIncome: 0, totalExpense: 0, balance: 0 });
-  const detailRequestIdRef = useRef(0);
   const resizeDependents = (householdMembersValue: string, currentDependents: string[]) => {
     const parsed = parseStrictIntegerInput(householdMembersValue);
     const householdCount = parsed !== null && parsed > 0 ? Math.min(parsed, 50) : 1;
@@ -169,23 +169,49 @@ export default function MuqtadisPage() {
     fetchImamFundSummary();
   }, [fetchImamFundSummary]);
 
-  const refreshDetails = useCallback(async (id: string) => {
-    const requestId = ++detailRequestIdRef.current;
-    try {
-      const detail = await muqtadisService.getById(id);
-      if (requestId !== detailRequestIdRef.current) {
-        return;
-      }
-      setSelectedDetails(detail);
-    } catch (error) {
-      if (requestId !== detailRequestIdRef.current) {
-        return;
-      }
-      toast.error(getErrorMessage(error, 'Failed to load household details'));
-    }
-  }, []);
+  const buildPreviewDetails = useCallback((item: Muqtadi): MuqtadiDetails => ({
+    id: item.id,
+    userId: item.userId ?? null,
+    accountState: item.accountState ?? 'OFFLINE',
+    setupLinkExpiresAt: item.setupLinkExpiresAt ?? null,
+    setupLinkExpiresInMinutes: item.setupLinkExpiresInMinutes ?? null,
+    name: item.name,
+    fatherName: item.fatherName ?? '',
+    email: item.email ?? null,
+    householdMembers: item.householdMembers ?? 1,
+    memberNames: Array.isArray(item.memberNames) ? item.memberNames : [item.name].filter(Boolean),
+    whatsappNumber: item.whatsappNumber ?? null,
+    isVerified: item.isVerified ?? false,
+    category: item.category ?? null,
+    phone: item.phone ?? null,
+    notes: item.notes ?? null,
+    status: item.status ?? 'ACTIVE',
+    overview: {
+      totalDue: 0,
+      totalPaid: 0,
+      outstandingAmount: 0,
+    },
+    dues: [],
+    payments: [],
+    history: [],
+  }), []);
+
+  const patchDetailCache = useCallback((id: string, updater: (old: MuqtadiDetails | undefined) => MuqtadiDetails | undefined) => {
+    const queryKey = queryKeys.muqtadiDetail(id);
+    queryClient.setQueryData(queryKey, (old: MuqtadiDetails | undefined) => updater(old));
+    setSelectedDetails((old) => (old?.id === id ? updater(old) ?? old : old));
+  }, [queryClient]);
+
+  const invalidateDetailQueries = useCallback(async (id: string) => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: queryKeys.muqtadiDetail(id), exact: true }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.muqtadiPayments(id), exact: true }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.muqtadiHistory(id), exact: true }),
+    ]);
+  }, [queryClient]);
 
   const {
+    items,
     setItems,
     filteredItems,
     stats,
@@ -196,7 +222,6 @@ export default function MuqtadisPage() {
   } = useMuqtadis({
     enabled: canManageMembers,
     selectedDetailId: selectedDetails?.id ?? null,
-    refreshDetails,
   });
 
   const isDeletedMuqtadi = useCallback((item: Muqtadi) => {
@@ -229,7 +254,11 @@ export default function MuqtadisPage() {
     }
   }, [activeTab]);
 
-  const openEdit = (item: Muqtadi) => {
+  const openAddDialog = useCallback(() => {
+    setIsAddOpen(true);
+  }, []);
+
+  const openEdit = useCallback((item: Muqtadi) => {
     setSelectedMuqtadi(item);
     setForm({
       name: item.name,
@@ -240,29 +269,29 @@ export default function MuqtadisPage() {
       notes: item.notes || '',
     });
     setIsEditOpen(true);
-  };
+  }, []);
 
-  const openPayment = (item: Muqtadi) => {
+  const openPayment = useCallback((item: Muqtadi) => {
     setSelectedMuqtadi(item);
     setPaymentMode('new');
     setEditingPaymentId(null);
-    setSelectedCycleId(sortedCycles[0]?.id || '');
+    setSelectedCycleId(cycles[0]?.id || '');
     setPaymentAmount('');
     setPaymentMethod('CASH');
     setPaymentUtr('');
     setPaymentReference('');
     setPaymentNotes('');
     setIsPaymentOpen(true);
-  };
+  }, [cycles]);
 
-  const openPaymentDetails = (item: Muqtadi) => {
+  const openPaymentDetails = useCallback((item: Muqtadi) => {
+    const cached = queryClient.getQueryData<MuqtadiDetails>(queryKeys.muqtadiDetail(item.id));
     setSelectedMuqtadi(item);
-    setSelectedDetails(null);
+    setSelectedDetails(cached ?? buildPreviewDetails(item));
     setSelectedPaymentDetailId(null);
     setPaymentDetailImageFailed(false);
     setIsDrawerOpen(true);
-    void refreshDetails(item.id);
-  };
+  }, [buildPreviewDetails, queryClient]);
 
   const openPaymentAdjustment = (item: Muqtadi, payment: MuqtadiDetails['payments'][number]) => {
     setSelectedMuqtadi(item);
@@ -300,7 +329,29 @@ export default function MuqtadisPage() {
       return;
     }
 
+    const optimisticId = `optimistic-muqtadi-${Date.now()}`;
+    const previousItems = items;
+
     setSubmitting(true);
+    setItems((prev) => [
+      {
+        id: optimisticId,
+        name: form.name.trim(),
+        fatherName: form.fatherName.trim(),
+        householdMembers,
+        memberNames: [form.name.trim(), ...dependents],
+        dependents,
+        whatsappNumber: form.whatsappNumber.trim() || undefined,
+        phone: form.whatsappNumber.trim() || undefined,
+        notes: form.notes.trim() || undefined,
+        status: 'ACTIVE',
+        isDisabled: false,
+        isVerified: false,
+        createdAt: new Date().toISOString(),
+      } as Muqtadi,
+      ...prev,
+    ]);
+
     try {
       await muqtadisService.create({
         name: form.name.trim(),
@@ -316,7 +367,9 @@ export default function MuqtadisPage() {
       setIsAddOpen(false);
       setForm(EMPTY_FORM);
       await actions.fetchItems();
+      await invalidateMuqtadiMutationQueries(queryClient);
     } catch (error) {
+      setItems(previousItems);
       const message = getErrorMessage(error, 'Failed to add household');
       const normalized = message.toLowerCase();
       if (
@@ -328,6 +381,7 @@ export default function MuqtadisPage() {
         toast.error(message);
       }
     } finally {
+      await invalidateMuqtadiMutationQueries(queryClient);
       setSubmitting(false);
     }
   };
@@ -354,7 +408,7 @@ export default function MuqtadisPage() {
       toast.success('Household updated');
       setIsEditOpen(false);
       await actions.fetchItems();
-      await refreshDetails(selectedMuqtadi.id);
+      await invalidateDetailQueries(selectedMuqtadi.id);
     } catch (error) {
       toast.error(getErrorMessage(error, 'Failed to update household'));
     } finally {
@@ -402,11 +456,45 @@ export default function MuqtadisPage() {
       toast.success(paymentMode === 'adjustment' ? 'Payment adjustment recorded' : 'Payment recorded');
       setIsPaymentOpen(false);
       setEditingPaymentId(null);
+      patchDetailCache(selectedMuqtadi.id, (old) => {
+        if (!old) return old;
+        const optimisticEntry = {
+          id: editingPaymentId ?? `optimistic-payment-${Date.now()}`,
+          action: paymentMode === 'adjustment' ? 'PAYMENT_ADJUSTED' : 'PAYMENT_RECORDED',
+          createdAt: new Date().toISOString(),
+          details: {
+            amount,
+            method: paymentMethod,
+            cycleId: selectedCycleId,
+            status: 'PENDING',
+            utr: paymentUtr.trim() || undefined,
+            reference: paymentReference.trim() || undefined,
+          },
+        };
+        return {
+          ...old,
+          payments: [optimisticEntry, ...(old.payments ?? [])],
+        };
+      });
+      queryClient.setQueryData(queryKeys.muqtadiPayments(selectedMuqtadi.id), (old: MuqtadiDetails['payments'] | undefined) => {
+        const optimisticEntry = {
+          id: editingPaymentId ?? `optimistic-payment-${Date.now()}`,
+          action: paymentMode === 'adjustment' ? 'PAYMENT_ADJUSTED' : 'PAYMENT_RECORDED',
+          createdAt: new Date().toISOString(),
+          details: {
+            amount,
+            method: paymentMethod,
+            cycleId: selectedCycleId,
+            status: 'PENDING',
+            utr: paymentUtr.trim() || undefined,
+            reference: paymentReference.trim() || undefined,
+          },
+        };
+        return [optimisticEntry, ...(old ?? [])];
+      });
       await actions.fetchItems();
       await fetchImamFundSummary();
-      if (selectedDetails) {
-        await refreshDetails(selectedMuqtadi.id);
-      }
+      await invalidateDetailQueries(selectedMuqtadi.id);
     } catch (error) {
       toast.error(getErrorMessage(error, 'Failed to record payment'));
     } finally {
@@ -426,6 +514,14 @@ export default function MuqtadisPage() {
       ? selectedDetails.memberNames.filter((entry) => Boolean(String(entry || '').trim()))
       : [selectedDetails.name].filter(Boolean);
     const nextMembers = [...currentMembers, trimmed];
+    patchDetailCache(selectedDetails.id, (old) => {
+      if (!old) return old;
+      return {
+        ...old,
+        memberNames: nextMembers,
+        householdMembers: nextMembers.length,
+      };
+    });
 
     setIsUpdatingDependents(true);
     try {
@@ -435,8 +531,9 @@ export default function MuqtadisPage() {
       });
       toast.success('Dependent added');
       await actions.fetchItems();
-      await refreshDetails(selectedDetails.id);
+      await invalidateDetailQueries(selectedDetails.id);
     } catch (error) {
+      await invalidateDetailQueries(selectedDetails.id);
       toast.error(getErrorMessage(error, 'Failed to add dependent'));
     } finally {
       setIsUpdatingDependents(false);
@@ -461,6 +558,15 @@ export default function MuqtadisPage() {
       return;
     }
 
+    patchDetailCache(selectedDetails.id, (old) => {
+      if (!old) return old;
+      return {
+        ...old,
+        memberNames: nextMembers,
+        householdMembers: nextMembers.length,
+      };
+    });
+
     setIsUpdatingDependents(true);
     try {
       await muqtadisService.update(selectedDetails.id, {
@@ -469,8 +575,9 @@ export default function MuqtadisPage() {
       });
       toast.success('Dependent removed');
       await actions.fetchItems();
-      await refreshDetails(selectedDetails.id);
+      await invalidateDetailQueries(selectedDetails.id);
     } catch (error) {
+      await invalidateDetailQueries(selectedDetails.id);
       toast.error(getErrorMessage(error, 'Failed to remove dependent'));
     } finally {
       setIsUpdatingDependents(false);
@@ -489,7 +596,7 @@ export default function MuqtadisPage() {
         toast.success('Household included in current cycle');
       }
       await actions.fetchItems();
-      await refreshDetails(selectedDetails.id);
+      await invalidateDetailQueries(selectedDetails.id);
     } catch (error) {
       toast.error(getErrorMessage(error, 'Failed to include household in current cycle'));
     } finally {
@@ -509,7 +616,7 @@ export default function MuqtadisPage() {
         toast.success('Household removed from current cycle');
       }
       await actions.fetchItems();
-      await refreshDetails(selectedDetails.id);
+      await invalidateDetailQueries(selectedDetails.id);
     } catch (error) {
       toast.error(getErrorMessage(error, 'Failed to remove household from current cycle'));
     } finally {
@@ -557,7 +664,7 @@ export default function MuqtadisPage() {
       }));
       toast.success('Login link generated');
       await actions.fetchItems();
-      await refreshDetails(selectedDetails.id);
+      await invalidateDetailQueries(selectedDetails.id);
     } catch (error) {
       toast.error(getErrorMessage(error, 'Failed to generate login link'));
     } finally {
@@ -588,7 +695,7 @@ export default function MuqtadisPage() {
       }));
       toast.success('Admin reset link generated');
       await actions.fetchItems();
-      await refreshDetails(selectedDetails.id);
+      await invalidateDetailQueries(selectedDetails.id);
     } catch (error) {
       toast.error(getErrorMessage(error, 'Failed to generate admin reset link'));
     } finally {
@@ -618,7 +725,7 @@ export default function MuqtadisPage() {
       await invalidateMoneyQueries(queryClient);
       await actions.fetchItems();
       await fetchImamFundSummary();
-      await refreshDetails(selectedMuqtadi.id);
+      await invalidateDetailQueries(selectedMuqtadi.id);
     } catch (error) {
       toast.error(getErrorMessage(error, 'Failed to verify payment'));
     } finally {
@@ -636,7 +743,7 @@ export default function MuqtadisPage() {
       await invalidateMoneyQueries(queryClient);
       await actions.fetchItems();
       await fetchImamFundSummary();
-      await refreshDetails(selectedMuqtadi.id);
+      await invalidateDetailQueries(selectedMuqtadi.id);
     } catch (error) {
       toast.error(getErrorMessage(error, 'Failed to reject payment'));
     } finally {
@@ -655,7 +762,7 @@ export default function MuqtadisPage() {
       await invalidateMoneyQueries(queryClient);
       await actions.fetchItems();
       await fetchImamFundSummary();
-      await refreshDetails(selectedMuqtadi.id);
+      await invalidateDetailQueries(selectedMuqtadi.id);
     } catch (error) {
       toast.error(getErrorMessage(error, 'Failed to delete payment'));
     } finally {
@@ -696,7 +803,7 @@ export default function MuqtadisPage() {
     }
   };
 
-  const toggleStatus = async (item: Muqtadi, status: MuqtadiStatus) => {
+  const toggleStatus = useCallback(async (item: Muqtadi, status: MuqtadiStatus) => {
     if (actionLoadingId === item.id) return;
     setActionLoadingId(item.id);
     try {
@@ -742,14 +849,22 @@ export default function MuqtadisPage() {
         }
         setTrashItems((prev) => prev.filter((entry) => entry.id !== item.id));
         await actions.fetchItems();
-        await queryClient.invalidateQueries({ queryKey: ['muqtadis'], exact: false });
+        await invalidateMuqtadiMutationQueries(queryClient);
       }
     } catch (error) {
       toast.error(getErrorMessage(error, 'Failed to update status'));
     } finally {
       setActionLoadingId(null);
     }
-  };
+  }, [
+    actionLoadingId,
+    actions,
+    activeTab,
+    fetchTrashItems,
+    queryClient,
+    setItems,
+    trashPage,
+  ]);
 
   const sortedCycles = useMemo(() => {
     return [...cycles].sort((a, b) => {
@@ -913,8 +1028,14 @@ export default function MuqtadisPage() {
             <MuqtadiList
               isLoading={loading.isLoading}
               items={activeItems}
+              page={filters.page}
+              search={filters.search}
               accountFilter={filters.accountFilter}
-              onAdd={() => setIsAddOpen(true)}
+              verificationFilter={filters.verificationFilter}
+              cycleFilter={filters.cycleFilter}
+              paymentFilter={filters.paymentFilter}
+              sortOrder={filters.sortOrder}
+              onAdd={openAddDialog}
               resolvePaymentStatus={actions.resolvePaymentStatus}
               formatDate={formatDate}
               openEdit={openEdit}
@@ -1082,6 +1203,7 @@ export default function MuqtadisPage() {
         onOpenChange={setIsDrawerOpen}
         details={selectedDetails}
         selectedMuqtadi={selectedMuqtadi}
+        onDetailsChange={setSelectedDetails}
         formatDate={formatDate}
         formatCurrency={formatCurrency}
         formatCycleLabel={formatCycleLabel}

@@ -126,12 +126,15 @@ export default function MembersPage() {
   const [memberToRemoveId, setMemberToRemoveId] = useState<string | null>(null);
   const pageLimit = getSafeLimit(20);
 
-  const membersFilters = {
-    search: debouncedSearch.trim(),
-    role: roleFilter,
-    status: 'all',
-  };
-  const membersQueryKey = queryKeys.members({ page, limit: pageLimit, filters: membersFilters });
+  const membersQueryKey = queryKeys.members({
+    page,
+    limit: pageLimit,
+    filters: {
+      search: '',
+      role: 'all',
+      status: 'all',
+    },
+  });
   const invitesQueryKey = queryKeys.invites;
 
   const membersQuery = useQuery({
@@ -140,8 +143,8 @@ export default function MembersPage() {
     enabled: canManageMembers,
     placeholderData: keepPreviousData,
     staleTime: 30_000,
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
     refetchOnMount: false,
     retry: (failureCount, error) => isTransientServiceError(error) && failureCount < 2,
   });
@@ -151,8 +154,8 @@ export default function MembersPage() {
     queryFn: () => membersService.getInvites(),
     enabled: canManageMembers,
     staleTime: 30_000,
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
     refetchOnMount: false,
     retry: (failureCount, error) => isTransientServiceError(error) && failureCount < 2,
   });
@@ -267,7 +270,7 @@ export default function MembersPage() {
       await membersService.remove(memberId);
       toast.success('Member removed successfully');
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['members'] }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.membersRoot, exact: false }),
         queryClient.invalidateQueries({ queryKey: membersQueryKey }),
         queryClient.invalidateQueries({ queryKey: invitesQueryKey }),
       ]);

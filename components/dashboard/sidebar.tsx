@@ -29,6 +29,7 @@ import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { getSidebarNavGroups } from '@/components/dashboard/sidebar-config';
+import { queryKeys } from '@/lib/query-keys';
 
 interface SidebarProps {
   collapsed: boolean;
@@ -60,13 +61,13 @@ export function DashboardSidebar({ collapsed, onToggle, onMobileClose }: Sidebar
   const canViewPendingCount = isAdmin || isSuperAdmin;
 
   const pendingCountQuery = useQuery({
-    queryKey: ['pending-count', mosque?.id],
+    queryKey: queryKeys.donationsPendingCount(mosque?.id),
     queryFn: () => donationsService.getPendingCount(),
     enabled: Boolean(mosque?.id) && Boolean(token) && canViewPendingCount,
   });
 
   const pendingExpenseCountQuery = useQuery({
-    queryKey: ['expenses-pending-count', mosque?.id],
+    queryKey: queryKeys.expensesPendingCount(mosque?.id),
     queryFn: () => expensesService.getPendingCount(),
     enabled: Boolean(mosque?.id) && Boolean(token) && canViewPendingCount,
   });

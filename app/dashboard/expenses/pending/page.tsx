@@ -16,7 +16,8 @@ import { useAuthStore } from '@/src/store/auth.store';
 import { usePermission } from '@/hooks/usePermission';
 import { getErrorMessage } from '@/src/utils/error';
 import { formatCurrency, formatDate, formatExpenseCategory } from '@/src/utils/format';
-import { invalidateMoneyQueries } from '@/lib/money-cache';
+import { invalidateExpenseMutationQueries, invalidateMoneyQueries } from '@/lib/money-cache';
+import { queryKeys } from '@/lib/query-keys';
 
 export default function PendingExpensesPage() {
   const router = useRouter();
@@ -36,7 +37,14 @@ export default function PendingExpensesPage() {
   }
 
   const pendingQuery = useQuery({
-    queryKey: ['expenses', mosqueId, 'pending'],
+    queryKey: queryKeys.expenses(mosqueId, {
+      page: 1,
+      pageSize: 50,
+      status: 'PENDING',
+      category: 'all',
+      fundType: 'all',
+      search: '',
+    }),
     queryFn: () =>
       expensesService.getAll({
         page: 1,
@@ -47,7 +55,14 @@ export default function PendingExpensesPage() {
     placeholderData: keepPreviousData,
   });
 
-  const pendingQueryKey = ['expenses', mosqueId, 'pending'] as const;
+  const pendingQueryKey = queryKeys.expenses(mosqueId, {
+    page: 1,
+    pageSize: 50,
+    status: 'PENDING',
+    category: 'all',
+    fundType: 'all',
+    search: '',
+  });
 
   const approveMutation = useMutation({
     mutationFn: (id: string) => expensesService.approve(id),
@@ -70,7 +85,7 @@ export default function PendingExpensesPage() {
       toast.error(getErrorMessage(error, 'Failed to approve expense'));
     },
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['expenses', mosqueId] });
+      await invalidateExpenseMutationQueries(queryClient, mosque?.id);
       await invalidateMoneyQueries(queryClient);
       toast.success('Expense approved');
     },
@@ -97,7 +112,7 @@ export default function PendingExpensesPage() {
       toast.error(getErrorMessage(error, 'Failed to reject expense'));
     },
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['expenses', mosqueId] });
+      await invalidateExpenseMutationQueries(queryClient, mosque?.id);
       await invalidateMoneyQueries(queryClient);
       toast.success('Expense rejected');
     },

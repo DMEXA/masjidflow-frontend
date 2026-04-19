@@ -114,7 +114,7 @@ export default function DonateBySlugPage() {
   const publicConfigQuery = useQuery({
     queryKey: queryKeys.publicDonateConfig(mosqueId),
     enabled: Boolean(mosqueId),
-    staleTime: 45_000,
+    staleTime: 60_000,
     gcTime: 15 * 60_000,
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,
@@ -127,7 +127,7 @@ export default function DonateBySlugPage() {
   const publicFundsQuery = useQuery({
     queryKey: queryKeys.publicDonateFunds(mosqueId),
     enabled: Boolean(mosqueId),
-    staleTime: 45_000,
+    staleTime: 60_000,
     gcTime: 15 * 60_000,
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,

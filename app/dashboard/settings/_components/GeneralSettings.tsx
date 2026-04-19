@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Building2, Globe, Loader2, Save } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -10,8 +10,10 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useAuthStore } from '@/src/store/auth.store';
 import { mosqueService, updateMosqueProfile, type UpdateMosqueData } from '@/services/mosque.service';
+import { queryKeys } from '@/lib/query-keys';
 
 export function GeneralSettings() {
+  const queryClient = useQueryClient();
   const fieldClass = 'w-full rounded-xl px-4 py-3';
   const { mosque: currentMosque } = useAuthStore();
   const [isEditing, setIsEditing] = useState(false);
@@ -30,7 +32,7 @@ export function GeneralSettings() {
   const [initialFormData, setInitialFormData] = useState(formData);
 
   const mosqueQuery = useQuery({
-    queryKey: ['mosque'],
+    queryKey: queryKeys.mosqueProfile(currentMosque?.id),
     queryFn: () => {
       if (!currentMosque?.id) {
         throw new Error('Mosque not found');
@@ -38,8 +40,8 @@ export function GeneralSettings() {
       return mosqueService.getById(currentMosque.id);
     },
     enabled: Boolean(currentMosque?.id),
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
     retry: false,
   });
 
@@ -91,6 +93,7 @@ export function GeneralSettings() {
         phone: updatedMosque.phone ?? prev.phone,
         email: updatedMosque.email ?? prev.email,
       }));
+      queryClient.invalidateQueries({ queryKey: queryKeys.mosqueProfile(currentMosque?.id) });
       setIsEditing(false);
     },
     onError: () => {

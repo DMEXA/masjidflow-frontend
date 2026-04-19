@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Muqtadi } from '@/types';
 import { muqtadisService } from '@/services/muqtadis.service';
 import { getErrorMessage } from '@/src/utils/error';
 import { useDebounce } from '@/hooks/useDebounce';
+import { queryKeys } from '@/lib/queryKeys';
 
 export type SortOrder = 'newest' | 'oldest';
 export type AccountFilter = 'all' | 'account' | 'offline';
@@ -11,6 +13,7 @@ export type VerificationFilter = 'all' | 'verified' | 'pending';
 export type StatusFilter = 'all' | 'active' | 'disabled';
 export type CycleFilter = 'all' | 'included' | 'not_included';
 export type PaymentFilter = 'all' | 'paid' | 'partial' | 'unpaid' | 'proof_pending';
+const MUQTADI_PAGE_LIMIT = 20;
 
 type UseMuqtadisOptions = {
   enabled: boolean;
@@ -20,8 +23,8 @@ type UseMuqtadisOptions = {
 
 export function useMuqtadis(options: UseMuqtadisOptions) {
   const { enabled, selectedDetailId, refreshDetails } = options;
+  const queryClient = useQueryClient();
 
-  const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebounce(search);
   const [sortOrder, setSortOrder] = useState<SortOrder>('newest');
@@ -33,9 +36,9 @@ export function useMuqtadis(options: UseMuqtadisOptions) {
   const [paymentFilter, setPaymentFilter] = useState<PaymentFilter>('all');
   const [targetMuqtadies, setTargetMuqtadies] = useState(0);
   const [page, setPage] = useState(1);
+  const [limit] = useState(MUQTADI_PAGE_LIMIT);
   const [totalPages, setTotalPages] = useState(1);
   const [items, setItems] = useState<Muqtadi[]>([]);
-  const [pendingItems, setPendingItems] = useState<Muqtadi[]>([]);
   const [backendStats, setBackendStats] = useState({
     verifiedHouseholds: 0,
     verifiedMuqtadies: 0,
@@ -50,37 +53,57 @@ export function useMuqtadis(options: UseMuqtadisOptions) {
   });
   const [pendingVerificationId, setPendingVerificationId] = useState<string | null>(null);
 
-  const fetchLockRef = useRef(false);
-  const fetchRequestSeqRef = useRef(0);
   const settingsLoadedRef = useRef(false);
-  const listCacheRef = useRef<{
-    key: string;
-    at: number;
-    data: Muqtadi[];
-    pending: Muqtadi[];
-    totalPages: number;
-    backendStats: {
-      verifiedHouseholds: number;
-      verifiedMuqtadies: number;
-      pendingHouseholds: number;
-      pendingMuqtadies: number;
-    };
-    totalMuqtadies: number;
-    registeredMuqtadies: number;
-    totalSalary: number;
-    perHead: number;
-  } | null>(null);
 
-  const parseBooleanValue = useCallback((value: unknown): boolean => {
-    if (typeof value === 'boolean') return value;
-    if (typeof value === 'number') return value === 1;
-    if (typeof value === 'string') {
-      const normalized = value.trim().toLowerCase();
-      if (normalized === 'true' || normalized === '1' || normalized === 'yes') return true;
-      if (normalized === 'false' || normalized === '0' || normalized === 'no' || normalized === '') return false;
-    }
-    return false;
-  }, []);
+  const {
+    data: listResult,
+    isLoading: isListLoading,
+    refetch: refetchList,
+  } = useQuery({
+    queryKey: queryKeys.muqtadis({
+      page,
+      limit,
+      search: debouncedSearch,
+      accountStatus: accountFilter,
+      paymentStatus: paymentFilter,
+      verificationStatus: verificationFilter,
+      cycleStatus: cycleFilter,
+    }),
+    queryFn: () => muqtadisService.getAll({
+      page,
+      limit,
+      search: debouncedSearch || undefined,
+      accountStatus: accountFilter,
+      paymentStatus: paymentFilter,
+      verificationStatus: verificationFilter,
+      cycleStatus: cycleFilter,
+    }),
+    enabled,
+    placeholderData: keepPreviousData,
+    staleTime: 45_000,
+  });
+
+  const {
+    data: summary,
+    isLoading: isSummaryLoading,
+    refetch: refetchSummary,
+  } = useQuery({
+    queryKey: ['muqtadi-salary-summary'],
+    queryFn: () => muqtadisService.getSalarySummary(),
+    enabled,
+    staleTime: 45_000,
+  });
+
+  const {
+    data: statsResponse,
+    isLoading: isStatsLoading,
+    refetch: refetchStats,
+  } = useQuery({
+    queryKey: ['muqtadi-stats'],
+    queryFn: () => muqtadisService.getStats(),
+    enabled,
+    staleTime: 45_000,
+  });
 
   const resolvePaymentStatus = useCallback((item: Muqtadi): 'PAID' | 'PARTIAL' | 'UNPAID' => {
     const rawStatus = String((item as Muqtadi & { currentCyclePaymentStatus?: string }).currentCyclePaymentStatus || item.paymentStatus || '').trim().toUpperCase();
@@ -91,76 +114,84 @@ export function useMuqtadis(options: UseMuqtadisOptions) {
 
   const fetchItems = useCallback(async () => {
     if (!enabled) return;
-    if (fetchLockRef.current) return;
-
-    const cacheKey = `${page}:${debouncedSearch}`;
-    const now = Date.now();
-    const cache = listCacheRef.current;
-    if (cache && cache.key === cacheKey && now - cache.at < 5000) {
-      setItems(cache.data);
-      setPendingItems(cache.pending);
-      setTotalPages(cache.totalPages);
-      setBackendStats(cache.backendStats);
-      setSalarySummary({
-        totalMuqtadies: cache.totalMuqtadies,
-        registeredMuqtadies: cache.registeredMuqtadies,
-        totalSalary: cache.totalSalary,
-        perHead: cache.perHead,
-      });
-      return;
-    }
-
-    fetchLockRef.current = true;
-    const requestSeq = ++fetchRequestSeqRef.current;
-    setIsLoading(true);
     try {
-      const [result, summary, statsResponse] = await Promise.all([
-        muqtadisService.getAll({ page, limit: 20, search: debouncedSearch || undefined }),
-        muqtadisService.getSalarySummary(),
-        muqtadisService.getStats(),
-      ]);
-
-      if (requestSeq !== fetchRequestSeqRef.current) {
-        return;
-      }
-
-      const boundedData = result.data.length > 50 ? result.data.slice(0, 50) : result.data;
-      setItems(boundedData);
-      setPendingItems(result.pending);
-      setTotalPages(result.totalPages);
-      const normalizedStats = {
-        verifiedHouseholds: statsResponse.totalHouseholds,
-        verifiedMuqtadies: statsResponse.totalMuqtadies,
-        pendingHouseholds: statsResponse.pending,
-        pendingMuqtadies: 0,
-      };
-      setBackendStats(normalizedStats);
-      setSalarySummary({
-        totalMuqtadies: summary.totalMuqtadies,
-        registeredMuqtadies: summary.registeredMuqtadies,
-        totalSalary: summary.totalSalary,
-        perHead: summary.perHead,
-      });
-
-      listCacheRef.current = {
-        key: cacheKey,
-        at: now,
-        data: boundedData,
-        pending: result.pending,
-        totalPages: result.totalPages,
-        backendStats: normalizedStats,
-        totalMuqtadies: summary.totalMuqtadies,
-        registeredMuqtadies: summary.registeredMuqtadies,
-        totalSalary: summary.totalSalary,
-        perHead: summary.perHead,
-      };
+      await Promise.all([refetchList(), refetchSummary(), refetchStats()]);
     } catch (error) {
       toast.error(getErrorMessage(error, 'Failed to load muqtadis'));
-    } finally {
-      setIsLoading(false);
-      fetchLockRef.current = false;
     }
-  }, [debouncedSearch, enabled, page]);
+  }, [enabled, refetchList, refetchStats, refetchSummary]);
+
+  useEffect(() => {
+    if (!listResult) return;
+    const boundedData = listResult.data.length > 50 ? listResult.data.slice(0, 50) : listResult.data;
+    setItems(boundedData);
+    setTotalPages(listResult.totalPages);
+  }, [listResult]);
+
+  useEffect(() => {
+    if (!enabled || !listResult) return;
+
+    const total = listResult.totalPages ?? 1;
+    if (page >= total) return;
+
+    const nextPage = page + 1;
+    const nextQueryKey = queryKeys.muqtadis({
+      page: nextPage,
+      limit,
+      search: debouncedSearch,
+      accountStatus: accountFilter,
+      paymentStatus: paymentFilter,
+      verificationStatus: verificationFilter,
+      cycleStatus: cycleFilter,
+    });
+
+    if (queryClient.getQueryData(nextQueryKey)) return;
+
+    void queryClient.prefetchQuery({
+      queryKey: nextQueryKey,
+      queryFn: () => muqtadisService.getAll({
+        page: nextPage,
+        limit,
+        search: debouncedSearch || undefined,
+        accountStatus: accountFilter,
+        paymentStatus: paymentFilter,
+        verificationStatus: verificationFilter,
+        cycleStatus: cycleFilter,
+      }),
+      staleTime: 45_000,
+    });
+  }, [
+    enabled,
+    listResult,
+    page,
+    limit,
+    debouncedSearch,
+    accountFilter,
+    paymentFilter,
+    verificationFilter,
+    cycleFilter,
+    queryClient,
+  ]);
+
+  useEffect(() => {
+    if (!summary) return;
+    setSalarySummary({
+      totalMuqtadies: summary.totalMuqtadies,
+      registeredMuqtadies: summary.registeredMuqtadies,
+      totalSalary: summary.totalSalary,
+      perHead: summary.perHead,
+    });
+  }, [summary]);
+
+  useEffect(() => {
+    if (!statsResponse) return;
+    setBackendStats({
+      verifiedHouseholds: statsResponse.totalHouseholds,
+      verifiedMuqtadies: statsResponse.totalMuqtadies,
+      pendingHouseholds: statsResponse.pending,
+      pendingMuqtadies: 0,
+    });
+  }, [statsResponse]);
 
   const sortByCreatedAt = useCallback((list: Muqtadi[]) => {
     return [...list].sort((a, b) => {
@@ -170,68 +201,7 @@ export function useMuqtadis(options: UseMuqtadisOptions) {
     });
   }, [sortOrder]);
 
-  const filteredItems = useMemo(() => {
-    const sourceItems = verificationFilter === 'pending' ? pendingItems : items;
-    const sorted = sortByCreatedAt(sourceItems);
-
-    return sorted.filter((item) => {
-      const normalizedName = (item.name || '').toLowerCase();
-      const normalizedPhone = (item.whatsappNumber || item.phone || '').toLowerCase();
-      const normalizedSearch = debouncedSearch.trim().toLowerCase();
-
-      if (normalizedSearch) {
-        const matches = normalizedName.includes(normalizedSearch) || normalizedPhone.includes(normalizedSearch);
-        if (!matches) return false;
-      }
-
-      const accountState = item.accountState || 'OFFLINE';
-      if (accountFilter === 'account' && accountState === 'OFFLINE') return false;
-      if (accountFilter === 'offline' && accountState !== 'OFFLINE') return false;
-
-      const isDisabled = Boolean((item as Muqtadi & { isDeleted?: boolean }).isDeleted || item.isDisabled || item.status === 'DISABLED');
-      if (statusFilter === 'active' && isDisabled) return false;
-      if (statusFilter === 'disabled' && !isDisabled) return false;
-
-      const cycleIncludedRaw = (item as Muqtadi & {
-        isIncludedInCycle?: boolean;
-        includedInCycle?: boolean;
-        cycleIncluded?: boolean;
-        inCurrentCycle?: boolean;
-        currentlyIncludedInCycle?: boolean;
-      }).isIncludedInCycle
-        ?? (item as any).includedInCycle
-        ?? (item as any).cycleIncluded
-        ?? (item as any).inCurrentCycle
-        ?? (item as any).currentlyIncludedInCycle;
-      const cycleIncluded = parseBooleanValue(cycleIncludedRaw);
-      if (cycleFilter === 'included' && !cycleIncluded) return false;
-      if (cycleFilter === 'not_included' && cycleIncluded) return false;
-
-      const paymentStatus = resolvePaymentStatus(item);
-      const proofPendingRaw = (item as Muqtadi & {
-        proofPending?: boolean | string | number;
-        isProofPending?: boolean | string | number;
-        paymentProofPending?: boolean | string | number;
-        paymentVerificationStatus?: string;
-      }).proofPending
-        ?? (item as any).isProofPending
-        ?? (item as any).paymentProofPending
-        ?? (item as any).paymentVerificationStatus;
-      const proofPending = parseBooleanValue(proofPendingRaw)
-        || String((item as any).paymentVerificationStatus || '').trim().toUpperCase() === 'PENDING';
-
-      if (paymentFilter !== 'all' && !cycleIncluded) return false;
-      if (paymentFilter === 'proof_pending' && !proofPending) return false;
-      if (paymentFilter === 'paid' && paymentStatus !== 'PAID') return false;
-      if (paymentFilter === 'partial' && paymentStatus !== 'PARTIAL') return false;
-      if (paymentFilter === 'unpaid' && paymentStatus !== 'UNPAID') return false;
-
-      if (verificationFilter === 'verified' && !item.isVerified) return false;
-      if (verificationFilter === 'pending' && item.isVerified) return false;
-
-      return true;
-    });
-  }, [accountFilter, cycleFilter, debouncedSearch, items, parseBooleanValue, paymentFilter, pendingItems, resolvePaymentStatus, sortByCreatedAt, statusFilter, verificationFilter]);
+  const filteredItems = useMemo(() => sortByCreatedAt(items), [items, sortByCreatedAt]);
 
   const stats = useMemo(() => {
     const totalHouseholds = backendStats.verifiedHouseholds;
@@ -286,11 +256,6 @@ export function useMuqtadis(options: UseMuqtadisOptions) {
   }, [fetchItems, pendingVerificationId, refreshDetails, selectedDetailId]);
 
   useEffect(() => {
-    if (!enabled) return;
-    void fetchItems();
-  }, [enabled, fetchItems]);
-
-  useEffect(() => {
     setPage(1);
   }, [accountFilter, cycleFilter, paymentFilter, statusFilter, verificationFilter]);
 
@@ -325,6 +290,7 @@ export function useMuqtadis(options: UseMuqtadisOptions) {
       cycleFilter,
       paymentFilter,
       page,
+      limit,
       totalPages,
       salarySummary,
     },
@@ -346,7 +312,7 @@ export function useMuqtadis(options: UseMuqtadisOptions) {
       rejectMuqtadi,
     },
     loading: {
-      isLoading,
+      isLoading: isListLoading || isSummaryLoading || isStatsLoading,
       pendingVerificationId,
     },
   };

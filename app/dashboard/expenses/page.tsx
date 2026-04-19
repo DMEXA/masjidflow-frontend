@@ -32,9 +32,11 @@ import { collectPaginatedExportRows, downloadPdfExport, EXPORT_MAX_ROWS } from '
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useFundsListQuery } from '@/hooks/useFundsListQuery';
 import { useDebounce } from '@/hooks/useDebounce';
-import { invalidateMoneyQueries } from '@/lib/money-cache';
+import { invalidateExpenseMutationQueries, invalidateMoneyQueries } from '@/lib/money-cache';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { ListEmptyState } from '@/components/common/list-empty-state';
+import { queryKeys } from '@/lib/query-keys';
+import { getSafeLimit } from '@/src/utils/pagination';
 
 export default function ExpensesPage() {
   const router = useRouter();
@@ -64,6 +66,7 @@ export default function ExpensesPage() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [bulkActionLoading, setBulkActionLoading] = useState<'approve' | 'reject' | 'delete' | null>(null);
   const [isBulkDeleteOpen, setIsBulkDeleteOpen] = useState(false);
+  const [limit] = useState(() => getSafeLimit(20));
   const debouncedSearch = useDebounce(searchQuery);
 
   const fundsQuery = useFundsListQuery(mosque?.id);
@@ -88,11 +91,18 @@ export default function ExpensesPage() {
   }, [fundTypeFilter]);
 
   const expensesQuery = useQuery({
-    queryKey: ['expenses', mosqueId, page, statusFilter, categoryFilter, fundTypeFilter, debouncedSearch],
+    queryKey: queryKeys.expenses(mosqueId, {
+      page,
+      pageSize: limit,
+      status: statusFilter,
+      category: categoryFilter,
+      fundType: fundTypeFilter,
+      search: debouncedSearch,
+    }),
     queryFn: () =>
       expensesService.getAll({
         page,
-        pageSize: 20,
+        pageSize: limit,
         status:
           statusFilter === 'all'
             ? undefined
@@ -109,9 +119,63 @@ export default function ExpensesPage() {
     placeholderData: keepPreviousData,
     staleTime: 30_000,
     refetchOnMount: false,
-    refetchOnWindowFocus: false,
+    refetchOnWindowFocus: true,
     refetchOnReconnect: true,
   });
+
+  useEffect(() => {
+    if (!mosque?.id || !token) return;
+    if (!expensesQuery.data) return;
+
+    const totalPages = expensesQuery.data.totalPages ?? 1;
+    if (page >= totalPages) return;
+
+    const nextPage = page + 1;
+    const nextQueryKey = queryKeys.expenses(mosqueId, {
+      page: nextPage,
+      pageSize: limit,
+      status: statusFilter,
+      category: categoryFilter,
+      fundType: fundTypeFilter,
+      search: debouncedSearch,
+    });
+
+    if (queryClient.getQueryData(nextQueryKey)) return;
+
+    void queryClient.prefetchQuery({
+      queryKey: nextQueryKey,
+      queryFn: () =>
+        expensesService.getAll({
+          page: nextPage,
+          pageSize: limit,
+          status:
+            statusFilter === 'all'
+              ? undefined
+              : statusFilter === 'VERIFIED'
+                ? 'APPROVED'
+                : statusFilter === 'INITIATED'
+                  ? 'REJECTED'
+                  : 'PENDING',
+          category: categoryFilter !== 'all' ? (categoryFilter as any) : undefined,
+          fundId: selectedFundId,
+          search: debouncedSearch || undefined,
+        }),
+      staleTime: 30_000,
+    });
+  }, [
+    mosque?.id,
+    token,
+    expensesQuery.data,
+    page,
+    mosqueId,
+    limit,
+    statusFilter,
+    categoryFilter,
+    fundTypeFilter,
+    debouncedSearch,
+    selectedFundId,
+    queryClient,
+  ]);
 
   useEffect(() => {
     if (expensesQuery.error) {
@@ -120,43 +184,46 @@ export default function ExpensesPage() {
   }, [expensesQuery.error]);
 
   const pendingCountQuery = useQuery({
-    queryKey: ['expenses-pending-count', mosque?.id],
+    queryKey: queryKeys.expensesPendingCount(mosque?.id),
     queryFn: () => expensesService.getPendingCount(),
     enabled: Boolean(mosque?.id) && Boolean(token) && canViewPendingCount,
     staleTime: 30_000,
     refetchOnMount: false,
-    refetchOnWindowFocus: false,
+    refetchOnWindowFocus: true,
   });
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => expensesService.delete(id),
     onMutate: async (id: string) => {
-      await queryClient.cancelQueries({ queryKey: ['expenses', mosqueId] });
-      const snapshot = queryClient.getQueryData(['expenses', mosqueId, page, statusFilter, categoryFilter, fundTypeFilter, debouncedSearch]);
+      await queryClient.cancelQueries({ queryKey: queryKeys.expensesRoot(mosqueId), exact: false });
+      const listQueryKey = queryKeys.expenses(mosqueId, {
+        page,
+        pageSize: limit,
+        status: statusFilter,
+        category: categoryFilter,
+        fundType: fundTypeFilter,
+        search: debouncedSearch,
+      });
+      const snapshot = queryClient.getQueryData(listQueryKey);
 
-      queryClient.setQueryData(
-        ['expenses', mosqueId, page, statusFilter, categoryFilter, fundTypeFilter, debouncedSearch],
-        (prev: any) => {
-          if (!prev || !Array.isArray(prev.data)) return prev;
-          return {
-            ...prev,
-            data: prev.data.filter((item: Expense) => item.id !== id),
-          };
-        },
-      );
+      queryClient.setQueryData(listQueryKey, (prev: any) => {
+        if (!prev || !Array.isArray(prev.data)) return prev;
+        return {
+          ...prev,
+          data: prev.data.filter((item: Expense) => item.id !== id),
+        };
+      });
 
-      return { snapshot };
+      return { snapshot, listQueryKey };
     },
     onError: (_error, _id, context) => {
-      if (context?.snapshot) {
-        queryClient.setQueryData(
-          ['expenses', mosqueId, page, statusFilter, categoryFilter, fundTypeFilter, debouncedSearch],
-          context.snapshot,
-        );
+      if (context?.snapshot && context.listQueryKey) {
+        queryClient.setQueryData(context.listQueryKey, context.snapshot);
       }
     },
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['expenses', mosqueId] });
+      await invalidateExpenseMutationQueries(queryClient, mosque?.id);
+      await queryClient.invalidateQueries({ queryKey: queryKeys.funds(mosque?.id), exact: false });
       await invalidateMoneyQueries(queryClient);
     },
   });
@@ -188,8 +255,7 @@ export default function ExpensesPage() {
     try {
       await approveMutation.mutateAsync(id);
       toast.success('Expense approved');
-      await queryClient.invalidateQueries({ queryKey: ['expenses', mosqueId] });
-      await queryClient.invalidateQueries({ queryKey: ['expenses-pending-count'] });
+      await invalidateExpenseMutationQueries(queryClient, mosque?.id);
     } catch (error) {
       toast.error(getErrorMessage(error, 'Failed to approve expense'));
     }
@@ -200,8 +266,7 @@ export default function ExpensesPage() {
     try {
       await rejectMutation.mutateAsync(id);
       toast.success('Expense rejected');
-      await queryClient.invalidateQueries({ queryKey: ['expenses', mosqueId] });
-      await queryClient.invalidateQueries({ queryKey: ['expenses-pending-count'] });
+      await invalidateExpenseMutationQueries(queryClient, mosque?.id);
     } catch (error) {
       toast.error(getErrorMessage(error, 'Failed to reject expense'));
     }
@@ -228,8 +293,7 @@ export default function ExpensesPage() {
       }
       setSelectedIds([]);
       toast.success(`Bulk ${action} completed`);
-      await queryClient.invalidateQueries({ queryKey: ['expenses', mosqueId] });
-      await queryClient.invalidateQueries({ queryKey: ['expenses-pending-count'] });
+      await invalidateExpenseMutationQueries(queryClient, mosque?.id);
     } finally {
       setBulkActionLoading(null);
     }
@@ -292,7 +356,7 @@ export default function ExpensesPage() {
 
   const expenses = expensesQuery.data?.data ?? [];
   const currentPage = expensesQuery.data?.page ?? page;
-  const currentLimit = expensesQuery.data?.pageSize ?? 20;
+  const currentLimit = expensesQuery.data?.pageSize ?? limit;
   const currentTotal = expensesQuery.data?.total ?? 0;
   const canGoPrevious = currentPage > 1;
   const canGoNext = currentPage * currentLimit < currentTotal;
@@ -343,8 +407,7 @@ export default function ExpensesPage() {
       setSelectedIds([]);
       setIsBulkDeleteOpen(false);
       toast.success('Selected expenses moved to trash');
-      await queryClient.invalidateQueries({ queryKey: ['expenses', mosqueId] });
-      await queryClient.invalidateQueries({ queryKey: ['expenses-pending-count'] });
+      await invalidateExpenseMutationQueries(queryClient, mosque?.id);
       await invalidateMoneyQueries(queryClient);
     } finally {
       setBulkActionLoading(null);

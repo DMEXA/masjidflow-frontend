@@ -9,12 +9,14 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { platformAdminService, type PlatformMosqueRow } from '@/services/platform-admin.service';
 import { getErrorMessage } from '@/src/utils/error';
+import { queryKeys } from '@/lib/query-keys';
+import { invalidatePlatformMosquesQueries } from '@/lib/money-cache';
 
 export default function PlatformIndexPage() {
   const queryClient = useQueryClient();
 
   const mosquesQuery = useQuery({
-    queryKey: ['platform-home-mosques'],
+    queryKey: queryKeys.platformHomeMosques,
     queryFn: async () => {
       const result = await platformAdminService.getMosques({ page: 1, limit: 10 });
       return result.data;
@@ -25,8 +27,7 @@ export default function PlatformIndexPage() {
   const deleteMutation = useMutation({
     mutationFn: (mosqueId: string) => platformAdminService.deleteMosque(mosqueId),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['platform-home-mosques'] });
-      await queryClient.invalidateQueries({ queryKey: ['platform-mosques'] });
+      await invalidatePlatformMosquesQueries(queryClient);
     },
   });
 

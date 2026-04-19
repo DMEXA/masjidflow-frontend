@@ -67,11 +67,16 @@ export default function InvitesPage() {
   const handleCancel = async (id: string) => {
     if (loadingId || invitesQuery.isLoading) return;
     setLoadingId(id);
+    const previousInvites = queryClient.getQueryData<InviteRecord[]>(queryKeys.invites);
+    queryClient.setQueryData<InviteRecord[]>(queryKeys.invites, (prev = []) =>
+      prev.map((item) => (item.id === id ? { ...item, status: 'CANCELLED' } : item)),
+    );
     try {
       await membersService.cancelInvite(id);
       toast.success('Invitation cancelled');
       await queryClient.invalidateQueries({ queryKey: queryKeys.invites });
     } catch (error) {
+      queryClient.setQueryData(queryKeys.invites, previousInvites);
       toast.error(getErrorMessage(error, 'Failed to cancel invitation'));
     } finally {
       setLoadingId(null);
@@ -82,11 +87,24 @@ export default function InvitesPage() {
   const handleResend = useCallback(async (id: string) => {
     if (loadingId || invitesQuery.isLoading) return;
     setLoadingId(id);
+    const previousInvites = queryClient.getQueryData<InviteRecord[]>(queryKeys.invites);
+    queryClient.setQueryData<InviteRecord[]>(queryKeys.invites, (prev = []) =>
+      prev.map((item) =>
+        item.id === id
+          ? {
+              ...item,
+              status: 'PENDING',
+              createdAt: new Date().toISOString(),
+            }
+          : item,
+      ),
+    );
     try {
       await membersService.resendInvite(id);
       toast.success('Invitation resent');
       await queryClient.invalidateQueries({ queryKey: queryKeys.invites });
     } catch (error) {
+      queryClient.setQueryData(queryKeys.invites, previousInvites);
       toast.error(getErrorMessage(error, 'Failed to resend invitation'));
     } finally {
       setLoadingId(null);
