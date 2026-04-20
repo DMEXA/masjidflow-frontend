@@ -44,6 +44,7 @@ export default function DashboardProfilePage() {
     state: '',
   });
   const [savingProfile, setSavingProfile] = useState(false);
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [securityLoading, setSecurityLoading] = useState(false);
   const [passwordForm, setPasswordForm] = useState({
     currentPassword: '',
@@ -148,6 +149,7 @@ export default function DashboardProfilePage() {
       }
 
       toast.success('Profile updated successfully');
+      setIsEditingProfile(false);
     } catch (error) {
       toast.error(getErrorMessage(error, 'Failed to update profile'));
     } finally {
@@ -207,7 +209,7 @@ export default function DashboardProfilePage() {
                 id="staff-name"
                 value={form.name}
                 onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
-                disabled={savingProfile}
+                disabled={savingProfile || !isEditingProfile}
               />
             </div>
 
@@ -217,7 +219,7 @@ export default function DashboardProfilePage() {
                 id="staff-father-name"
                 value={form.fatherName}
                 onChange={(e) => setForm((prev) => ({ ...prev, fatherName: e.target.value }))}
-                disabled={savingProfile}
+                disabled={savingProfile || !isEditingProfile}
                 placeholder="Optional"
               />
             </div>
@@ -236,7 +238,7 @@ export default function DashboardProfilePage() {
                 type="tel"
                 value={form.phone}
                 onChange={(e) => setForm((prev) => ({ ...prev, phone: e.target.value }))}
-                disabled={savingProfile}
+                disabled={savingProfile || !isEditingProfile}
                 placeholder="+91 98765 43210"
               />
             </div>
@@ -248,15 +250,41 @@ export default function DashboardProfilePage() {
                 type="email"
                 value={form.email}
                 onChange={(e) => setForm((prev) => ({ ...prev, email: e.target.value }))}
-                disabled={savingProfile}
+                disabled={savingProfile || !isEditingProfile}
               />
             </div>
           </div>
 
-          <Button onClick={handleSaveProfile} disabled={savingProfile || !hasChanges} className="w-full sm:w-auto">
-            {savingProfile ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-            Save Profile
-          </Button>
+          {!isEditingProfile ? (
+            <Button type="button" variant="outline" onClick={() => setIsEditingProfile(true)} className="w-full sm:w-auto">
+              Edit Profile
+            </Button>
+          ) : (
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  if (!user) return;
+                  setForm({
+                    name: user.name || '',
+                    fatherName: user.fatherName || '',
+                    phone: user.phone || '',
+                    email: user.email || '',
+                  });
+                  setIsEditingProfile(false);
+                }}
+                disabled={savingProfile}
+                className="w-full sm:w-auto"
+              >
+                Cancel
+              </Button>
+              <Button onClick={handleSaveProfile} disabled={savingProfile || !hasChanges} className="w-full sm:w-auto">
+                {savingProfile ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Save Profile
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
 

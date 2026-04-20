@@ -67,6 +67,7 @@ export default function MuqtadiProfilePage() {
   const onSave = async () => {
     const current = profileQuery.data;
     if (!current) return;
+    const isVerifiedHousehold = Boolean(current.isVerified);
 
     const payload: {
       name?: string;
@@ -86,7 +87,7 @@ export default function MuqtadiProfilePage() {
     if (profile.phone.trim() !== (current.phone || '').trim()) {
       payload.phone = profile.phone.trim();
     }
-    if (profile.whatsappNumber.trim() !== (current.whatsappNumber || '').trim()) {
+    if (!isVerifiedHousehold && profile.whatsappNumber.trim() !== (current.whatsappNumber || '').trim()) {
       payload.whatsappNumber = profile.whatsappNumber.trim();
     }
     if (profile.email.trim() !== (current.email || '').trim()) {
@@ -95,7 +96,7 @@ export default function MuqtadiProfilePage() {
 
     const normalizedDependents = profile.dependentNames.map((name) => name.trim());
     const currentDependents = (Array.isArray(current.dependentNames) ? current.dependentNames : []).map((name) => (name || '').trim());
-    if (JSON.stringify(normalizedDependents) !== JSON.stringify(currentDependents)) {
+    if (!isVerifiedHousehold && JSON.stringify(normalizedDependents) !== JSON.stringify(currentDependents)) {
       payload.dependentNames = normalizedDependents;
     }
 
@@ -145,7 +146,9 @@ export default function MuqtadiProfilePage() {
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="rounded-xl border bg-[#f6faf2] p-3 text-xs text-muted-foreground">
-            Household size and contribution structure are locked after submission.
+            {profileQuery.data?.isVerified
+              ? 'Household structure is locked after verification. You can still update name, father name, mobile, and email.'
+              : 'Household size and contribution structure are locked after submission.'}
           </div>
 
         <div className="space-y-2">
@@ -182,6 +185,7 @@ export default function MuqtadiProfilePage() {
           <Label>WhatsApp</Label>
           <Input
             value={profile.whatsappNumber}
+            disabled={Boolean(profileQuery.data?.isVerified)}
             onChange={(e) => setProfile((prev) => ({ ...prev, whatsappNumber: e.target.value }))}
           />
         </div>
@@ -199,6 +203,7 @@ export default function MuqtadiProfilePage() {
                 <Input
                   key={`dependent-${index}`}
                   value={name}
+                  disabled={Boolean(profileQuery.data?.isVerified)}
                   onChange={(e) => {
                     const next = [...profile.dependentNames];
                     next[index] = e.target.value;

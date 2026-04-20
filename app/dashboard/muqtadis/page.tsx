@@ -185,6 +185,8 @@ export default function MuqtadisPage() {
     phone: item.phone ?? null,
     notes: item.notes ?? null,
     status: item.status ?? 'ACTIVE',
+    hasCycle: false,
+    isHouseholdInCycle: false,
     overview: {
       totalDue: 0,
       totalPaid: 0,
@@ -371,12 +373,20 @@ export default function MuqtadisPage() {
   }, []);
 
   const openEdit = useCallback((item: Muqtadi) => {
+    const memberNames = Array.isArray(item.memberNames)
+      ? item.memberNames.map((name) => String(name ?? '').trim()).filter(Boolean)
+      : [];
+    const resolvedHouseholdMembers = item.householdMembers ?? Math.max(memberNames.length, 1);
+    const dependentsFromMemberNames = memberNames.length > 0
+      ? memberNames.slice(1)
+      : resizeDependents(String(resolvedHouseholdMembers), []);
+
     setSelectedMuqtadi(item);
     setForm({
       name: item.name,
       fatherName: item.fatherName,
-      householdMembers: String(item.householdMembers ?? 1),
-      dependents: resizeDependents(String(item.householdMembers ?? 1), []),
+      householdMembers: String(resolvedHouseholdMembers),
+      dependents: resizeDependents(String(resolvedHouseholdMembers), dependentsFromMemberNames),
       whatsappNumber: item.whatsappNumber || '',
       notes: item.notes || '',
     });
@@ -507,12 +517,19 @@ export default function MuqtadisPage() {
       return;
     }
 
+    const dependents = resizeDependents(form.householdMembers, form.dependents).map((name) => name.trim());
+    if (dependents.some((name) => !name)) {
+      toast.error('All dependents names are required');
+      return;
+    }
+
     setSubmitting(true);
     try {
       await muqtadisService.update(selectedMuqtadi.id, {
         name: form.name.trim(),
         fatherName: form.fatherName.trim(),
         householdMembers,
+        memberNames: [form.name.trim(), ...dependents],
         whatsappNumber: form.whatsappNumber.trim() || undefined,
         phone: form.whatsappNumber.trim() || undefined,
         notes: form.notes.trim() || undefined,
@@ -803,6 +820,28 @@ export default function MuqtadisPage() {
       toast.success('Link copied');
     } catch {
       toast.error('Failed to copy link');
+    }
+  };
+
+  const handleVerifyPendingHousehold = async () => {
+    if (!selectedMuqtadi || loading.pendingVerificationId) return;
+
+    try {
+      await actions.verifyMuqtadi(selectedMuqtadi);
+      await invalidateDetailQueries(selectedMuqtadi.id);
+    } catch (error) {
+      toast.error(getErrorMessage(error, 'Failed to verify household'));
+    }
+  };
+
+  const handleRejectPendingHousehold = async () => {
+    if (!selectedMuqtadi || loading.pendingVerificationId) return;
+
+    try {
+      await actions.rejectMuqtadi(selectedMuqtadi);
+      await invalidateDetailQueries(selectedMuqtadi.id);
+    } catch (error) {
+      toast.error(getErrorMessage(error, 'Failed to update household verification'));
     }
   };
 
@@ -1226,7 +1265,28 @@ export default function MuqtadisPage() {
           <div className="space-y-3">
             <div className="space-y-2"><Label>Name</Label><Input value={form.name} onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))} /></div>
             <div className="space-y-2"><Label>Father Name</Label><Input value={form.fatherName} onChange={(e) => setForm((prev) => ({ ...prev, fatherName: e.target.value }))} /></div>
-            <div className="space-y-2"><Label>Household Members</Label><Input type="text" inputMode="numeric" pattern="^\d+$" value={form.householdMembers} onChange={(e) => setForm((prev) => ({ ...prev, householdMembers: e.target.value }))} /></div>
+            <div className="space-y-2"><Label>Household Members</Label><Input type="text" inputMode="numeric" pattern="^\d+$" value={form.householdMembers} onChange={(e) => setForm((prev) => ({ ...prev, householdMembers: e.target.value, dependents: resizeDependents(e.target.value, prev.dependents) }))} /></div>
+            {form.dependents.length > 0 ? (
+              <div className="space-y-2">
+                <Label>Dependents</Label>
+                <div className="space-y-2">
+                  {form.dependents.map((dependentName, index) => (
+                    <Input
+                      key={`edit-dependent-${index + 1}`}
+                      placeholder={`Dependent ${index + 1} Name`}
+                      value={dependentName}
+                      onChange={(e) =>
+                        setForm((prev) => {
+                          const nextDependents = [...prev.dependents];
+                          nextDependents[index] = e.target.value;
+                          return { ...prev, dependents: nextDependents };
+                        })
+                      }
+                    />
+                  ))}
+                </div>
+              </div>
+            ) : null}
             <div className="space-y-2"><Label>WhatsApp Number</Label><Input value={form.whatsappNumber} onChange={(e) => setForm((prev) => ({ ...prev, whatsappNumber: e.target.value }))} /></div>
             <div className="space-y-2"><Label>Notes</Label><Textarea rows={3} value={form.notes} onChange={(e) => setForm((prev) => ({ ...prev, notes: e.target.value }))} /></div>
           </div>
@@ -1303,6 +1363,9 @@ export default function MuqtadisPage() {
             openEdit(selectedMuqtadi);
           }
         }}
+        onVerifyPending={handleVerifyPendingHousehold}
+        onRejectPending={handleRejectPendingHousehold}
+        onOpenCreateCycle={() => router.push('/dashboard/imam-salary/cycles')}
         onOpenPaymentDetail={(paymentId: string) => {
           setSelectedPaymentDetailId(paymentId);
           setPaymentDetailImageFailed(false);
@@ -1319,6 +1382,7 @@ export default function MuqtadisPage() {
         isRemovingFromCycle={isRemovingFromCycle}
         isGeneratingLoginLink={isGeneratingLoginLink}
         isSendingResetLink={isSendingResetLink}
+        isPendingActionLoading={Boolean(loading.pendingVerificationId)}
         authLinkState={selectedDetails ? authLinksByMuqtadiId[selectedDetails.id] ?? null : null}
       />
 

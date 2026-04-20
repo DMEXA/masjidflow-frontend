@@ -38,6 +38,8 @@ function buildInitialDetails(selectedMuqtadi, details) {
     phone: selectedMuqtadi.phone ?? null,
     notes: selectedMuqtadi.notes ?? null,
     status: selectedMuqtadi.status ?? 'ACTIVE',
+    hasCycle: false,
+    isHouseholdInCycle: false,
     overview: {
       totalDue: 0,
       totalPaid: 0,
@@ -61,6 +63,9 @@ export default function MuqtadiDetailsModal({
   getCycleStatus,
   onOpenRecordPayment,
   onOpenEditDetails,
+  onVerifyPending,
+  onRejectPending,
+  onOpenCreateCycle,
   onOpenPaymentDetail,
   onAddDependent,
   onRemoveDependent,
@@ -74,6 +79,7 @@ export default function MuqtadiDetailsModal({
   isRemovingFromCycle,
   isGeneratingLoginLink,
   isSendingResetLink,
+  isPendingActionLoading,
   authLinkState,
 }) {
   const queryClient = useQueryClient();
@@ -172,34 +178,14 @@ export default function MuqtadiDetailsModal({
   }, [detailsData]);
 
   const accountState = detailsData?.accountState || 'OFFLINE';
+  const isPendingHousehold = Boolean(
+    (detailsData && detailsData.isVerified === false)
+    || (selectedMuqtadi && selectedMuqtadi.isVerified === false),
+  );
+  const hasCycle = Boolean(detailsData?.hasCycle);
+  const isHouseholdInCycle = Boolean(detailsData?.isHouseholdInCycle);
   const pendingExpiryMinutes = authLinkState?.expiresInMinutes ?? detailsData?.setupLinkExpiresInMinutes ?? null;
   const activeLink = authLinkState?.link ?? '';
-
-  const isAlreadyIncludedInCurrentCycle = useMemo(() => {
-    if (!detailsData || detailsData.dues.length === 0) {
-      return false;
-    }
-
-    const latestDue = [...detailsData.dues].sort((a, b) => {
-      const ay = a.year ?? 0;
-      const by = b.year ?? 0;
-      if (ay !== by) return by - ay;
-      const am = a.month ?? 0;
-      const bm = b.month ?? 0;
-      if (am !== bm) return bm - am;
-      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-    })[0];
-
-    if (!latestDue?.month || !latestDue?.year) {
-      return false;
-    }
-
-    const now = new Date();
-    const currentMonth = now.getMonth() + 1;
-    const currentYear = now.getFullYear();
-
-    return latestDue.month === currentMonth && latestDue.year === currentYear;
-  }, [detailsData]);
 
   const currentCycleDue = useMemo(() => {
     if (!detailsData) return null;
@@ -218,6 +204,35 @@ export default function MuqtadiDetailsModal({
           <SheetTitle>{detailsData?.name || selectedMuqtadi?.name || 'Household Details'}</SheetTitle>
           <SheetDescription>Overview, dues, payments, and full admin controls</SheetDescription>
         </SheetHeader>
+
+        {isPendingHousehold ? (
+          <Card className="mt-4">
+            <CardContent className="flex flex-wrap items-center gap-2 pt-4">
+              <Button type="button" size="sm" variant="outline" onClick={onOpenEditDetails}>
+                Edit
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                onClick={onVerifyPending}
+                disabled={isPendingActionLoading}
+              >
+                {isPendingActionLoading ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
+                Verify
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="destructive"
+                onClick={onRejectPending}
+                disabled={isPendingActionLoading}
+              >
+                {isPendingActionLoading ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
+                Reject
+              </Button>
+            </CardContent>
+          </Card>
+        ) : null}
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-4 space-y-3">
             <TabsList className="grid w-full grid-cols-4">
@@ -306,7 +321,7 @@ export default function MuqtadiDetailsModal({
                         type="button"
                         size="sm"
                         variant="outline"
-                        disabled={isIncludingInCycle || isAlreadyIncludedInCurrentCycle}
+                        disabled={isIncludingInCycle || !hasCycle || isHouseholdInCycle}
                         onClick={onIncludeInCycle}
                       >
                         {isIncludingInCycle ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
@@ -316,13 +331,16 @@ export default function MuqtadiDetailsModal({
                         type="button"
                         size="sm"
                         variant="outline"
-                        disabled={isRemovingFromCycle || !isAlreadyIncludedInCurrentCycle || removeBlockedByPayment}
+                        disabled={isRemovingFromCycle || !hasCycle || !isHouseholdInCycle || removeBlockedByPayment}
                         onClick={onRemoveFromCycle}
                       >
                         {isRemovingFromCycle ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
                         Remove from Cycle
                       </Button>
                     </div>
+                    {!hasCycle ? (
+                      <p className="text-xs text-muted-foreground">No active cycle found. Create a cycle first.</p>
+                    ) : null}
                     {removeBlockedByPayment ? (
                       <p className="text-xs text-muted-foreground">
                         Cannot remove from cycle because a payment exists in the current cycle.
@@ -411,12 +429,26 @@ export default function MuqtadiDetailsModal({
                     <div className="h-4 w-40 animate-pulse rounded bg-muted" />
                   </CardContent>
                 </Card>
-                      ) : dues.length === 0 ? (
+              ) : !hasCycle ? (
                 <ListEmptyState
-                  title="No dues generated yet"
-                  description="Start a salary month to generate dues for members."
-                  actionLabel="Open Salary Months"
-                  actionHref="/dashboard/imam-salary/cycles"
+                  title="No active cycle found"
+                  description="Create a cycle to generate dues"
+                  actionLabel="Create Cycle"
+                  onAction={onOpenCreateCycle}
+                  className="min-h-36"
+                />
+              ) : !isHouseholdInCycle ? (
+                <ListEmptyState
+                  title="Household not included in current cycle"
+                  description="Add this household to generate dues"
+                  actionLabel="Add to Cycle"
+                  onAction={onIncludeInCycle}
+                  className="min-h-36"
+                />
+              ) : dues.length === 0 ? (
+                <ListEmptyState
+                  title="No dues available"
+                  description="Dues will appear here after generation."
                   className="min-h-36"
                 />
               ) : (
@@ -464,6 +496,22 @@ export default function MuqtadiDetailsModal({
                     <div className="h-4 w-28 animate-pulse rounded bg-muted" />
                   </CardContent>
                 </Card>
+              ) : !hasCycle ? (
+                <ListEmptyState
+                  title="No payment cycle available"
+                  description="Create a cycle before recording payments."
+                  actionLabel="Create Cycle"
+                  onAction={onOpenCreateCycle}
+                  className="min-h-36"
+                />
+              ) : !isHouseholdInCycle ? (
+                <ListEmptyState
+                  title="Household not part of cycle"
+                  description="Add this household to current cycle to record payments."
+                  actionLabel="Add to Cycle"
+                  onAction={onIncludeInCycle}
+                  className="min-h-36"
+                />
               ) : payments.length === 0 ? (
                 <ListEmptyState
                   title="No payment records yet"

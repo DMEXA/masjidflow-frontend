@@ -314,6 +314,8 @@ export interface MuqtadiDetails {
   phone?: string | null;
   notes?: string | null;
   status: MuqtadiStatus;
+  hasCycle?: boolean;
+  isHouseholdInCycle?: boolean;
   overview: {
     totalDue: number;
     totalPaid: number;
@@ -888,6 +890,7 @@ export const muqtadisService = {
     memberNames?: string[];
     dependentNames?: string[];
     isVerified?: boolean;
+    phoneVerified?: boolean;
     status: MuqtadiStatus;
     householdLocked: boolean;
   }> {

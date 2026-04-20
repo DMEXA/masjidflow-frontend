@@ -104,8 +104,8 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-muted/30 px-4 py-12">
-      <div className="w-full max-w-lg">
+    <div className="flex min-h-screen items-center bg-muted/30 py-12">
+      <div className="mx-auto w-full max-w-md px-4">
         {/* Logo */}
         <div className="mb-8 text-center">
           <Link href="/" className="inline-flex items-center gap-2">
@@ -129,7 +129,7 @@ export default function RegisterPage() {
             </div>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleSubmit} className="ds-stack">
+            <form onSubmit={handleSubmit} className="flex w-full flex-col gap-4">
               {step === 1 ? (
                 <>
                   <div className="space-y-2">
@@ -137,6 +137,7 @@ export default function RegisterPage() {
                       Mosque Name
                     </label>
                     <Input
+                      className="w-full"
                       id="mosqueName"
                       placeholder="e.g., Jamia Masjid"
                       value={formData.mosqueName}
@@ -149,6 +150,7 @@ export default function RegisterPage() {
                       Address
                     </label>
                     <Input
+                      className="w-full"
                       id="mosqueAddress"
                       placeholder="Full street address"
                       value={formData.mosqueAddress}
@@ -156,37 +158,38 @@ export default function RegisterPage() {
                       required
                     />
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <label htmlFor="mosqueCity" className="text-sm font-medium text-foreground">
-                        City
-                      </label>
-                      <Input
-                        id="mosqueCity"
-                        placeholder="City"
-                        value={formData.mosqueCity}
-                        onChange={(e) => setFormData({ ...formData, mosqueCity: e.target.value })}
-                        required
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label htmlFor="mosqueState" className="text-sm font-medium text-foreground">
-                        State
-                      </label>
-                      <Input
-                        id="mosqueState"
-                        placeholder="State"
-                        value={formData.mosqueState}
-                        onChange={(e) => setFormData({ ...formData, mosqueState: e.target.value })}
-                        required
-                      />
-                    </div>
+                  <div className="space-y-2">
+                    <label htmlFor="mosqueCity" className="text-sm font-medium text-foreground">
+                      City
+                    </label>
+                    <Input
+                      className="w-full"
+                      id="mosqueCity"
+                      placeholder="City"
+                      value={formData.mosqueCity}
+                      onChange={(e) => setFormData({ ...formData, mosqueCity: e.target.value })}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label htmlFor="mosqueState" className="text-sm font-medium text-foreground">
+                      State
+                    </label>
+                    <Input
+                      className="w-full"
+                      id="mosqueState"
+                      placeholder="State"
+                      value={formData.mosqueState}
+                      onChange={(e) => setFormData({ ...formData, mosqueState: e.target.value })}
+                      required
+                    />
                   </div>
                   <div className="space-y-2">
                     <label htmlFor="mosqueCountry" className="text-sm font-medium text-foreground">
                       Country
                     </label>
                     <Input
+                      className="w-full"
                       id="mosqueCountry"
                       placeholder="Country"
                       value={formData.mosqueCountry}
@@ -202,6 +205,7 @@ export default function RegisterPage() {
                       Your Name
                     </label>
                     <Input
+                      className="w-full"
                       id="adminName"
                       placeholder="Full name"
                       value={formData.adminName}
@@ -215,6 +219,7 @@ export default function RegisterPage() {
                       Phone (Primary Login)
                     </label>
                     <Input
+                      className="w-full"
                       id="adminPhone"
                       type="tel"
                       placeholder="+91 9876543210"
@@ -229,6 +234,7 @@ export default function RegisterPage() {
                       Email (Recovery Required)
                     </label>
                     <Input
+                      className="w-full"
                       id="adminEmail"
                       type="email"
                       placeholder="admin@mosque.com"
@@ -246,6 +252,7 @@ export default function RegisterPage() {
                       Password
                     </label>
                     <Input
+                      className="w-full"
                       id="adminPassword"
                       type="password"
                       placeholder="Minimum 8 characters"
@@ -258,19 +265,19 @@ export default function RegisterPage() {
                 </>
               )}
               
-              <div className="flex gap-4 pt-2">
+              <div className="flex flex-col gap-4 pt-2 sm:flex-row">
                 {step === 2 && (
                   <Button 
                     type="button" 
                     variant="outline" 
-                    className="flex-1"
+                    className="w-full sm:flex-1"
                     onClick={() => setStep(step - 1)}
                     disabled={isLoading}
                   >
                     Back
                   </Button>
                 )}
-                <Button type="submit" className="flex-1" disabled={isLoading}>
+                <Button type="submit" className="w-full sm:flex-1" disabled={isLoading}>
                   {isLoading ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
