@@ -65,6 +65,10 @@ export function useDashboardOverviewQuery(options: {
     queryKey: [...queryKeys.dashboardOverview(mosqueId), { chartsLimit }],
     enabled,
     placeholderData: (previous) => previous,
+    staleTime: 8000,
+    refetchOnMount: true,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: true,
     queryFn: async () => {
       const [yearlyResult, membersResult] = await Promise.allSettled([
         api.get<YearlyReportResponse>('/reports/yearly').then((r) => r.data),

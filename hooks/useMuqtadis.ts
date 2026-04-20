@@ -80,7 +80,10 @@ export function useMuqtadis(options: UseMuqtadisOptions) {
     }),
     enabled,
     placeholderData: keepPreviousData,
-    staleTime: 45_000,
+    staleTime: 8000,
+    refetchOnMount: true,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: true,
   });
 
   const {
@@ -88,10 +91,13 @@ export function useMuqtadis(options: UseMuqtadisOptions) {
     isLoading: isSummaryLoading,
     refetch: refetchSummary,
   } = useQuery({
-    queryKey: ['muqtadi-salary-summary'],
+    queryKey: queryKeys.muqtadiSalarySummary,
     queryFn: () => muqtadisService.getSalarySummary(),
     enabled,
-    staleTime: 45_000,
+    staleTime: 8000,
+    refetchOnMount: true,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: true,
   });
 
   const {
@@ -99,10 +105,13 @@ export function useMuqtadis(options: UseMuqtadisOptions) {
     isLoading: isStatsLoading,
     refetch: refetchStats,
   } = useQuery({
-    queryKey: ['muqtadi-stats'],
+    queryKey: queryKeys.muqtadiStats,
     queryFn: () => muqtadisService.getStats(),
     enabled,
-    staleTime: 45_000,
+    staleTime: 8000,
+    refetchOnMount: true,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: true,
   });
 
   const resolvePaymentStatus = useCallback((item: Muqtadi): 'PAID' | 'PARTIAL' | 'UNPAID' => {
@@ -158,7 +167,7 @@ export function useMuqtadis(options: UseMuqtadisOptions) {
         verificationStatus: verificationFilter,
         cycleStatus: cycleFilter,
       }),
-      staleTime: 45_000,
+      staleTime: 8000,
     });
   }, [
     enabled,

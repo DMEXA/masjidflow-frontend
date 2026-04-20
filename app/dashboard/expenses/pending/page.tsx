@@ -86,7 +86,7 @@ export default function PendingExpensesPage() {
     },
     onSuccess: async () => {
       await invalidateExpenseMutationQueries(queryClient, mosque?.id);
-      await invalidateMoneyQueries(queryClient);
+      await invalidateMoneyQueries(queryClient, mosque?.id);
       toast.success('Expense approved');
     },
   });
@@ -113,7 +113,7 @@ export default function PendingExpensesPage() {
     },
     onSuccess: async () => {
       await invalidateExpenseMutationQueries(queryClient, mosque?.id);
-      await invalidateMoneyQueries(queryClient);
+      await invalidateMoneyQueries(queryClient, mosque?.id);
       toast.success('Expense rejected');
     },
   });

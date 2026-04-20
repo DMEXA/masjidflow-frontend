@@ -92,7 +92,7 @@ export default function MuqtadiDetailsModal({
     queryFn: () => muqtadisService.getById(muqtadiId),
     enabled: Boolean(muqtadiId),
     initialData: () => buildInitialDetails(selectedMuqtadi, details),
-    staleTime: 60_000,
+    staleTime: 8000,
     refetchOnWindowFocus: false,
     refetchOnMount: 'always',
   });
@@ -108,8 +108,9 @@ export default function MuqtadiDetailsModal({
     },
     enabled: activeTab === 'payments' && Boolean(muqtadiId),
     initialData: () => detailQuery.data?.payments ?? [],
-    staleTime: 60_000,
+    staleTime: 8000,
     refetchOnWindowFocus: false,
+    refetchOnMount: true,
   });
 
   const duesQuery = useQuery({
@@ -123,8 +124,9 @@ export default function MuqtadiDetailsModal({
     },
     enabled: activeTab === 'dues' && Boolean(muqtadiId),
     initialData: () => detailQuery.data?.dues ?? [],
-    staleTime: 60_000,
+    staleTime: 8000,
     refetchOnWindowFocus: false,
+    refetchOnMount: true,
   });
 
   const historyQuery = useQuery({
@@ -138,8 +140,9 @@ export default function MuqtadiDetailsModal({
     },
     enabled: activeTab === 'history' && Boolean(muqtadiId),
     initialData: () => detailQuery.data?.history ?? [],
-    staleTime: 60_000,
+    staleTime: 8000,
     refetchOnWindowFocus: false,
+    refetchOnMount: true,
   });
 
   const detailsData = detailQuery.data ?? buildInitialDetails(selectedMuqtadi, details) ?? null;

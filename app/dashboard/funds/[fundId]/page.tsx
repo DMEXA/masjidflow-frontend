@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { toast } from 'sonner';
-import { ArrowLeft, Loader2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, XAxis } from 'recharts';
 import { PageHeader } from '@/components/dashboard/page-header';
 import { Badge } from '@/components/ui/badge';
@@ -87,7 +87,10 @@ export default function FundDetailPage() {
     queryKey: queryKeys.fundDetail(fundId),
     queryFn: fetchFund,
     enabled: Boolean(fundId),
-    staleTime: 30_000,
+    staleTime: 15000,
+    refetchOnMount: true,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: true,
     placeholderData: keepPreviousData,
   });
 
@@ -124,7 +127,7 @@ export default function FundDetailPage() {
       setIsCategoryEditorOpen(false);
       await Promise.all([
         fundQuery.refetch(),
-        queryClient.invalidateQueries({ queryKey: queryKeys.funds(), exact: false }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.fundsRoot, exact: false }),
       ]);
       toast.success('Category added successfully');
     } catch (error) {

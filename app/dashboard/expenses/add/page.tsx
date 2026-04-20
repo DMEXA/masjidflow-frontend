@@ -17,10 +17,16 @@ import { type Fund } from '@/services/funds.service';
 import { usePermission } from '@/hooks/usePermission';
 import { useAuthStore } from '@/src/store/auth.store';
 import { useFundsListQuery } from '@/hooks/useFundsListQuery';
-import { invalidateExpenseMutationQueries, invalidateMoneyQueries } from '@/lib/money-cache';
-import { useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { parseStrictAmountInput } from '@/src/utils/numeric-input';
 import { queryKeys } from '@/lib/query-keys';
+import {
+  debugInvalidateByFilters,
+  endFlowGroup,
+  logOptimisticUpdate,
+  logRollback,
+  startFlowGroup,
+} from '@/lib/query-debug';
 
 export default function AddExpensePage() {
   const router = useRouter();
@@ -38,7 +44,6 @@ export default function AddExpensePage() {
     return null;
   }
 
-  const [isLoading, setIsLoading] = useState(false);
   const [uploadStage, setUploadStage] = useState<'compressing' | 'uploading' | null>(null);
   const [formData, setFormData] = useState({
     category: '',
@@ -65,6 +70,132 @@ export default function AddExpensePage() {
     }));
   }, [funds]);
 
+  const createExpenseMutation = useMutation({
+    mutationKey: ['expense'],
+    mutationFn: async (payload: {
+      category: string;
+      amount: number;
+      description: string;
+      fundId?: string;
+      receipt?: File | null;
+    }) => {
+      startFlowGroup('EXPENSE FLOW');
+      let receiptUrl: string | undefined;
+      if (payload.receipt) {
+        const { url } = await expensesService.uploadReceipt(payload.receipt, setUploadStage);
+        receiptUrl = url;
+      }
+
+      return expensesService.create({
+        category: payload.category,
+        amount: payload.amount,
+        description: payload.description,
+        fundId: payload.fundId,
+        receipt: receiptUrl,
+      });
+    },
+    onMutate: async (newData) => {
+      logOptimisticUpdate('expense', newData);
+      const expensesRootKey = queryKeys.expensesRoot(mosque?.id);
+      const pendingCountKey = queryKeys.expensesPendingCount(mosque?.id);
+      const dashboardOverviewKey = queryKeys.dashboardOverview(mosque?.id);
+      const optimisticId = `temp-${Date.now()}`;
+
+      await Promise.all([
+        queryClient.cancelQueries({ queryKey: expensesRootKey, exact: false }),
+        queryClient.cancelQueries({ queryKey: pendingCountKey, exact: false }),
+        queryClient.cancelQueries({ queryKey: dashboardOverviewKey, exact: false }),
+      ]);
+
+      const previousExpenseQueries = queryClient.getQueriesData({
+        queryKey: expensesRootKey,
+        exact: false,
+      });
+      const previousPendingCount = queryClient.getQueryData(pendingCountKey);
+      const previousDashboardQueries = queryClient.getQueriesData({
+        queryKey: dashboardOverviewKey,
+        exact: false,
+      });
+
+      queryClient.setQueriesData({ queryKey: expensesRootKey, exact: false }, (old: any) => {
+        if (!old || !Array.isArray(old.data)) return old;
+        if (old.data.some((item: any) => item?.id === optimisticId)) return old;
+        return {
+          ...old,
+          data: [
+            {
+              id: optimisticId,
+              category: newData.category,
+              amount: newData.amount,
+              description: newData.description,
+              status: 'PENDING',
+              createdAt: new Date().toISOString(),
+              isOptimistic: true,
+            },
+            ...old.data,
+          ],
+        };
+      });
+
+      queryClient.setQueryData(pendingCountKey, (old: any) => {
+        const current = Number(old?.count ?? 0);
+        return { count: current + 1 };
+      });
+
+      queryClient.setQueriesData({ queryKey: dashboardOverviewKey, exact: false }, (old: any) => {
+        if (!old?.stats) return old;
+        return {
+          ...old,
+          stats: {
+            ...old.stats,
+            totalExpenses: Number(old.stats.totalExpenses ?? 0) + newData.amount,
+            net: Number(old.stats.net ?? 0) - newData.amount,
+          },
+        };
+      });
+
+      return { previousExpenseQueries, previousPendingCount, previousDashboardQueries, optimisticId };
+    },
+    onError: (error, _newData, context) => {
+      logRollback(context);
+      context?.previousExpenseQueries?.forEach(([key, data]) => {
+        queryClient.setQueryData(key, data);
+      });
+      queryClient.setQueryData(queryKeys.expensesPendingCount(mosque?.id), context?.previousPendingCount);
+      context?.previousDashboardQueries?.forEach(([key, data]) => {
+        queryClient.setQueryData(key, data);
+      });
+      toast.error(getErrorMessage(error));
+      endFlowGroup();
+    },
+    onSuccess: (createdExpense, _newData, context) => {
+      const optimisticId = context?.optimisticId;
+      if (!optimisticId) return;
+
+      queryClient.setQueriesData({ queryKey: queryKeys.expensesRoot(mosque?.id), exact: false }, (old: any) => {
+        if (!old || !Array.isArray(old.data)) return old;
+        const withoutTemp = old.data.filter((item: any) => item?.id !== optimisticId);
+        const hasReal = withoutTemp.some((item: any) => item?.id === createdExpense.id);
+        return {
+          ...old,
+          data: hasReal ? withoutTemp : [createdExpense, ...withoutTemp],
+        };
+      });
+    },
+    onSettled: async () => {
+      await debugInvalidateByFilters(queryClient, {
+        predicate: ({ queryKey }) => {
+          const root = String(queryKey?.[0] ?? '');
+          return root === queryKeys.fundsRoot[0] || root === queryKeys.reports[0];
+        },
+      });
+      setUploadStage(null);
+      endFlowGroup();
+    },
+  });
+
+  const isLoading = createExpenseMutation.isPending;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -81,78 +212,21 @@ export default function AddExpensePage() {
       return;
     }
 
-    setIsLoading(true);
-    const expensesRootKey = queryKeys.expensesRoot(mosque?.id);
-    const pendingCountKey = queryKeys.expensesPendingCount(mosque?.id);
-    const previousExpenseQueries = queryClient.getQueriesData({
-      queryKey: expensesRootKey,
-      exact: false,
-    });
-    const previousPendingCount = queryClient.getQueryData(pendingCountKey);
-    const optimisticId = `optimistic-expense-${Date.now()}`;
-
-    queryClient.setQueriesData({ queryKey: expensesRootKey, exact: false }, (old: any) => {
-      if (!old || !Array.isArray(old.data)) return old;
-      return {
-        ...old,
-        data: [
-          {
-            id: optimisticId,
-            category: formData.category,
-            amount: parsedAmount,
-            description: formData.description,
-            status: 'PENDING',
-            createdAt: new Date().toISOString(),
-          },
-          ...old.data,
-        ],
-      };
-    });
-    queryClient.setQueryData(pendingCountKey, (old: any) => {
-      const current = Number(old?.count ?? 0);
-      return { count: current + 1 };
-    });
-
     try {
-      let receiptUrl: string | undefined;
-      if (formData.receipt) {
-        const { url } = await expensesService.uploadReceipt(formData.receipt, setUploadStage);
-        receiptUrl = url;
-      }
-
-      const createdExpense = await expensesService.create({
+      await createExpenseMutation.mutateAsync({
         category: formData.category,
         amount: parsedAmount,
         description: formData.description,
         fundId: formData.fundId || undefined,
-        receipt: receiptUrl,
+        receipt: formData.receipt,
       });
-
-      queryClient.setQueriesData(
-        { queryKey: expensesRootKey, exact: false },
-        (old: any) => {
-          if (!old || !Array.isArray(old.data)) return old;
-          return {
-            ...old,
-            data: old.data.map((item: any) => (item?.id === optimisticId ? createdExpense : item)),
-          };
-        },
-      );
-
-      await invalidateExpenseMutationQueries(queryClient, mosque?.id);
-      await invalidateMoneyQueries(queryClient);
 
       toast.success('Expense added successfully');
       router.push('/dashboard/expenses');
-    } catch (error) {
-      previousExpenseQueries.forEach(([key, data]) => {
-        queryClient.setQueryData(key, data);
-      });
-      queryClient.setQueryData(pendingCountKey, previousPendingCount);
-      toast.error(getErrorMessage(error));
     } finally {
-      setUploadStage(null);
-      setIsLoading(false);
+      if (!createExpenseMutation.isPending) {
+        setUploadStage(null);
+      }
     }
   };
 

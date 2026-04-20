@@ -143,7 +143,7 @@ export default function EditExpensePage() {
         receipt: receiptUrl,
       });
 
-      await invalidateMoneyQueries(queryClient);
+      await invalidateMoneyQueries(queryClient, mosque?.id);
 
       toast.success('Expense updated successfully');
       router.push(`/dashboard/expenses/${params.id}`);

@@ -40,6 +40,7 @@ import { ActionOverflowMenu } from '@/components/common/action-overflow-menu';
 import { ListEmptyState } from '@/components/common/list-empty-state';
 import { invalidateMoneyQueries } from '@/lib/money-cache';
 import { queryKeys } from '@/lib/query-keys';
+import { useAuthStore } from '@/src/store/auth.store';
 
 function toWaLink(phone?: string) {
   if (!phone) return '';
@@ -50,6 +51,8 @@ function toWaLink(phone?: string) {
 export default function PendingDonationsPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const { mosque } = useAuthStore();
+  const mosqueId = mosque?.id;
   const { isAdmin, isSuperAdmin } = usePermission();
 
   useEffect(() => {
@@ -77,23 +80,14 @@ export default function PendingDonationsPage() {
   const [manualConfirm, setManualConfirm] = useState(false);
   const [intentMatchedViaReconciliation, setIntentMatchedViaReconciliation] = useState(false);
   const fetchLockRef = useRef(false);
-  const listCacheRef = useRef<{ key: string; at: number; data: Donation[] } | null>(null);
 
   const refreshDonationQueries = useCallback(async () => {
-    await queryClient.invalidateQueries({ queryKey: queryKeys.donationsPendingCount(), exact: false });
-    await queryClient.invalidateQueries({ queryKey: queryKeys.donationsRoot(), exact: false });
-  }, [queryClient]);
+    await queryClient.invalidateQueries({ queryKey: queryKeys.donationsPendingCount(mosqueId), exact: false });
+    await queryClient.invalidateQueries({ queryKey: queryKeys.donationsRoot(mosqueId), exact: false });
+  }, [mosqueId, queryClient]);
 
   const fetchPending = useCallback(async () => {
     if (fetchLockRef.current) return;
-    const cacheKey = statusFilter;
-    const now = Date.now();
-    const cache = listCacheRef.current;
-    if (cache && cache.key === cacheKey && now - cache.at < 5000) {
-      setDonations(cache.data);
-      setSelectedIds((prev) => prev.filter((id) => cache.data.some((item) => item.id === id)));
-      return;
-    }
 
     fetchLockRef.current = true;
     setIsLoading(true);
@@ -102,14 +96,13 @@ export default function PendingDonationsPage() {
       const bounded = data.length > 50 ? data.slice(0, 50) : data;
       setDonations(bounded);
       setSelectedIds((prev) => prev.filter((id) => data.some((item) => item.id === id)));
-      listCacheRef.current = { key: cacheKey, at: now, data: bounded };
     } catch (error) {
       toast.error(getErrorMessage(error, 'Failed to load pending donations'));
     } finally {
       setIsLoading(false);
       fetchLockRef.current = false;
     }
-  }, [statusFilter]);
+  }, []);
 
   useEffect(() => {
     fetchPending();
@@ -161,7 +154,7 @@ export default function PendingDonationsPage() {
       setManualConfirm(false);
       setIntentMatchedViaReconciliation(false);
       await refreshDonationQueries();
-      await invalidateMoneyQueries(queryClient);
+      await invalidateMoneyQueries(queryClient, mosqueId);
     } catch (error) {
       toast.error(getErrorMessage(error, 'Failed to approve donation'));
     } finally {
@@ -175,7 +168,7 @@ export default function PendingDonationsPage() {
       await donationsService.rejectPending(id);
       toast.success('Donation rejected');
       await refreshDonationQueries();
-      await invalidateMoneyQueries(queryClient);
+      await invalidateMoneyQueries(queryClient, mosqueId);
       await fetchPending();
     } catch (error) {
       toast.error(getErrorMessage(error, 'Failed to reject donation'));
@@ -274,7 +267,7 @@ export default function PendingDonationsPage() {
       toast.success(`${verifiedCount} donations verified (INR ${totalAmountVerified.toFixed(2)})`);
       setSelectedIds([]);
       await refreshDonationQueries();
-      await invalidateMoneyQueries(queryClient);
+      await invalidateMoneyQueries(queryClient, mosqueId);
       await fetchPending();
     } catch (error) {
       toast.error(getErrorMessage(error, 'Failed to bulk verify donations'));
@@ -304,7 +297,7 @@ export default function PendingDonationsPage() {
       toast.success(`${rejectedCount} donations rejected`);
       setSelectedIds([]);
       await refreshDonationQueries();
-      await invalidateMoneyQueries(queryClient);
+      await invalidateMoneyQueries(queryClient, mosqueId);
       await fetchPending();
     } catch (error) {
       toast.error(getErrorMessage(error, 'Failed to bulk reject donations'));

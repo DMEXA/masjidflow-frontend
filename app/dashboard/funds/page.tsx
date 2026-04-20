@@ -91,14 +91,20 @@ export default function FundsPage() {
     queryKey: fundsKey,
     queryFn: () => fundsService.getSummary(),
     enabled: Boolean(mosqueId) && Boolean(token),
-    staleTime: 45_000,
+    staleTime: 15000,
+    refetchOnMount: true,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: true,
   });
 
   const inactiveFundsQuery = useQuery({
     queryKey: inactiveFundsKey,
     queryFn: fetchInactiveFunds,
     enabled: Boolean(mosqueId) && Boolean(token),
-    staleTime: 45_000,
+    staleTime: 15000,
+    refetchOnMount: true,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: true,
   });
 
   const funds = useMemo(() => fundsQuery.data ?? [], [fundsQuery.data]);

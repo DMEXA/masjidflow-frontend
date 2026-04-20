@@ -117,9 +117,9 @@ export default function ExpensesPage() {
       }),
     enabled: Boolean(mosque?.id) && Boolean(token),
     placeholderData: keepPreviousData,
-    staleTime: 30_000,
-    refetchOnMount: false,
-    refetchOnWindowFocus: true,
+    staleTime: 5000,
+    refetchOnMount: true,
+    refetchOnWindowFocus: false,
     refetchOnReconnect: true,
   });
 
@@ -160,7 +160,7 @@ export default function ExpensesPage() {
           fundId: selectedFundId,
           search: debouncedSearch || undefined,
         }),
-      staleTime: 30_000,
+      staleTime: 5000,
     });
   }, [
     mosque?.id,
@@ -187,9 +187,9 @@ export default function ExpensesPage() {
     queryKey: queryKeys.expensesPendingCount(mosque?.id),
     queryFn: () => expensesService.getPendingCount(),
     enabled: Boolean(mosque?.id) && Boolean(token) && canViewPendingCount,
-    staleTime: 30_000,
+    staleTime: 5000,
     refetchOnMount: false,
-    refetchOnWindowFocus: true,
+    refetchOnWindowFocus: false,
   });
 
   const deleteMutation = useMutation({
@@ -224,7 +224,7 @@ export default function ExpensesPage() {
     onSuccess: async () => {
       await invalidateExpenseMutationQueries(queryClient, mosque?.id);
       await queryClient.invalidateQueries({ queryKey: queryKeys.funds(mosque?.id), exact: false });
-      await invalidateMoneyQueries(queryClient);
+      await invalidateMoneyQueries(queryClient, mosque?.id);
     },
   });
 
@@ -408,7 +408,7 @@ export default function ExpensesPage() {
       setIsBulkDeleteOpen(false);
       toast.success('Selected expenses moved to trash');
       await invalidateExpenseMutationQueries(queryClient, mosque?.id);
-      await invalidateMoneyQueries(queryClient);
+      await invalidateMoneyQueries(queryClient, mosque?.id);
     } finally {
       setBulkActionLoading(null);
     }

@@ -9,6 +9,7 @@ import {
   markRefreshTokenAvailable,
 } from '@/services/auth-session';
 import { clearAccessToken, getAccessToken, setAccessToken } from './access-token';
+import { logApiCall } from '@/lib/query-debug';
 
 const MAX_REFRESH_RETRIES = 1;
 const PREEMPTIVE_REFRESH_WINDOW_MS = 60 * 1000;
@@ -171,6 +172,11 @@ function maybePreemptiveRefresh(token: string, requestPath: string): void {
 // Request interceptor to add auth token
 api.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
+    logApiCall({
+      url: typeof config.url === 'string' ? config.url : '',
+      method: config.method,
+    });
+
     if (typeof window !== 'undefined') {
       const token = getAccessToken();
       const requestPath = resolveRequestPath(typeof config.url === 'string' ? config.url : '');

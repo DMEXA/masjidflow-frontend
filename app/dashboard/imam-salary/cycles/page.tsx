@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { PageHeader } from '@/components/dashboard/page-header';
@@ -11,6 +12,9 @@ import { muqtadisService, type ImamSalaryCycle } from '@/services/muqtadis.servi
 import { formatCurrency, formatCycleLabel } from '@/src/utils/format';
 import { getErrorMessage } from '@/src/utils/error';
 import { ListEmptyState } from '@/components/common/list-empty-state';
+import { queryKeys } from '@/lib/query-keys';
+import { invalidateMuqtadiMutationQueries } from '@/lib/money-cache';
+import { useAuthStore } from '@/src/store/auth.store';
 
 type SortOrder = 'newest' | 'oldest';
 
@@ -24,10 +28,30 @@ function defaultMonthValue() {
 
 export default function ImamSalaryCyclesPage() {
   const router = useRouter();
-  const [isLoading, setIsLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [cycles, setCycles] = useState<ImamSalaryCycle[]>([]);
+  const queryClient = useQueryClient();
+  const { mosque } = useAuthStore();
+  const mosqueId = mosque?.id;
   const [sortOrder, setSortOrder] = useState<SortOrder>('newest');
+  const cyclesQuery = useQuery<ImamSalaryCycle[]>({
+    queryKey: queryKeys.imamSalaryCycles(mosqueId),
+    queryFn: () => muqtadisService.getSalaryMonths(),
+    staleTime: 8000,
+    refetchOnMount: true,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: true,
+  });
+
+  const createCycleMutation = useMutation({
+    mutationFn: () =>
+      muqtadisService.createSalaryMonth({
+        month: currentPeriod.month,
+        year: currentPeriod.year,
+      }),
+  });
+
+  const isLoading = cyclesQuery.isLoading;
+  const saving = createCycleMutation.isPending;
+  const cycles = cyclesQuery.data ?? [];
   const currentPeriod = defaultMonthValue();
   const currentMonthExists = cycles.some(
     (entry) => entry.month === currentPeriod.month && entry.year === currentPeriod.year,
@@ -39,37 +63,25 @@ export default function ImamSalaryCyclesPage() {
     return sortOrder === 'newest' ? right - left : left - right;
   });
 
-  const load = async () => {
-    setIsLoading(true);
-    try {
-      const monthList = await muqtadisService.getSalaryMonths();
-      setCycles(monthList);
-    } catch (error) {
-      toast.error(getErrorMessage(error, 'Failed to load salary months'));
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   useEffect(() => {
-    load();
-  }, []);
+    if (cyclesQuery.error) {
+      toast.error(getErrorMessage(cyclesQuery.error, 'Failed to load salary months'));
+    }
+  }, [cyclesQuery.error]);
 
   const startMonth = async () => {
     if (currentMonthExists) return;
 
-    setSaving(true);
     try {
-      const created = await muqtadisService.createSalaryMonth({
-        month: currentPeriod.month,
-        year: currentPeriod.year,
-      });
+      const created = await createCycleMutation.mutateAsync();
       toast.success(`Month created with ${formatCurrency(created.contributionAmount ?? created.perHead)} fixed contribution`);
-      await load();
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.imamSalaryCycles(mosqueId), exact: false }),
+        invalidateMuqtadiMutationQueries(queryClient, mosqueId),
+        queryClient.invalidateQueries({ queryKey: queryKeys.dashboardOverview(mosqueId), exact: false }),
+      ]);
     } catch (error) {
       toast.error(getErrorMessage(error, 'Failed to create salary month'));
-    } finally {
-      setSaving(false);
     }
   };
 

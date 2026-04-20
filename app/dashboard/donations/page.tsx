@@ -130,9 +130,9 @@ export default function DonationsPage() {
       }),
     enabled: Boolean(mosqueId) && Boolean(token),
     placeholderData: keepPreviousData,
-    staleTime: 30_000,
-    refetchOnMount: false,
-    refetchOnWindowFocus: true,
+    staleTime: 5000,
+    refetchOnMount: true,
+    refetchOnWindowFocus: false,
     refetchOnReconnect: true,
   });
 
@@ -166,7 +166,7 @@ export default function DonationsPage() {
           fundId: selectedFundId,
           search: debouncedSearch || undefined,
         }),
-      staleTime: 30_000,
+      staleTime: 5000,
     });
   }, [
     mosqueId,
@@ -186,8 +186,9 @@ export default function DonationsPage() {
     queryKey: queryKeys.donationsPendingCount(mosqueId),
     queryFn: () => donationsService.getPendingCount(),
     enabled: false,
-    staleTime: 30_000,
+    staleTime: 5000,
     refetchOnMount: false,
+    refetchOnWindowFocus: false,
     initialData: () =>
       queryClient.getQueryData<{ count: number }>(queryKeys.donationsPendingCount(mosqueId)),
   });
@@ -224,7 +225,7 @@ export default function DonationsPage() {
     onSuccess: async () => {
       await invalidateDonationMutationQueries(queryClient, mosqueId);
       await queryClient.invalidateQueries({ queryKey: queryKeys.funds(mosqueId), exact: false });
-      await invalidateMoneyQueries(queryClient);
+      await invalidateMoneyQueries(queryClient, mosqueId);
     },
   });
 
@@ -430,7 +431,7 @@ export default function DonationsPage() {
       setIsBulkDeleteOpen(false);
       toast.success('Selected donations moved to trash');
       await invalidateDonationQueries();
-      await invalidateMoneyQueries(queryClient);
+      await invalidateMoneyQueries(queryClient, mosqueId);
     } finally {
       setBulkActionLoading(null);
     }

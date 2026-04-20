@@ -19,10 +19,16 @@ import type { PaymentType } from '@/src/constants';
 import { usePermission } from '@/hooks/usePermission';
 import { useAuthStore } from '@/src/store/auth.store';
 import { useFundsListQuery } from '@/hooks/useFundsListQuery';
-import { invalidateDonationMutationQueries, invalidateMoneyQueries } from '@/lib/money-cache';
-import { useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { parseStrictAmountInput } from '@/src/utils/numeric-input';
 import { queryKeys } from '@/lib/query-keys';
+import {
+  debugInvalidateByFilters,
+  endFlowGroup,
+  logOptimisticUpdate,
+  logRollback,
+  startFlowGroup,
+} from '@/lib/query-debug';
 
 export default function AddDonationPage() {
   const router = useRouter();
@@ -40,7 +46,6 @@ export default function AddDonationPage() {
     return null;
   }
 
-  const [isLoading, setIsLoading] = useState(false);
   const [uploadStage, setUploadStage] = useState<'compressing' | 'uploading' | null>(null);
   const [formData, setFormData] = useState({
     donorName: '',
@@ -66,6 +71,139 @@ export default function AddDonationPage() {
       fundId: prev.fundId || masjidFund.id,
     }));
   }, [funds]);
+
+  const createDonationMutation = useMutation({
+    mutationKey: ['donation'],
+    mutationFn: async (payload: {
+      donorName: string;
+      donorPhone?: string;
+      amount: number;
+      paymentType: PaymentType;
+      customPaymentMethod?: string;
+      description?: string;
+      fundId?: string;
+      receipt?: File | null;
+    }) => {
+      startFlowGroup('DONATION FLOW');
+      let receiptUrl: string | undefined;
+      if (payload.receipt) {
+        const { url } = await donationsService.uploadReceipt(payload.receipt, setUploadStage);
+        receiptUrl = url;
+      }
+
+      return donationsService.create({
+        donorName: payload.donorName,
+        donorPhone: payload.donorPhone,
+        amount: payload.amount,
+        paymentType: payload.paymentType,
+        customPaymentMethod: payload.customPaymentMethod,
+        description: payload.description,
+        fundId: payload.fundId,
+        receipt: receiptUrl,
+      });
+    },
+    onMutate: async (newData) => {
+      logOptimisticUpdate('donation', newData);
+      const donationsRootKey = queryKeys.donationsRoot(mosque?.id);
+      const pendingCountKey = queryKeys.donationsPendingCount(mosque?.id);
+      const dashboardOverviewKey = queryKeys.dashboardOverview(mosque?.id);
+      const optimisticId = `temp-${Date.now()}`;
+
+      await Promise.all([
+        queryClient.cancelQueries({ queryKey: donationsRootKey, exact: false }),
+        queryClient.cancelQueries({ queryKey: pendingCountKey, exact: false }),
+        queryClient.cancelQueries({ queryKey: dashboardOverviewKey, exact: false }),
+      ]);
+
+      const previousDonationQueries = queryClient.getQueriesData({
+        queryKey: donationsRootKey,
+        exact: false,
+      });
+      const previousPendingCount = queryClient.getQueryData(pendingCountKey);
+      const previousDashboardQueries = queryClient.getQueriesData({
+        queryKey: dashboardOverviewKey,
+        exact: false,
+      });
+
+      queryClient.setQueriesData({ queryKey: donationsRootKey, exact: false }, (old: any) => {
+        if (!old || !Array.isArray(old.data)) return old;
+        if (old.data.some((item: any) => item?.id === optimisticId)) return old;
+        return {
+          ...old,
+          data: [
+            {
+              id: optimisticId,
+              donorName: newData.donorName,
+              donorPhone: newData.donorPhone || null,
+              amount: newData.amount,
+              paymentType: newData.paymentType,
+              donationStatus: 'PENDING',
+              createdAt: new Date().toISOString(),
+              isOptimistic: true,
+            },
+            ...old.data,
+          ],
+        };
+      });
+
+      queryClient.setQueryData(pendingCountKey, (old: any) => {
+        const current = Number(old?.count ?? 0);
+        return { count: current + 1 };
+      });
+
+      queryClient.setQueriesData({ queryKey: dashboardOverviewKey, exact: false }, (old: any) => {
+        if (!old?.stats) return old;
+        return {
+          ...old,
+          stats: {
+            ...old.stats,
+            totalDonations: Number(old.stats.totalDonations ?? 0) + newData.amount,
+            net: Number(old.stats.net ?? 0) + newData.amount,
+          },
+        };
+      });
+
+      return { previousDonationQueries, previousPendingCount, previousDashboardQueries, optimisticId };
+    },
+    onError: (error, _newData, context) => {
+      logRollback(context);
+      context?.previousDonationQueries?.forEach(([key, data]) => {
+        queryClient.setQueryData(key, data);
+      });
+      queryClient.setQueryData(queryKeys.donationsPendingCount(mosque?.id), context?.previousPendingCount);
+      context?.previousDashboardQueries?.forEach(([key, data]) => {
+        queryClient.setQueryData(key, data);
+      });
+      toast.error(getErrorMessage(error, 'Failed to add donation'));
+      endFlowGroup();
+    },
+    onSuccess: (createdDonation, _newData, context) => {
+      const optimisticId = context?.optimisticId;
+      if (!optimisticId) return;
+
+      queryClient.setQueriesData({ queryKey: queryKeys.donationsRoot(mosque?.id), exact: false }, (old: any) => {
+        if (!old || !Array.isArray(old.data)) return old;
+        const withoutTemp = old.data.filter((item: any) => item?.id !== optimisticId);
+        const hasReal = withoutTemp.some((item: any) => item?.id === createdDonation.id);
+        return {
+          ...old,
+          data: hasReal ? withoutTemp : [createdDonation, ...withoutTemp],
+        };
+      });
+    },
+    onSettled: async () => {
+      await debugInvalidateByFilters(queryClient, {
+        predicate: ({ queryKey }) => {
+          const root = String(queryKey?.[0] ?? '');
+          return root === queryKeys.fundsRoot[0] || root === queryKeys.reports[0];
+        },
+      });
+      setUploadStage(null);
+      endFlowGroup();
+    },
+  });
+
+  const isLoading = createDonationMutation.isPending;
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] ?? null;
@@ -93,51 +231,10 @@ export default function AddDonationPage() {
       return;
     }
 
-    setIsLoading(true);
-    const donationsRootKey = queryKeys.donationsRoot(mosque?.id);
-    const pendingCountKey = queryKeys.donationsPendingCount(mosque?.id);
-    const previousDonationQueries = queryClient.getQueriesData({
-      queryKey: donationsRootKey,
-      exact: false,
-    });
-    const previousPendingCount = queryClient.getQueryData(pendingCountKey);
-    const optimisticId = `optimistic-donation-${Date.now()}`;
-
-    queryClient.setQueriesData({ queryKey: donationsRootKey, exact: false }, (old: any) => {
-      if (!old || !Array.isArray(old.data)) return old;
-      return {
-        ...old,
-        data: [
-          {
-            id: optimisticId,
-            donorName: formData.donorName,
-            donorPhone: formData.donorPhone || null,
-            amount,
-            paymentType: formData.paymentType,
-            donationStatus: 'PENDING',
-            createdAt: new Date().toISOString(),
-          },
-          ...old.data,
-        ],
-      };
-    });
-    queryClient.setQueryData(pendingCountKey, (old: any) => {
-      const current = Number(old?.count ?? 0);
-      return { count: current + 1 };
-    });
-
     try {
       const normalizedCustomMethod = formData.customPaymentMethod.trim().toLowerCase();
 
-      // 1. Upload receipt file first if one is selected
-      let receiptUrl: string | undefined;
-      if (formData.receipt) {
-        const { url } = await donationsService.uploadReceipt(formData.receipt, setUploadStage);
-        receiptUrl = url;
-      }
-
-      // 2. Create the donation record
-      const createdDonation = await donationsService.create({
+      await createDonationMutation.mutateAsync({
         donorName: formData.donorName,
         donorPhone: formData.donorPhone || undefined,
         amount,
@@ -146,34 +243,15 @@ export default function AddDonationPage() {
           formData.paymentType === 'OTHER' ? normalizedCustomMethod : undefined,
         description: formData.description || undefined,
         fundId: formData.fundId || undefined,
-        receipt: receiptUrl,
+        receipt: formData.receipt,
       });
-
-      queryClient.setQueriesData(
-        { queryKey: donationsRootKey, exact: false },
-        (old: any) => {
-          if (!old || !Array.isArray(old.data)) return old;
-          return {
-            ...old,
-            data: old.data.map((item: any) => (item?.id === optimisticId ? createdDonation : item)),
-          };
-        },
-      );
-
-      await invalidateDonationMutationQueries(queryClient, mosque?.id);
-      await invalidateMoneyQueries(queryClient);
 
       toast.success('Donation added successfully');
       router.push('/dashboard/donations');
-    } catch (error) {
-      previousDonationQueries.forEach(([key, data]) => {
-        queryClient.setQueryData(key, data);
-      });
-      queryClient.setQueryData(pendingCountKey, previousPendingCount);
-      toast.error(getErrorMessage(error, 'Failed to add donation'));
     } finally {
-      setUploadStage(null);
-      setIsLoading(false);
+      if (!createDonationMutation.isPending) {
+        setUploadStage(null);
+      }
     }
   };
 

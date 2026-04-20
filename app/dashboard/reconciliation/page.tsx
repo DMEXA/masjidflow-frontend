@@ -45,7 +45,7 @@ function reasonLabel(reason: ReconciliationNeedsReviewRow['reason']): string {
 
 export default function ReconciliationPage() {
   const queryClient = useQueryClient();
-  const { user } = useAuthStore();
+  const { user, mosque } = useAuthStore();
   const { canCreate, canEdit } = usePermission(user?.role);
   const [isUploading, setIsUploading] = useState(false);
   const [isGeneratingCsv, setIsGeneratingCsv] = useState(false);
@@ -60,7 +60,7 @@ export default function ReconciliationPage() {
   const runReconciliation = async (file: File, successMessage: string) => {
     const response = await reconciliationService.uploadCsv(file);
     setResult(response);
-    await invalidateMoneyQueries(queryClient);
+    await invalidateMoneyQueries(queryClient, mosque?.id);
     toast.success(successMessage);
   };
 

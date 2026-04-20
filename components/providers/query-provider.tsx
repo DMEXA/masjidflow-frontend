@@ -1,13 +1,37 @@
 'use client';
 
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useState } from 'react';
 import { isTransientServiceError } from '@/src/utils/error';
+import {
+  logQueryError,
+  logQuerySuccess,
+  logOptimisticUpdate,
+  logRollback,
+  patchInvalidateQueries,
+} from '@/lib/query-debug';
 
 export function QueryProvider({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
-    () =>
-      new QueryClient({
+    () => {
+      const client = new QueryClient({
+        queryCache: new QueryCache({
+          onSuccess: (_data, query) => {
+            logQuerySuccess(query.queryKey);
+          },
+          onError: (_error, query) => {
+            logQueryError(query.queryKey);
+          },
+        }),
+        mutationCache: new MutationCache({
+          onMutate: (variables, mutation) => {
+            const type = String(mutation.options.mutationKey?.[0] ?? 'mutation');
+            logOptimisticUpdate(type, variables);
+          },
+          onError: (_error, _variables, context) => {
+            logRollback(context);
+          },
+        }),
         defaultOptions: {
           queries: {
             staleTime: 45_000,
@@ -27,7 +51,11 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
             retry: 1,
           },
         },
-      }),
+      });
+
+      patchInvalidateQueries(client);
+      return client;
+    },
   );
 
   return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
