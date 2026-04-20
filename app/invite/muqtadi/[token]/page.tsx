@@ -121,8 +121,8 @@ export default function MuqtadiInvitePage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-muted/30 px-4 py-12">
-      <div className="w-full max-w-md">
+    <div className="flex min-h-screen items-center justify-center overflow-x-hidden bg-muted/30 py-12">
+      <div className="w-full max-w-md mx-auto px-4 box-border">
         <div className="mb-8 text-center">
           <Link href="/" className="inline-flex items-center gap-2">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary">
@@ -142,6 +142,7 @@ export default function MuqtadiInvitePage() {
               {step === 1 ? (
                 <>
                   <Input
+                    className="w-full"
                     placeholder="Name"
                     value={form.name}
                     onChange={(e) =>
@@ -156,16 +157,19 @@ export default function MuqtadiInvitePage() {
                     }
                   />
                   <Input
+                    className="w-full"
                     placeholder="Father Name"
                     value={form.fatherName}
                     onChange={(e) => setForm((prev) => ({ ...prev, fatherName: e.target.value }))}
                   />
                   <Input
+                    className="w-full"
                     placeholder="WhatsApp Number"
                     value={form.whatsappNumber}
                     onChange={(e) => setForm((prev) => ({ ...prev, whatsappNumber: e.target.value }))}
                   />
                   <Input
+                    className="w-full"
                     type="text"
                     min={1}
                     max={50}
@@ -193,6 +197,7 @@ export default function MuqtadiInvitePage() {
                     const placeholder = isFirst ? 'Member 1 (auto-filled)' : `Dependent ${index}`;
                     return (
                       <Input
+                        className="w-full"
                         key={`member-${index + 1}`}
                         placeholder={placeholder}
                         value={isFirst ? form.name : (form.memberNames[index] ?? '')}
@@ -212,23 +217,25 @@ export default function MuqtadiInvitePage() {
                   })}
 
                   <Input
+                    className="w-full"
                     type="password"
                     placeholder="Password"
                     value={form.password}
                     onChange={(e) => setForm((prev) => ({ ...prev, password: e.target.value }))}
                   />
                   <Input
+                    className="w-full"
                     type="password"
                     placeholder="Confirm Password"
                     value={form.confirmPassword}
                     onChange={(e) => setForm((prev) => ({ ...prev, confirmPassword: e.target.value }))}
                   />
 
-                  <div className="flex gap-2">
-                    <Button type="button" variant="outline" className="w-full" onClick={() => setStep(1)} disabled={isLoading}>
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <Button type="button" variant="outline" className="w-full sm:flex-1" onClick={() => setStep(1)} disabled={isLoading}>
                       Back
                     </Button>
-                    <Button type="submit" className="w-full" disabled={isLoading}>
+                    <Button type="submit" className="w-full sm:flex-1" disabled={isLoading}>
                       {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                       Register
                     </Button>

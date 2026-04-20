@@ -110,7 +110,11 @@ export default function DashboardPage() {
             </Link>
           </Button>
 
-          <Button variant="outline" asChild>
+          <Button
+            variant="secondary"
+            className="bg-gray-100 text-gray-800 border border-gray-200 hover:bg-gray-200 transition-colors"
+            asChild
+          >
             <Link href="/dashboard/expenses/add">
               <Plus className="mr-2 h-4 w-4" />
               Add Expense

@@ -206,14 +206,14 @@ export default function MuqtadiDetailsModal({
         </SheetHeader>
 
         {isPendingHousehold ? (
-          <Card className="mt-4">
-            <CardContent className="flex flex-wrap items-center gap-2 pt-4">
-              <Button type="button" size="sm" variant="outline" onClick={onOpenEditDetails}>
+          <div className="flex w-full flex-wrap items-center justify-center gap-3 px-2">
+              <Button type="button" size="sm" variant="outline" className="min-w-26 rounded-xl" onClick={onOpenEditDetails}>
                 Edit
               </Button>
               <Button
                 type="button"
                 size="sm"
+                className="min-w-26 rounded-xl"
                 onClick={onVerifyPending}
                 disabled={isPendingActionLoading}
               >
@@ -224,14 +224,14 @@ export default function MuqtadiDetailsModal({
                 type="button"
                 size="sm"
                 variant="destructive"
+                className="min-w-26 rounded-xl"
                 onClick={onRejectPending}
                 disabled={isPendingActionLoading}
               >
                 {isPendingActionLoading ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
                 Reject
               </Button>
-            </CardContent>
-          </Card>
+          </div>
         ) : null}
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-4 space-y-3">

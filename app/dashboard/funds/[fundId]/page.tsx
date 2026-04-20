@@ -166,17 +166,17 @@ export default function FundDetailPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 px-2">
       <PageHeader title={fund.name} description="Detailed fund financial overview">
-        <Button variant="outline" size="sm" asChild>
+        {/* <Button variant="outline" size="sm" asChild>
           <Link href="/dashboard/funds">
             {fundQuery.isFetching ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ArrowLeft className="mr-2 h-4 w-4" />}
             Back to Funds
           </Link>
-        </Button>
+        </Button> */}
       </PageHeader>
 
-      <Card>
+      <Card className='-mt-4'>
         <CardHeader>
           <CardTitle>Fund Header</CardTitle>
           <CardDescription>Professional financial summary for this fund.</CardDescription>

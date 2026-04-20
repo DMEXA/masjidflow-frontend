@@ -49,7 +49,6 @@ import { getErrorMessage } from '@/src/utils/error';
 import { invalidateMoneyQueries, invalidateMuqtadiMutationQueries } from '@/lib/money-cache';
 import { queryKeys } from '@/lib/queryKeys';
 import { formatCurrency, formatDate, formatCycleLabel, getCycleStatus } from '@/src/utils/format';
-import { ActionOverflowMenu } from '@/components/common/action-overflow-menu';
 import { ListEmptyState } from '@/components/common/list-empty-state';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import MuqtadiStats from '@/components/muqtadis/MuqtadiStats';
@@ -1058,10 +1057,10 @@ export default function MuqtadisPage() {
     <div className="ds-section ds-stack">
       <PageHeader title="Households" description="Manage imam salary households and dues">
         <div className="space-y-2">
-          <div className="flex flex-wrap gap-2">
+          <div className="flex items-center gap-4">
             <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
               <DialogTrigger asChild>
-                <Button>
+                <Button className=''>
                   <Plus className="mr-2 h-4 w-4" />
                   Add
                 </Button>
@@ -1109,16 +1108,15 @@ export default function MuqtadisPage() {
               </DialogContent>
             </Dialog>
 
-            <ActionOverflowMenu
-              items={[
-                {
-                  label: isInviteLinkLoading ? 'Creating Invite...' : 'Invite',
-                  onSelect: () => setIsInviteLimitDialogOpen(true),
-                },
-                { label: 'Salary Settings', onSelect: () => router.push('/dashboard/settings') },
-                { label: 'Month', onSelect: () => router.push('/dashboard/imam-salary/cycles') },
-              ]}
-            />
+            <Button
+              type="button"
+              variant="secondary"
+              className="bg-gray-100 text-gray-800 border border-gray-200 hover:bg-gray-200 transition-colors px-8"
+              onClick={() => setIsInviteLimitDialogOpen(true)}
+              disabled={isInviteLinkLoading}
+            >
+              Invite
+            </Button>
           </div>
         </div>
 
