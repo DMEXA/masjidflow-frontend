@@ -22,10 +22,6 @@ import { parseStrictAmountInput } from '@/src/utils/numeric-input';
 import { queryKeys } from '@/lib/query-keys';
 import {
   debugInvalidateByFilters,
-  endFlowGroup,
-  logOptimisticUpdate,
-  logRollback,
-  startFlowGroup,
 } from '@/lib/query-debug';
 
 export default function AddExpensePage() {
@@ -79,7 +75,6 @@ export default function AddExpensePage() {
       fundId?: string;
       receipt?: File | null;
     }) => {
-      startFlowGroup('EXPENSE FLOW');
       let receiptUrl: string | undefined;
       if (payload.receipt) {
         const { url } = await expensesService.uploadReceipt(payload.receipt, setUploadStage);
@@ -95,7 +90,6 @@ export default function AddExpensePage() {
       });
     },
     onMutate: async (newData) => {
-      logOptimisticUpdate('expense', newData);
       const expensesRootKey = queryKeys.expensesRoot(mosque?.id);
       const pendingCountKey = queryKeys.expensesPendingCount(mosque?.id);
       const dashboardOverviewKey = queryKeys.dashboardOverview(mosque?.id);
@@ -157,7 +151,6 @@ export default function AddExpensePage() {
       return { previousExpenseQueries, previousPendingCount, previousDashboardQueries, optimisticId };
     },
     onError: (error, _newData, context) => {
-      logRollback(context);
       context?.previousExpenseQueries?.forEach(([key, data]) => {
         queryClient.setQueryData(key, data);
       });
@@ -166,7 +159,6 @@ export default function AddExpensePage() {
         queryClient.setQueryData(key, data);
       });
       toast.error(getErrorMessage(error));
-      endFlowGroup();
     },
     onSuccess: (createdExpense, _newData, context) => {
       const optimisticId = context?.optimisticId;
@@ -190,7 +182,6 @@ export default function AddExpensePage() {
         },
       });
       setUploadStage(null);
-      endFlowGroup();
     },
   });
 

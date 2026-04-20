@@ -55,8 +55,6 @@ import { useAuthStore } from '@/src/store/auth.store';
 import {
   debugInvalidate,
   debugInvalidateByFilters,
-  logOptimisticUpdate,
-  logRollback,
 } from '@/lib/query-debug';
 import MuqtadiStats from '@/components/muqtadis/MuqtadiStats';
 import MuqtadiFilters from '@/components/muqtadis/MuqtadiFilters';
@@ -224,14 +222,6 @@ export default function MuqtadisPage() {
     ]);
   }, [queryClient]);
 
-  const getCurrentCycleDueFromDetails = useCallback((details: MuqtadiDetails | null | undefined) => {
-    if (!details?.dues?.length) return null;
-    const now = new Date();
-    const currentMonth = now.getMonth() + 1;
-    const currentYear = now.getFullYear();
-    return details.dues.find((due) => due.month === currentMonth && due.year === currentYear) ?? null;
-  }, []);
-
   const dependentMutation = useMutation({
     mutationKey: ['muqtadi-dependent'],
     mutationFn: async ({
@@ -250,7 +240,6 @@ export default function MuqtadisPage() {
       return muqtadisService.getById(muqtadiId);
     },
     onMutate: async ({ muqtadiId, memberNames, householdMembers }) => {
-      logOptimisticUpdate('muqtadi-dependent', { muqtadiId, memberNames, householdMembers });
       await Promise.all([
         queryClient.cancelQueries({ queryKey: queryKeys.muqtadiDetail(muqtadiId), exact: true }),
         queryClient.cancelQueries({ queryKey: queryKeys.muqtadiDues(muqtadiId), exact: true }),
@@ -291,7 +280,6 @@ export default function MuqtadisPage() {
       return { previousDetail, previousDues, previousItems, muqtadiId };
     },
     onError: (_error, _variables, context) => {
-      logRollback(context);
       if (context?.muqtadiId) {
         queryClient.setQueryData(queryKeys.muqtadiDetail(context.muqtadiId), context.previousDetail);
         queryClient.setQueryData(queryKeys.muqtadiDues(context.muqtadiId), context.previousDues ?? []);
@@ -315,20 +303,17 @@ export default function MuqtadisPage() {
       queryClient.setQueryData(queryKeys.muqtadiDues(variables.muqtadiId), updatedDetail.dues ?? []);
       setSelectedDetails((old) => (old?.id === variables.muqtadiId ? updatedDetail : old));
 
-      const currentDue = getCurrentCycleDueFromDetails(updatedDetail);
       setItems((prev) => prev.map((entry) => (
         entry.id === variables.muqtadiId
           ? {
               ...entry,
               memberNames: updatedDetail.memberNames,
               householdMembers: updatedDetail.householdMembers,
-              expectedAmount: Number(currentDue?.expectedAmount ?? entry.expectedAmount ?? 0),
-              paidAmount: Number(currentDue?.paidAmount ?? entry.paidAmount ?? 0),
-              creditAmount: Number(currentDue?.creditAmount ?? entry.creditAmount ?? 0),
-              remainingAmount: Number(currentDue?.remainingAmount ?? entry.remainingAmount ?? 0),
             }
           : entry
       )));
+
+      void debugInvalidate(queryClient, queryKeys.muqtadis(), { exact: false });
     },
     onSettled: async (_data, _error, variables) => {
       await Promise.all([
@@ -346,7 +331,6 @@ export default function MuqtadisPage() {
       apiPayload: Parameters<typeof muqtadisService.create>[0];
     }) => muqtadisService.create(payload.apiPayload),
     onMutate: async (newData) => {
-      logOptimisticUpdate('muqtadi', newData);
       const optimisticId = `temp-${Date.now()}`;
       const optimisticItem = {
         id: optimisticId,
@@ -405,7 +389,6 @@ export default function MuqtadisPage() {
       };
     },
     onError: (_error, _newData, context) => {
-      logRollback(context);
       context?.previousMuqtadiQueries?.forEach(([key, data]) => {
         queryClient.setQueryData(key, data);
       });
@@ -469,7 +452,6 @@ export default function MuqtadisPage() {
       });
     },
     onMutate: async (newData) => {
-      logOptimisticUpdate('muqtadi-payment', newData);
       const tempId = `temp-${Date.now()}`;
       await Promise.all([
         queryClient.cancelQueries({ queryKey: queryKeys.muqtadiDetail(newData.muqtadiId), exact: true }),
@@ -478,7 +460,6 @@ export default function MuqtadisPage() {
 
       const previousDetail = queryClient.getQueryData<MuqtadiDetails>(queryKeys.muqtadiDetail(newData.muqtadiId));
       const previousPayments = queryClient.getQueryData<MuqtadiDetails['payments']>(queryKeys.muqtadiPayments(newData.muqtadiId));
-      const previousItems = items;
 
       const optimisticEntry = {
         id: tempId,
@@ -497,14 +478,8 @@ export default function MuqtadisPage() {
 
       patchDetailCache(newData.muqtadiId, (old) => {
         if (!old) return old;
-        const nextOverview = {
-          ...old.overview,
-          totalPaid: Number(old.overview?.totalPaid ?? 0) + newData.amount,
-          outstandingAmount: Math.max(Number(old.overview?.outstandingAmount ?? 0) - newData.amount, 0),
-        };
         return {
           ...old,
-          overview: nextOverview,
           payments: [optimisticEntry, ...(old.payments ?? [])],
         };
       });
@@ -515,26 +490,12 @@ export default function MuqtadisPage() {
         return [optimisticEntry, ...current];
       });
 
-      setItems((prev) => prev.map((entry) => (
-        entry.id === newData.muqtadiId
-          ? {
-              ...entry,
-              paidAmount: Number(entry.paidAmount ?? 0) + newData.amount,
-              remainingAmount: Math.max(Number(entry.remainingAmount ?? 0) - newData.amount, 0),
-            }
-          : entry
-      )));
-
-      return { tempId, previousDetail, previousPayments, previousItems, muqtadiId: newData.muqtadiId };
+      return { tempId, previousDetail, previousPayments, muqtadiId: newData.muqtadiId };
     },
     onError: (_error, _newData, context) => {
-      logRollback(context);
       if (!context?.muqtadiId) return;
       queryClient.setQueryData(queryKeys.muqtadiDetail(context.muqtadiId), context.previousDetail);
       queryClient.setQueryData(queryKeys.muqtadiPayments(context.muqtadiId), context.previousPayments ?? []);
-      if (context.previousItems) {
-        setItems(context.previousItems);
-      }
     },
     onSuccess: (_data, _newData, context) => {
       if (!context?.muqtadiId || !context?.tempId) return;

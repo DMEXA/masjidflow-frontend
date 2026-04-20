@@ -24,10 +24,6 @@ import { parseStrictAmountInput } from '@/src/utils/numeric-input';
 import { queryKeys } from '@/lib/query-keys';
 import {
   debugInvalidateByFilters,
-  endFlowGroup,
-  logOptimisticUpdate,
-  logRollback,
-  startFlowGroup,
 } from '@/lib/query-debug';
 
 export default function AddDonationPage() {
@@ -84,7 +80,6 @@ export default function AddDonationPage() {
       fundId?: string;
       receipt?: File | null;
     }) => {
-      startFlowGroup('DONATION FLOW');
       let receiptUrl: string | undefined;
       if (payload.receipt) {
         const { url } = await donationsService.uploadReceipt(payload.receipt, setUploadStage);
@@ -103,7 +98,6 @@ export default function AddDonationPage() {
       });
     },
     onMutate: async (newData) => {
-      logOptimisticUpdate('donation', newData);
       const donationsRootKey = queryKeys.donationsRoot(mosque?.id);
       const pendingCountKey = queryKeys.donationsPendingCount(mosque?.id);
       const dashboardOverviewKey = queryKeys.dashboardOverview(mosque?.id);
@@ -166,7 +160,6 @@ export default function AddDonationPage() {
       return { previousDonationQueries, previousPendingCount, previousDashboardQueries, optimisticId };
     },
     onError: (error, _newData, context) => {
-      logRollback(context);
       context?.previousDonationQueries?.forEach(([key, data]) => {
         queryClient.setQueryData(key, data);
       });
@@ -175,7 +168,6 @@ export default function AddDonationPage() {
         queryClient.setQueryData(key, data);
       });
       toast.error(getErrorMessage(error, 'Failed to add donation'));
-      endFlowGroup();
     },
     onSuccess: (createdDonation, _newData, context) => {
       const optimisticId = context?.optimisticId;
@@ -199,7 +191,6 @@ export default function AddDonationPage() {
         },
       });
       setUploadStage(null);
-      endFlowGroup();
     },
   });
 

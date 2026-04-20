@@ -164,17 +164,6 @@ export const donationsService = {
       params.append('limit', String(safeLimit));
     }
 
-    console.debug('[donationsService.getAll] params', {
-      page: filters?.page,
-      limit: safeLimit,
-      search: filters?.search,
-      startDate: filters?.startDate,
-      endDate: filters?.endDate,
-      paymentType: filters?.paymentType,
-      fundId: filters?.fundId,
-      donationStatus: filters?.donationStatus,
-    });
-
     const response = await api.get(`/donations?${params.toString()}`);
     const body = response.data;
     return {

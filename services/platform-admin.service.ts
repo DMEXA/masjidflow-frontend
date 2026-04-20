@@ -204,7 +204,6 @@ export const platformAdminService = {
 
   async getMosques(query: PaginationQuery = {}): Promise<PaginatedResponse<PlatformMosqueRow>> {
     const safeQuery = normalizePaginationQuery(query);
-    console.debug('[platformAdminService.getMosques] params', safeQuery);
     const response = await api.get<PaginatedResponse<PlatformMosqueRow>>('/admin/mosques', {
       params: safeQuery,
     });
@@ -218,7 +217,6 @@ export const platformAdminService = {
 
   async getDeletedMosques(query: PaginationQuery = {}): Promise<PaginatedResponse<PlatformDeletedMosqueRow>> {
     const safeQuery = normalizePaginationQuery(query);
-    console.debug('[platformAdminService.getDeletedMosques] params', safeQuery);
     const response = await api.get<PaginatedResponse<PlatformDeletedMosqueRow>>('/admin/mosques/trash', {
       params: safeQuery,
     });
@@ -227,7 +225,6 @@ export const platformAdminService = {
 
   async getUsers(query: PaginationQuery = {}): Promise<PaginatedResponse<PlatformUserRow>> {
     const safeQuery = normalizePaginationQuery(query);
-    console.debug('[platformAdminService.getUsers] params', safeQuery);
     const response = await api.get<PaginatedResponse<PlatformUserRow>>('/admin/users', {
       params: safeQuery,
     });
@@ -238,7 +235,6 @@ export const platformAdminService = {
     query: PaginationQuery = {},
   ): Promise<PaginatedResponse<PlatformSubscriptionRow>> {
     const safeQuery = normalizePaginationQuery(query);
-    console.debug('[platformAdminService.getSubscriptions] params', safeQuery);
     const response = await api.get<PaginatedResponse<PlatformSubscriptionRow>>('/admin/subscriptions', {
       params: safeQuery,
     });
@@ -249,7 +245,6 @@ export const platformAdminService = {
     query: PaginationQuery = {},
   ): Promise<PaginatedResponse<PlatformSubscriptionRow>> {
     const safeQuery = normalizePaginationQuery(query);
-    console.debug('[platformAdminService.getMosqueBilling] params', safeQuery);
     const response = await api.get<PaginatedResponse<PlatformSubscriptionRow>>('/admin/billing/mosques', {
       params: safeQuery,
     });
@@ -313,7 +308,6 @@ export const platformAdminService = {
     query: PaginationQuery = {},
   ): Promise<PaginatedResponse<PlatformAuditLogRow>> {
     const safeQuery = normalizePaginationQuery(query, 50);
-    console.debug('[platformAdminService.getGlobalAuditLogs] params', safeQuery);
     const response = await api.get<PaginatedResponse<PlatformAuditLogRow>>('/admin/audit-logs', {
       params: safeQuery,
     });
@@ -324,7 +318,6 @@ export const platformAdminService = {
     query: PaginationQuery = {},
   ): Promise<PaginatedResponse<PlatformSubscriptionPaymentRow>> {
     const safeQuery = normalizePaginationQuery(query);
-    console.debug('[platformAdminService.getSubscriptionPayments] params', safeQuery);
     const response = await api.get<PaginatedResponse<PlatformSubscriptionPaymentRow>>('/admin/payments', {
       params: safeQuery,
     });

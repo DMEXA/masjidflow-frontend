@@ -41,17 +41,6 @@ export const expensesService = {
       params.append('limit', String(safeLimit));
     }
 
-    console.debug('[expensesService.getAll] params', {
-      page: filters?.page,
-      limit: safeLimit,
-      category: filters?.category,
-      search: filters?.search,
-      startDate: filters?.startDate,
-      endDate: filters?.endDate,
-      fundId: filters?.fundId,
-      status: filters?.status,
-    });
-
     const response = await api.get(`/expenses?${params.toString()}`);
     const body = response.data;
     return {

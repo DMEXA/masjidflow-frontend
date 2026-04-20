@@ -70,11 +70,6 @@ export const fundsService = {
       params.page = options.page;
     }
 
-    console.debug('[fundsService.getAll] params', {
-      page: options?.page,
-      limit: safeLimit,
-    });
-
     const response = await api.get('/funds', {
       params,
       signal: options?.signal,
@@ -93,7 +88,6 @@ export const fundsService = {
     }
 
     const safeLimit = getSafeLimit(undefined, DEFAULT_PAGE_LIMIT);
-    console.debug('[fundsService.getSummary] params', { limit: safeLimit });
 
     const request = api
       .get('/funds', {
@@ -177,11 +171,6 @@ export const fundsService = {
     options?: RequestOptions,
   ): Promise<Array<{ id: string; name: string; description?: string | null }>> {
     const safeLimit = getSafeLimit(undefined, 50);
-    console.debug('[fundsService.getPublicByMosqueId] params', {
-      mosqueId,
-      limit: safeLimit,
-    });
-
     const response = await api.get('/funds/public', {
       params: { mosqueId, limit: safeLimit },
       signal: options?.signal,
