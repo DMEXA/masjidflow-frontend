@@ -28,7 +28,7 @@ import { useAuthStore } from '@/src/store/auth.store';
 import { getErrorMessage } from '@/src/utils/error';
 import { formatCurrency, formatCycleLabel } from '@/src/utils/format';
 import { parseStrictAmountInput } from '@/src/utils/numeric-input';
-import { invalidateMuqtadiFinancialQueries } from '@/lib/realtime-invalidation';
+import { debugInvalidate } from '@/lib/query-debug';
 
 type SortOrder = 'newest' | 'oldest';
 
@@ -148,7 +148,7 @@ export function SalarySettings() {
     queryKey: queryKeys.muqtadiNextCycleInfo,
     queryFn: () => muqtadisService.getNextCycleInfo(),
     staleTime: 30_000,
-    refetchOnWindowFocus: true,
+    refetchOnWindowFocus: false,
     refetchOnReconnect: true,
     retry: false,
   });
@@ -276,8 +276,10 @@ export function SalarySettings() {
         useCurrentSettingsForNextCycle: false,
       });
       await loadSalaryMonths();
-      await nextCycleInfoQuery.refetch();
-      await invalidateMuqtadiFinancialQueries(queryClient, { mosqueId: currentMosque?.id });
+      await Promise.all([
+        debugInvalidate(queryClient, queryKeys.muqtadiNextCycleInfo, { exact: true }),
+        debugInvalidate(queryClient, queryKeys.imamSalaryCycles(currentMosque?.id), { exact: false }),
+      ]);
       toast.success(hasActiveCycle ? 'Next cycle settings saved' : 'Settings saved');
       setNextCycleSnapshot({
         contributionMode: nextCycleForm.contributionMode,
@@ -320,8 +322,18 @@ export function SalarySettings() {
         useCurrentSettingsForNextCycle: false,
       });
       await loadSalaryMonths();
-      await nextCycleInfoQuery.refetch();
-      await invalidateMuqtadiFinancialQueries(queryClient, { mosqueId: currentMosque?.id });
+      await Promise.all([
+        debugInvalidate(queryClient, queryKeys.muqtadis(), { exact: false }),
+        debugInvalidate(queryClient, queryKeys.dashboardOverview(currentMosque?.id), { exact: false }),
+        debugInvalidate(queryClient, queryKeys.muqtadiDuesRoot, { exact: false }),
+        debugInvalidate(queryClient, queryKeys.muqtadiDetailRoot, { exact: false }),
+        debugInvalidate(queryClient, queryKeys.muqtadiPaymentsRoot, { exact: false }),
+        debugInvalidate(queryClient, queryKeys.muqtadiHistoryRoot, { exact: false }),
+        debugInvalidate(queryClient, queryKeys.imamSalaryCycles(currentMosque?.id), { exact: false }),
+        debugInvalidate(queryClient, queryKeys.muqtadiStats, { exact: false }),
+        debugInvalidate(queryClient, queryKeys.muqtadiSalarySummary, { exact: false }),
+        debugInvalidate(queryClient, queryKeys.muqtadiNextCycleInfo, { exact: true }),
+      ]);
       toast.success('Current cycle updated');
       setCurrentCycleSnapshot({
         contributionMode: currentCycleForm.contributionMode,
@@ -399,9 +411,19 @@ export function SalarySettings() {
         year: currentPeriod.year,
       });
       toast.success(`Month created with ${formatCurrency(created.contributionAmount ?? created.perHead)} fixed contribution`);
-      await invalidateMuqtadiFinancialQueries(queryClient, { mosqueId: currentMosque?.id });
       await loadSalaryMonths();
-      await nextCycleInfoQuery.refetch();
+      await Promise.all([
+        debugInvalidate(queryClient, queryKeys.muqtadis(), { exact: false }),
+        debugInvalidate(queryClient, queryKeys.dashboardOverview(currentMosque?.id), { exact: false }),
+        debugInvalidate(queryClient, queryKeys.muqtadiDuesRoot, { exact: false }),
+        debugInvalidate(queryClient, queryKeys.muqtadiDetailRoot, { exact: false }),
+        debugInvalidate(queryClient, queryKeys.muqtadiPaymentsRoot, { exact: false }),
+        debugInvalidate(queryClient, queryKeys.muqtadiHistoryRoot, { exact: false }),
+        debugInvalidate(queryClient, queryKeys.imamSalaryCycles(currentMosque?.id), { exact: false }),
+        debugInvalidate(queryClient, queryKeys.muqtadiStats, { exact: false }),
+        debugInvalidate(queryClient, queryKeys.muqtadiSalarySummary, { exact: false }),
+        debugInvalidate(queryClient, queryKeys.muqtadiNextCycleInfo, { exact: true }),
+      ]);
     } catch (error) {
       toast.error(getErrorMessage(error, 'Failed to create salary month'));
     } finally {

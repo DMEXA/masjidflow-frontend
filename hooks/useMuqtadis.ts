@@ -5,7 +5,7 @@ import type { Muqtadi } from '@/types';
 import { muqtadisService } from '@/services/muqtadis.service';
 import { getErrorMessage } from '@/src/utils/error';
 import { useDebounce } from '@/hooks/useDebounce';
-import { queryKeys } from '@/lib/queryKeys';
+import { queryKeys } from '@/lib/query-keys';
 
 export type SortOrder = 'newest' | 'oldest';
 export type AccountFilter = 'all' | 'account' | 'offline';

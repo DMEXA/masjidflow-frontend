@@ -87,6 +87,7 @@ export const queryKeys = {
   platformHomeMosques: ['platform-home-mosques'] as const,
   platformSubscriptions: (filters: { page: number; limit: number; status: string }) =>
     ['platform-subscriptions', 'platform', filters] as const,
+  muqtadiDuesRoot: ['muqtadi-dues'] as const,
   muqtadiDues: (userId?: string) => ['muqtadi-dues', userId ?? 'none'] as const,
   muqtadiProfile: (userId?: string) => ['muqtadi-profile', userId ?? 'none'] as const,
   notifications: (userId?: string) => ['notifications', userId ?? 'none'] as const,

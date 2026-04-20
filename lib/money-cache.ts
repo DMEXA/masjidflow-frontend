@@ -1,5 +1,5 @@
 import type { QueryClient } from '@tanstack/react-query';
-import { queryKeys } from '@/lib/queryKeys';
+import { queryKeys } from '@/lib/query-keys';
 import { debugInvalidate } from '@/lib/query-debug';
 
 export async function invalidateMoneyQueries(queryClient: QueryClient, mosqueId?: string): Promise<void> {
@@ -15,7 +15,7 @@ export async function invalidateMoneyQueries(queryClient: QueryClient, mosqueId?
     debugInvalidate(queryClient, queryKeys.reports),
     debugInvalidate(queryClient, queryKeys.dashboardOverview(mosqueId), { exact: false }),
     debugInvalidate(queryClient, queryKeys.muqtadiDashboard(), { exact: false }),
-    debugInvalidate(queryClient, queryKeys.muqtadiDues(), { exact: false }),
+    debugInvalidate(queryClient, queryKeys.muqtadiDuesRoot, { exact: false }),
   ]);
 }
 
@@ -54,6 +54,7 @@ export async function invalidateMuqtadiMutationQueries(
     debugInvalidate(queryClient, queryKeys.muqtadiStats, { exact: false }),
     debugInvalidate(queryClient, queryKeys.muqtadiSalarySummary, { exact: false }),
     debugInvalidate(queryClient, queryKeys.imamSalaryCycles(mosqueId), { exact: false }),
+    debugInvalidate(queryClient, queryKeys.muqtadiDuesRoot, { exact: false }),
     debugInvalidate(queryClient, queryKeys.muqtadiDetailRoot, { exact: false }),
     debugInvalidate(queryClient, queryKeys.muqtadiDetailDuesRoot, { exact: false }),
     debugInvalidate(queryClient, queryKeys.muqtadiPaymentsRoot, { exact: false }),

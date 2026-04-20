@@ -47,7 +47,7 @@ import {
 import { usePermission } from '@/hooks/usePermission';
 import { getErrorMessage } from '@/src/utils/error';
 import { invalidateMoneyQueries, invalidateMuqtadiMutationQueries } from '@/lib/money-cache';
-import { queryKeys } from '@/lib/queryKeys';
+import { queryKeys } from '@/lib/query-keys';
 import { formatCurrency, formatDate, formatCycleLabel, getCycleStatus } from '@/src/utils/format';
 import { ListEmptyState } from '@/components/common/list-empty-state';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -218,6 +218,7 @@ export default function MuqtadisPage() {
   const invalidateDetailQueries = useCallback(async (id: string) => {
     await Promise.all([
       debugInvalidate(queryClient, queryKeys.muqtadiDetail(id), { exact: true }),
+      debugInvalidate(queryClient, queryKeys.muqtadiDues(id), { exact: true }),
       debugInvalidate(queryClient, queryKeys.muqtadiPayments(id), { exact: true }),
       debugInvalidate(queryClient, queryKeys.muqtadiHistory(id), { exact: true }),
     ]);
@@ -252,11 +253,11 @@ export default function MuqtadisPage() {
       logOptimisticUpdate('muqtadi-dependent', { muqtadiId, memberNames, householdMembers });
       await Promise.all([
         queryClient.cancelQueries({ queryKey: queryKeys.muqtadiDetail(muqtadiId), exact: true }),
-        queryClient.cancelQueries({ queryKey: queryKeys.muqtadiDetailDues(muqtadiId), exact: true }),
+        queryClient.cancelQueries({ queryKey: queryKeys.muqtadiDues(muqtadiId), exact: true }),
       ]);
 
       const previousDetail = queryClient.getQueryData<MuqtadiDetails>(queryKeys.muqtadiDetail(muqtadiId));
-      const previousDues = queryClient.getQueryData<MuqtadiDetails['dues']>(queryKeys.muqtadiDetailDues(muqtadiId));
+      const previousDues = queryClient.getQueryData<MuqtadiDetails['dues']>(queryKeys.muqtadiDues(muqtadiId));
       const previousItems = items;
 
       queryClient.setQueryData(queryKeys.muqtadiDetail(muqtadiId), (old: MuqtadiDetails | undefined) => {
@@ -293,7 +294,7 @@ export default function MuqtadisPage() {
       logRollback(context);
       if (context?.muqtadiId) {
         queryClient.setQueryData(queryKeys.muqtadiDetail(context.muqtadiId), context.previousDetail);
-        queryClient.setQueryData(queryKeys.muqtadiDetailDues(context.muqtadiId), context.previousDues ?? []);
+        queryClient.setQueryData(queryKeys.muqtadiDues(context.muqtadiId), context.previousDues ?? []);
       }
       if (context?.previousItems) {
         setItems(context.previousItems);
@@ -311,7 +312,7 @@ export default function MuqtadisPage() {
     },
     onSuccess: (updatedDetail, variables) => {
       queryClient.setQueryData(queryKeys.muqtadiDetail(variables.muqtadiId), updatedDetail);
-      queryClient.setQueryData(queryKeys.muqtadiDetailDues(variables.muqtadiId), updatedDetail.dues ?? []);
+      queryClient.setQueryData(queryKeys.muqtadiDues(variables.muqtadiId), updatedDetail.dues ?? []);
       setSelectedDetails((old) => (old?.id === variables.muqtadiId ? updatedDetail : old));
 
       const currentDue = getCurrentCycleDueFromDetails(updatedDetail);
@@ -332,7 +333,7 @@ export default function MuqtadisPage() {
     onSettled: async (_data, _error, variables) => {
       await Promise.all([
         debugInvalidate(queryClient, queryKeys.muqtadiDetail(variables.muqtadiId), { exact: true }),
-        debugInvalidate(queryClient, queryKeys.muqtadiDetailDues(variables.muqtadiId), { exact: true }),
+        debugInvalidate(queryClient, queryKeys.muqtadiDues(variables.muqtadiId), { exact: true }),
       ]);
     },
   });
@@ -925,7 +926,6 @@ export default function MuqtadisPage() {
       } else {
         toast.success('Household included in current cycle');
       }
-      await actions.fetchItems();
       await invalidateDetailQueries(selectedDetails.id);
       await invalidateMuqtadiMutationQueries(queryClient, mosqueId);
     } catch (error) {
@@ -946,7 +946,6 @@ export default function MuqtadisPage() {
       } else if (result.removed) {
         toast.success('Household removed from current cycle');
       }
-      await actions.fetchItems();
       await invalidateDetailQueries(selectedDetails.id);
       await invalidateMuqtadiMutationQueries(queryClient, mosqueId);
     } catch (error) {

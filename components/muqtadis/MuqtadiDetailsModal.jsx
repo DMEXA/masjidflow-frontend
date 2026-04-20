@@ -14,7 +14,7 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { queryKeys } from '@/lib/queryKeys';
+import { queryKeys } from '@/lib/query-keys';
 import { muqtadisService } from '@/services/muqtadis.service';
 
 function buildInitialDetails(selectedMuqtadi, details) {
@@ -114,7 +114,7 @@ export default function MuqtadiDetailsModal({
   });
 
   const duesQuery = useQuery({
-    queryKey: queryKeys.muqtadiDetailDues(muqtadiId),
+    queryKey: queryKeys.muqtadiDues(muqtadiId),
     queryFn: async () => {
       const cachedDetail = queryClient.getQueryData(queryKeys.muqtadiDetail(muqtadiId));
       if (cachedDetail && Array.isArray(cachedDetail.dues)) {
