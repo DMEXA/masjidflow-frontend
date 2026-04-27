@@ -46,10 +46,10 @@ export function useMuqtadis(options: UseMuqtadisOptions) {
     pendingMuqtadies: 0,
   });
   const [salarySummary, setSalarySummary] = useState({
-    totalMuqtadies: 0,
-    registeredMuqtadies: 0,
-    totalSalary: 0,
-    perHead: 0,
+    totalDue: 0,
+    totalPaid: 0,
+    balance: 0,
+    isCyclePaused: false,
   });
   const [pendingVerificationId, setPendingVerificationId] = useState<string | null>(null);
 
@@ -185,10 +185,10 @@ export function useMuqtadis(options: UseMuqtadisOptions) {
   useEffect(() => {
     if (!summary) return;
     setSalarySummary({
-      totalMuqtadies: summary.totalMuqtadies,
-      registeredMuqtadies: summary.registeredMuqtadies,
-      totalSalary: summary.totalSalary,
-      perHead: summary.perHead,
+      totalDue: summary.totalDue,
+      totalPaid: summary.totalPaid,
+      balance: summary.balance,
+      isCyclePaused: summary.isCyclePaused,
     });
   }, [summary]);
 
@@ -230,11 +230,11 @@ export function useMuqtadis(options: UseMuqtadisOptions) {
     };
   }, [backendStats, targetMuqtadies]);
 
-  const verifyMuqtadi = useCallback(async (item: Muqtadi) => {
+  const verifyMuqtadi = useCallback(async (item: Muqtadi, previousDue = 0) => {
     if (pendingVerificationId) return;
     setPendingVerificationId(item.id);
     try {
-      await muqtadisService.verify(item.id);
+      await muqtadisService.verify(item.id, { previousDue: Number(previousDue || 0) });
       toast.success('Household verified');
       await fetchItems();
       if (selectedDetailId === item.id && refreshDetails) {

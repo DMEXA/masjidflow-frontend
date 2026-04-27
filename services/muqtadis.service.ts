@@ -1,18 +1,18 @@
-import api from './api';
-import type { Muqtadi, PaginatedResponse } from '@/types';
-import type { AuthResponse } from '@/types';
+import api from "./api";
+import type { Muqtadi, PaginatedResponse } from "@/types";
+import type { AuthResponse } from "@/types";
 
-export type ImamSalarySystem = 'EQUAL' | 'CATEGORY';
-export type MuqtadiDueStatus = 'PENDING' | 'PARTIAL' | 'PAID';
-export type MuqtadiStatus = 'ACTIVE' | 'DISABLED';
-export type ContributionMode = 'HOUSEHOLD' | 'PERSON';
-export type MuqtadiAccountState = 'OFFLINE' | 'PENDING_SETUP' | 'ACTIVE';
+export type ImamSalarySystem = "EQUAL" | "CATEGORY";
+export type MuqtadiDueStatus = "PENDING" | "PARTIAL" | "PAID";
+export type MuqtadiStatus = "ACTIVE" | "DISABLED";
+export type ContributionMode = "HOUSEHOLD" | "PERSON";
+export type MuqtadiAccountState = "OFFLINE" | "PENDING_SETUP" | "ACTIVE";
 
 export interface ImamSalarySettings {
   contributionMode: ContributionMode;
   contributionType: ContributionMode;
   contributionAmount: number;
-  imamSalarySystem: 'EQUAL';
+  imamSalarySystem: "EQUAL";
   totalMuqtadies: number;
   totalSalary: number;
   perHead: number;
@@ -24,7 +24,7 @@ export interface UpdateImamSalarySettingsPayload {
   contributionMode?: ContributionMode;
   contributionAmount?: number;
   contributionType?: ContributionMode;
-  imamSalarySystem?: 'EQUAL';
+  imamSalarySystem?: "EQUAL";
   totalMuqtadies?: number;
   totalSalary?: number;
   applyToCurrentMonth?: boolean;
@@ -63,10 +63,10 @@ export interface NextCycleInfo {
 }
 
 const EMPTY_IMAM_SALARY_SETTINGS: ImamSalarySettings = {
-  contributionMode: 'HOUSEHOLD',
-  contributionType: 'HOUSEHOLD',
+  contributionMode: "HOUSEHOLD",
+  contributionType: "HOUSEHOLD",
   contributionAmount: 0,
-  imamSalarySystem: 'EQUAL',
+  imamSalarySystem: "EQUAL",
   totalMuqtadies: 0,
   totalSalary: 0,
   perHead: 0,
@@ -84,8 +84,8 @@ const EMPTY_NEXT_CYCLE_INFO: NextCycleInfo = {
     minutes: 0,
   },
   settings: {
-    contributionMode: 'HOUSEHOLD',
-    contributionType: 'HOUSEHOLD',
+    contributionMode: "HOUSEHOLD",
+    contributionType: "HOUSEHOLD",
     contributionAmount: 0,
     totalMuqtadies: 0,
     totalSalary: 0,
@@ -96,13 +96,36 @@ const EMPTY_NEXT_CYCLE_INFO: NextCycleInfo = {
   settingsLockReason: null,
 };
 
+// export interface SalarySummaryResponse {
+//   payload: {
+//     contributionMode: string;
+//     contributionType: string;
+//     contributionAmount: number;
+//     cycleStartDay: number;
+//     totalSalary: number;
+//     totalMuqtadies: number;
+//     registeredMuqtadies: number;
+//     perHead: number;
+//   };
+//   isCyclePaused: boolean;
+// }
+
+export interface SalarySummaryResponse {
+  payload: {
+    totalDue: number;
+    totalPaid: number;
+    balance: number;
+  };
+  isCyclePaused: boolean;
+}
+
 function extractDataPayload(input: unknown): unknown {
-  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
     return input;
   }
 
   const source = input as Record<string, unknown>;
-  if ('data' in source) {
+  if ("data" in source) {
     return source.data;
   }
 
@@ -111,9 +134,13 @@ function extractDataPayload(input: unknown): unknown {
 
 function normalizeSettings(input: unknown): ImamSalarySettings {
   const source = (input as Record<string, unknown> | null) ?? null;
-  const contributionModeRaw = source?.contributionMode ?? source?.contributionType;
-  const contributionMode: ContributionMode = contributionModeRaw === 'PERSON' ? 'PERSON' : 'HOUSEHOLD';
-  const contributionAmount = Number(source?.contributionAmount ?? source?.totalSalary ?? 0);
+  const contributionModeRaw =
+    source?.contributionMode ?? source?.contributionType;
+  const contributionMode: ContributionMode =
+    contributionModeRaw === "PERSON" ? "PERSON" : "HOUSEHOLD";
+  const contributionAmount = Number(
+    source?.contributionAmount ?? source?.totalSalary ?? 0,
+  );
   const totalMuqtadies = Number(source?.totalMuqtadies ?? 0);
   const totalSalary = Number(source?.totalSalary ?? 0);
   const perHead = Number(source?.perHead ?? 0);
@@ -121,72 +148,111 @@ function normalizeSettings(input: unknown): ImamSalarySettings {
   return {
     contributionMode,
     contributionType: contributionMode,
-    contributionAmount: Number.isFinite(contributionAmount) ? contributionAmount : 0,
-    imamSalarySystem: 'EQUAL',
+    contributionAmount: Number.isFinite(contributionAmount)
+      ? contributionAmount
+      : 0,
+    imamSalarySystem: "EQUAL",
     totalMuqtadies: Number.isFinite(totalMuqtadies) ? totalMuqtadies : 0,
     totalSalary: Number.isFinite(totalSalary) ? totalSalary : 0,
     perHead: Number.isFinite(perHead) ? perHead : 0,
     settingsLocked: Boolean(source?.settingsLocked),
     settingsLockReason:
-      typeof source?.settingsLockReason === 'string'
+      typeof source?.settingsLockReason === "string"
         ? source.settingsLockReason
         : null,
   };
 }
 
 function normalizeNextCycleInfo(input: unknown): NextCycleInfo {
-  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
     return EMPTY_NEXT_CYCLE_INFO;
   }
 
   const source = input as Record<string, unknown>;
-  const currentCycle = source.currentCycle && typeof source.currentCycle === 'object' && !Array.isArray(source.currentCycle)
-    ? (source.currentCycle as Record<string, unknown>)
-    : null;
-  const nextCycle = source.nextCycle && typeof source.nextCycle === 'object' && !Array.isArray(source.nextCycle)
-    ? (source.nextCycle as Record<string, unknown>)
-    : null;
-  const timeRemaining = source.timeRemaining && typeof source.timeRemaining === 'object'
-    ? (source.timeRemaining as Record<string, unknown>)
-    : {};
+  const currentCycle =
+    source.currentCycle &&
+    typeof source.currentCycle === "object" &&
+    !Array.isArray(source.currentCycle)
+      ? (source.currentCycle as Record<string, unknown>)
+      : null;
+  const nextCycle =
+    source.nextCycle &&
+    typeof source.nextCycle === "object" &&
+    !Array.isArray(source.nextCycle)
+      ? (source.nextCycle as Record<string, unknown>)
+      : null;
+  const timeRemaining =
+    source.timeRemaining && typeof source.timeRemaining === "object"
+      ? (source.timeRemaining as Record<string, unknown>)
+      : {};
 
   const hasActiveCycle = Boolean(
-    source.hasActiveCycle
-    ?? (currentCycle && Number.isFinite(Number(currentCycle.month)) && Number.isFinite(Number(currentCycle.year))),
+    source.hasActiveCycle ??
+    (currentCycle &&
+      Number.isFinite(Number(currentCycle.month)) &&
+      Number.isFinite(Number(currentCycle.year))),
   );
 
   const month = Number(nextCycle?.month ?? 0);
   const year = Number(nextCycle?.year ?? 0);
-  const startsAt = typeof nextCycle?.startsAt === 'string' && nextCycle.startsAt
-    ? nextCycle.startsAt
-    : null;
+  const startsAt =
+    typeof nextCycle?.startsAt === "string" && nextCycle.startsAt
+      ? nextCycle.startsAt
+      : null;
 
   return {
     hasActiveCycle,
-    currentCycle: hasActiveCycle && currentCycle
-      ? {
-          month: Number.isFinite(Number(currentCycle.month)) ? Number(currentCycle.month) : null,
-          year: Number.isFinite(Number(currentCycle.year)) ? Number(currentCycle.year) : null,
-          createdAt: typeof currentCycle.createdAt === 'string' ? currentCycle.createdAt : null,
-        }
-      : null,
-    nextCycle: hasActiveCycle && startsAt && Number.isFinite(month) && Number.isFinite(year)
-      ? {
-          month,
-          year,
-          startsAt,
-        }
-      : null,
+    currentCycle:
+      hasActiveCycle && currentCycle
+        ? {
+            month: Number.isFinite(Number(currentCycle.month))
+              ? Number(currentCycle.month)
+              : null,
+            year: Number.isFinite(Number(currentCycle.year))
+              ? Number(currentCycle.year)
+              : null,
+            createdAt:
+              typeof currentCycle.createdAt === "string"
+                ? currentCycle.createdAt
+                : null,
+          }
+        : null,
+    nextCycle:
+      hasActiveCycle &&
+      startsAt &&
+      Number.isFinite(month) &&
+      Number.isFinite(year)
+        ? {
+            month,
+            year,
+            startsAt,
+          }
+        : null,
     timeRemaining: {
-      days: hasActiveCycle && nextCycle ? (Number.isFinite(Number(timeRemaining.days)) ? Number(timeRemaining.days) : 0) : 0,
-      hours: hasActiveCycle && nextCycle ? (Number.isFinite(Number(timeRemaining.hours)) ? Number(timeRemaining.hours) : 0) : 0,
-      minutes: hasActiveCycle && nextCycle ? (Number.isFinite(Number(timeRemaining.minutes)) ? Number(timeRemaining.minutes) : 0) : 0,
+      days:
+        hasActiveCycle && nextCycle
+          ? Number.isFinite(Number(timeRemaining.days))
+            ? Number(timeRemaining.days)
+            : 0
+          : 0,
+      hours:
+        hasActiveCycle && nextCycle
+          ? Number.isFinite(Number(timeRemaining.hours))
+            ? Number(timeRemaining.hours)
+            : 0
+          : 0,
+      minutes:
+        hasActiveCycle && nextCycle
+          ? Number.isFinite(Number(timeRemaining.minutes))
+            ? Number(timeRemaining.minutes)
+            : 0
+          : 0,
     },
     settings: normalizeSettings(source.settings),
     hasPendingSettings: Boolean(source.hasPendingSettings),
     settingsLocked: Boolean(source.settingsLocked),
     settingsLockReason:
-      typeof source.settingsLockReason === 'string'
+      typeof source.settingsLockReason === "string"
         ? source.settingsLockReason
         : null,
   };
@@ -203,8 +269,9 @@ export interface ImamSalaryCycle {
   totalMuqtadies: number;
   perHead: number;
   ratePerPerson: number;
-  systemType: 'EQUAL';
+  systemType: "EQUAL";
   createdAt: string;
+  status: string;
 }
 
 export interface MuqtadiDue {
@@ -214,8 +281,8 @@ export interface MuqtadiDue {
   year: number;
   expectedAmount: number;
   paidAmount: number;
-  creditAmount: number;
-  remainingAmount: number;
+  // creditAmount: number;
+  // remainingAmount: number;
   status: MuqtadiDueStatus;
   createdAt: string;
 }
@@ -223,18 +290,21 @@ export interface MuqtadiDue {
 export interface PaymentTransaction {
   id: string;
   amount: number;
-  method: 'UPI' | 'CASH' | 'BANK';
+  method: "UPI" | "CASH" | "BANK";
   reference?: string | null;
   utr?: string | null;
   intentId?: string | null;
-  status: 'INITIATED' | 'PENDING' | 'VERIFIED' | 'REJECTED' | 'FAILED';
+  status: "INITIATED" | "PENDING" | "VERIFIED" | "REJECTED" | "FAILED";
   cycleId?: string | null;
   month?: number | null;
   year?: number | null;
   createdAt: string;
 }
 
-export type ImamFundLedgerTransactionType = 'COLLECTION' | 'PAYOUT' | 'ADJUSTMENT';
+export type ImamFundLedgerTransactionType =
+  | "COLLECTION"
+  | "PAYOUT"
+  | "ADJUSTMENT";
 
 export interface ImamFundHistoryResponse {
   summary: {
@@ -282,7 +352,7 @@ export interface MuqtadiDashboardApiResponse {
   expectedAmount: number;
   paidAmount: number;
   remainingAmount: number;
-  status: 'PENDING' | 'PARTIAL' | 'PAID';
+  status: "PENDING" | "PARTIAL" | "PAID";
   history: Array<{
     id: string;
     cycleId?: string | null;
@@ -313,6 +383,8 @@ export interface MuqtadiDetails {
   category?: string | null;
   phone?: string | null;
   notes?: string | null;
+  previousDue?: number;
+  creditBalance?: number;
   status: MuqtadiStatus;
   hasCycle?: boolean;
   isHouseholdInCycle?: boolean;
@@ -320,10 +392,22 @@ export interface MuqtadiDetails {
     totalDue: number;
     totalPaid: number;
     outstandingAmount: number;
+    credit?: number;
   };
   dues: MuqtadiDue[];
-  payments: Array<{ id: string; action: string; details?: Record<string, unknown>; createdAt: string }>;
-  history: Array<{ id: string; action: string; entity: string; details?: Record<string, unknown>; createdAt: string }>;
+  payments: Array<{
+    id: string;
+    action: string;
+    details?: Record<string, unknown>;
+    createdAt: string;
+  }>;
+  history: Array<{
+    id: string;
+    action: string;
+    entity: string;
+    details?: Record<string, unknown>;
+    createdAt: string;
+  }>;
 }
 
 export interface EnableMuqtadiLoginPayload {
@@ -378,6 +462,7 @@ export interface CreateMuqtadiPayload {
   whatsappNumber?: string;
   phone?: string;
   notes?: string;
+  previousDue?: number;
 }
 
 export interface UpdateMuqtadiPayload {
@@ -393,9 +478,9 @@ export interface UpdateMuqtadiPayload {
 
 export interface RecordMuqtadiPaymentPayload {
   muqtadiId: string;
-  cycleId: string;
+  // cycleId: string;
   amount: number;
-  method: 'CASH' | 'UPI' | 'BANK';
+  method: "CASH" | "UPI" | "BANK";
   reference?: string;
   utr?: string;
   screenshotUrl?: string;
@@ -406,8 +491,8 @@ export interface UpdateMuqtadiPaymentPayload {
   muqtadiId?: string;
   cycleId?: string;
   amount?: number;
-  method?: 'CASH' | 'UPI' | 'BANK';
-  status?: 'PENDING' | 'VERIFIED' | 'REJECTED';
+  method?: "CASH" | "UPI" | "BANK";
+  status?: "PENDING" | "VERIFIED" | "REJECTED";
   reference?: string;
   utr?: string;
   screenshotUrl?: string;
@@ -422,9 +507,9 @@ export interface ImamFundSummary {
 }
 
 export interface InitiateMyPaymentPayload {
-  cycleId: string;
+  // cycleId: string;
   amount: number;
-  method?: 'UPI' | 'BANK' | 'CASH';
+  method?: "UPI" | "BANK" | "CASH";
   reference?: string;
   utr?: string;
   screenshotUrl?: string;
@@ -499,12 +584,12 @@ export const muqtadisService = {
       expiresAt?: string;
       maxUses?: number | null;
       usedCount?: number;
-    }>('/muqtadis/invite', payload ?? {});
+    }>("/muqtadis/invite", payload ?? {});
     return response.data;
   },
 
   async getInvites(): Promise<MuqtadiInvite[]> {
-    const response = await api.get<MuqtadiInvite[]>('/muqtadis/invites');
+    const response = await api.get<MuqtadiInvite[]>("/muqtadis/invites");
     return response.data;
   },
 
@@ -513,7 +598,10 @@ export const muqtadisService = {
   },
 
   async register(payload: RegisterMuqtadiPayload): Promise<AuthResponse> {
-    const response = await api.post<AuthResponse>('/muqtadis/register', payload);
+    const response = await api.post<AuthResponse>(
+      "/muqtadis/register",
+      payload,
+    );
     return response.data;
   },
 
@@ -522,46 +610,68 @@ export const muqtadisService = {
     limit?: number;
     search?: string;
     isDeleted?: boolean;
-    accountStatus?: 'all' | 'account' | 'offline';
-    paymentStatus?: 'all' | 'paid' | 'partial' | 'unpaid' | 'proof_pending';
-    verificationStatus?: 'all' | 'verified' | 'pending';
-    cycleStatus?: 'all' | 'included' | 'not_included';
+    accountStatus?: "all" | "account" | "offline";
+    paymentStatus?: "all" | "paid" | "partial" | "unpaid" | "proof_pending";
+    verificationStatus?: "all" | "verified" | "pending";
+    cycleStatus?: "all" | "included" | "not_included";
   }): Promise<MuqtadiListResponse> {
     const query = new URLSearchParams();
-    if (params?.page) query.append('page', String(params.page));
-    if (params?.limit) query.append('limit', String(params.limit));
-    if (params?.search) query.append('search', params.search);
-    if (params?.accountStatus && params.accountStatus !== 'all') query.append('accountStatus', params.accountStatus);
-    if (params?.paymentStatus && params.paymentStatus !== 'all') query.append('paymentStatus', params.paymentStatus);
-    if (params?.verificationStatus && params.verificationStatus !== 'all') query.append('verificationStatus', params.verificationStatus);
-    if (params?.cycleStatus && params.cycleStatus !== 'all') query.append('cycleStatus', params.cycleStatus);
-    if (params?.isDeleted !== undefined) query.append('isDeleted', String(params.isDeleted));
+    if (params?.page) query.append("page", String(params.page));
+    if (params?.limit) query.append("limit", String(params.limit));
+    if (params?.search) query.append("search", params.search);
+    if (params?.accountStatus && params.accountStatus !== "all")
+      query.append("accountStatus", params.accountStatus);
+    if (params?.paymentStatus && params.paymentStatus !== "all")
+      query.append("paymentStatus", params.paymentStatus);
+    if (params?.verificationStatus && params.verificationStatus !== "all")
+      query.append("verificationStatus", params.verificationStatus);
+    if (params?.cycleStatus && params.cycleStatus !== "all")
+      query.append("cycleStatus", params.cycleStatus);
+    if (params?.isDeleted !== undefined)
+      query.append("isDeleted", String(params.isDeleted));
 
     const suffix = query.toString();
-    const response = await api.get(`/muqtadis${suffix ? `?${suffix}` : ''}`);
-    const responseBody = (response.data as Record<string, unknown> | Muqtadi[] | null) ?? null;
+    const response = await api.get(`/muqtadis${suffix ? `?${suffix}` : ""}`);
+    const responseBody =
+      (response.data as Record<string, unknown> | Muqtadi[] | null) ?? null;
     const data = Array.isArray(response.data)
       ? (response.data as Muqtadi[])
       : Array.isArray((responseBody as Record<string, unknown> | null)?.data)
         ? ((responseBody as Record<string, unknown>).data as Muqtadi[])
-        : Array.isArray(((responseBody as Record<string, unknown> | null)?.data as Record<string, unknown> | undefined)?.data)
-          ? ((((responseBody as Record<string, unknown>).data as Record<string, unknown>).data) as Muqtadi[])
+        : Array.isArray(
+              (
+                (responseBody as Record<string, unknown> | null)?.data as
+                  | Record<string, unknown>
+                  | undefined
+              )?.data,
+            )
+          ? ((
+              (responseBody as Record<string, unknown>).data as Record<
+                string,
+                unknown
+              >
+            ).data as Muqtadi[])
           : [];
-    const body = (!Array.isArray(responseBody) && responseBody ? responseBody : null) as Record<string, unknown> | null;
-    const nestedBody = (!Array.isArray(body?.data) && body?.data && typeof body.data === 'object')
-      ? (body.data as Record<string, unknown>)
-      : null;
-    const meta = (body?.meta as Record<string, unknown> | undefined)
-      ?? (nestedBody?.meta as Record<string, unknown> | undefined)
-      ?? {};
+    const body = (
+      !Array.isArray(responseBody) && responseBody ? responseBody : null
+    ) as Record<string, unknown> | null;
+    const nestedBody =
+      !Array.isArray(body?.data) && body?.data && typeof body.data === "object"
+        ? (body.data as Record<string, unknown>)
+        : null;
+    const meta =
+      (body?.meta as Record<string, unknown> | undefined) ??
+      (nestedBody?.meta as Record<string, unknown> | undefined) ??
+      {};
     const pending = Array.isArray(body?.pending)
       ? (body.pending as Muqtadi[])
       : Array.isArray(nestedBody?.pending)
         ? (nestedBody?.pending as Muqtadi[])
         : [];
-    const stats = (body?.stats as Record<string, unknown> | undefined)
-      ?? (nestedBody?.stats as Record<string, unknown> | undefined)
-      ?? {};
+    const stats =
+      (body?.stats as Record<string, unknown> | undefined) ??
+      (nestedBody?.stats as Record<string, unknown> | undefined) ??
+      {};
     return {
       data,
       total: Number(meta.total ?? data.length),
@@ -578,13 +688,18 @@ export const muqtadisService = {
     };
   },
 
-  async getTrash(params?: { page?: number; limit?: number }): Promise<MuqtadiTrashResponse> {
+  async getTrash(params?: {
+    page?: number;
+    limit?: number;
+  }): Promise<MuqtadiTrashResponse> {
     const query = new URLSearchParams();
-    if (params?.page) query.append('page', String(params.page));
-    if (params?.limit) query.append('limit', String(params.limit));
+    if (params?.page) query.append("page", String(params.page));
+    if (params?.limit) query.append("limit", String(params.limit));
 
     const suffix = query.toString();
-    const response = await api.get(`/muqtadis/trash${suffix ? `?${suffix}` : ''}`);
+    const response = await api.get(
+      `/muqtadis/trash${suffix ? `?${suffix}` : ""}`,
+    );
     const body = (response.data as Record<string, unknown> | null) ?? null;
     const data = Array.isArray(body?.data) ? (body.data as Muqtadi[]) : [];
     const meta = (body?.meta as Record<string, unknown> | undefined) ?? {};
@@ -599,7 +714,7 @@ export const muqtadisService = {
   },
 
   async getStats(): Promise<MuqtadiStatsResponse> {
-    const response = await api.get('/muqtadis/stats');
+    const response = await api.get("/muqtadis/stats");
     const data = (response.data as Record<string, unknown> | null) ?? null;
     return {
       totalHouseholds: Number(data?.totalHouseholds ?? 0),
@@ -610,7 +725,7 @@ export const muqtadisService = {
   },
 
   async create(payload: CreateMuqtadiPayload): Promise<Muqtadi> {
-    const response = await api.post<Muqtadi>('/muqtadis', payload);
+    const response = await api.post<Muqtadi>("/muqtadis", payload);
     return response.data;
   },
 
@@ -624,92 +739,130 @@ export const muqtadisService = {
     return response.data;
   },
 
-  async getDetailPayments(id: string): Promise<MuqtadiDetails['payments']> {
+  async getDetailPayments(id: string): Promise<MuqtadiDetails["payments"]> {
     const detail = await this.getById(id);
     return Array.isArray(detail.payments) ? detail.payments : [];
   },
 
-  async getDetailDues(id: string): Promise<MuqtadiDetails['dues']> {
+  async getDetailDues(id: string): Promise<MuqtadiDetails["dues"]> {
     const detail = await this.getById(id);
     return Array.isArray(detail.dues) ? detail.dues : [];
   },
 
-  async getDetailHistory(id: string): Promise<MuqtadiDetails['history']> {
+  async getDetailHistory(id: string): Promise<MuqtadiDetails["history"]> {
     const detail = await this.getById(id);
     return Array.isArray(detail.history) ? detail.history : [];
   },
 
   async getSettings(): Promise<ImamSalarySettings> {
-    const response = await api.get<ImamSalarySettings>('/muqtadis/settings');
+    const response = await api.get<ImamSalarySettings>("/muqtadis/settings");
     const payload = extractDataPayload(response.data);
     return normalizeSettings(payload ?? EMPTY_IMAM_SALARY_SETTINGS);
   },
 
   async getNextCycleInfo(): Promise<NextCycleInfo> {
-    const response = await api.get<NextCycleInfo>('/muqtadis/next-cycle-info');
+    const response = await api.get<NextCycleInfo>("/muqtadis/next-cycle-info");
     const payload = extractDataPayload(response.data);
     return normalizeNextCycleInfo(payload);
   },
 
-  async updateSettings(payload: UpdateImamSalarySettingsPayload): Promise<ImamSalarySettings> {
-    const response = await api.post<ImamSalarySettings>('/muqtadis/settings', payload);
+  async updateSettings(
+    payload: UpdateImamSalarySettingsPayload,
+  ): Promise<ImamSalarySettings> {
+    const response = await api.post<ImamSalarySettings>(
+      "/muqtadis/settings",
+      payload,
+    );
     const normalizedPayload = extractDataPayload(response.data);
     return normalizeSettings(normalizedPayload ?? EMPTY_IMAM_SALARY_SETTINGS);
   },
 
-  async createSalaryMonth(payload: { month: number; year: number }): Promise<ImamSalaryCycle> {
-    const response = await api.post<ImamSalaryCycle>('/salary/month', payload);
+  async createSalaryMonth(payload: {
+    month: number;
+    year: number;
+  }): Promise<ImamSalaryCycle> {
+    const response = await api.post<ImamSalaryCycle>("/salary/month", payload);
     return response.data;
   },
 
   async getSalaryMonths(): Promise<ImamSalaryCycle[]> {
-    const response = await api.get<ImamSalaryCycle[]>('/salary/months');
+    const response = await api.get<ImamSalaryCycle[]>("/salary/months");
     return Array.isArray(response.data) ? response.data : [];
   },
 
+  async toggleCyclePause(data: { isPaused: boolean }) {
+  return api.post('/salary/cycle/pause', data);
+},
+
   async getSalarySummary(): Promise<{
-    contributionMode: ContributionMode;
-    contributionType: ContributionMode;
-    contributionAmount: number;
-    totalSalary: number;
-    totalMuqtadies: number;
-    registeredMuqtadies: number;
-    perHead: number;
+    // contributionMode: ContributionMode;
+    // contributionType: ContributionMode;
+    // contributionAmount: number;
+    // totalSalary: number;
+    // totalMuqtadies: number;
+    // registeredMuqtadies: number;
+    // perHead: number;
+    // isCyclePaused: boolean;
+    totalDue: number;
+    totalPaid: number;
+    balance: number;
+    isCyclePaused: boolean;
   }> {
-    const response = await api.get('/salary/summary');
-    const data = (response.data as Record<string, unknown> | null) ?? null;
-    const contributionModeRaw = data?.contributionMode ?? data?.contributionType;
-    const contributionMode: ContributionMode = contributionModeRaw === 'PERSON' ? 'PERSON' : 'HOUSEHOLD';
-    const contributionAmount = Number(data?.contributionAmount ?? data?.totalSalary ?? 0);
+    const response = await api.get<SalarySummaryResponse>("/salary/summary");
+
+    const data = response.data;
+
+    const payload = data.payload;
+
+    // const contributionMode: ContributionMode =
+    //   payload.contributionMode === "PERSON" ? "PERSON" : "HOUSEHOLD";
+
+    // const contributionAmount = Number(
+    //   payload.contributionAmount ?? payload.totalSalary ?? 0,
+    // );
 
     return {
-      contributionMode,
-      contributionType: contributionMode,
-      contributionAmount: Number.isFinite(contributionAmount) ? contributionAmount : 0,
-      totalSalary: Number(data?.totalSalary ?? 0),
-      totalMuqtadies: Number(data?.totalMuqtadies ?? 0),
-      registeredMuqtadies: Number(data?.registeredMuqtadies ?? 0),
-      perHead: Number(data?.perHead ?? 0),
+      // contributionMode,
+      // contributionType: contributionMode,
+      // contributionAmount: Number.isFinite(contributionAmount)
+      //   ? contributionAmount
+      //   : 0,
+      // totalSalary: Number(payload.totalSalary ?? 0),
+      // totalMuqtadies: Number(payload.totalMuqtadies ?? 0),
+      // registeredMuqtadies: Number(payload.registeredMuqtadies ?? 0),
+      // perHead: Number(payload.perHead ?? 0),
+      // isCyclePaused: data.isCyclePaused, // ✅ NEW
+      totalDue: Number(payload.totalDue ?? 0),
+  totalPaid: Number(payload.totalPaid ?? 0),
+  balance: Number(payload.balance ?? 0),
+  isCyclePaused: data.isCyclePaused,
     };
   },
 
-  async recordPayment(payload: RecordMuqtadiPaymentPayload): Promise<MuqtadiDue> {
-    const response = await api.post<MuqtadiDue>('/muqtadis/payments', payload);
+  async recordPayment(
+    payload: RecordMuqtadiPaymentPayload,
+  ): Promise<MuqtadiDue> {
+    const response = await api.post<MuqtadiDue>("/muqtadis/payments", payload);
     return response.data;
   },
 
   async updatePayment(paymentId: string, payload: UpdateMuqtadiPaymentPayload) {
-    const response = await api.patch(`/muqtadis/payments/${paymentId}`, payload);
+    const response = await api.patch(
+      `/muqtadis/payments/${paymentId}`,
+      payload,
+    );
     return response.data;
   },
 
-  async deletePayment(paymentId: string): Promise<{ id: string; deleted: boolean }> {
+  async deletePayment(
+    paymentId: string,
+  ): Promise<{ id: string; deleted: boolean }> {
     const response = await api.delete(`/muqtadis/payments/${paymentId}`);
     return response.data;
   },
 
   async getImamFundSummary(): Promise<ImamFundSummary> {
-    const response = await api.get('/imam-fund/summary');
+    const response = await api.get("/imam-fund/summary");
     const data = (response.data as Record<string, unknown> | null) ?? null;
     return {
       totalIncome: Number(data?.totalIncome ?? data?.income ?? 0),
@@ -724,17 +877,21 @@ export const muqtadisService = {
     page?: number;
     limit?: number;
     month?: string;
-    type?: ImamFundLedgerTransactionType | 'all';
+    type?: ImamFundLedgerTransactionType | "all";
   }): Promise<ImamFundHistoryResponse> {
     const query = new URLSearchParams();
-    if (params?.page) query.set('page', String(params.page));
-    if (params?.limit) query.set('limit', String(params.limit));
-    if (params?.month && params.month.trim()) query.set('month', params.month.trim());
-    if (params?.type && params.type !== 'all') query.set('type', params.type);
+    if (params?.page) query.set("page", String(params.page));
+    if (params?.limit) query.set("limit", String(params.limit));
+    if (params?.month && params.month.trim())
+      query.set("month", params.month.trim());
+    if (params?.type && params.type !== "all") query.set("type", params.type);
 
     const suffix = query.toString();
-    const response = await api.get(`/imam-fund/history${suffix ? `?${suffix}` : ''}`);
-    const data = (response.data as Partial<ImamFundHistoryResponse> | null) ?? null;
+    const response = await api.get(
+      `/imam-fund/history${suffix ? `?${suffix}` : ""}`,
+    );
+    const data =
+      (response.data as Partial<ImamFundHistoryResponse> | null) ?? null;
 
     return {
       summary: {
@@ -753,10 +910,10 @@ export const muqtadisService = {
         : [],
       transactions: Array.isArray(data?.transactions)
         ? data!.transactions!.map((row) => ({
-            id: String(row.id ?? ''),
-            type: (row.type ?? 'ADJUSTMENT') as ImamFundLedgerTransactionType,
+            id: String(row.id ?? ""),
+            type: (row.type ?? "ADJUSTMENT") as ImamFundLedgerTransactionType,
             amount: Number(row.amount ?? 0),
-            status: String(row.status ?? 'POSTED'),
+            status: String(row.status ?? "POSTED"),
             createdAt: String(row.createdAt ?? new Date(0).toISOString()),
             month: Number(row.month ?? 0),
             year: Number(row.year ?? 0),
@@ -780,38 +937,74 @@ export const muqtadisService = {
     await api.post(`/muqtadis/${id}/enable`);
   },
 
-  async verify(id: string): Promise<{ id: string; isVerified: boolean }> {
-    const response = await api.patch<{ id: string; isVerified: boolean }>(`/muqtadis/${id}/verify`);
+  async verify(
+    id: string,
+    payload?: { previousDue?: number },
+  ): Promise<{ id: string; isVerified: boolean }> {
+    const response = await api.patch<{ id: string; isVerified: boolean }>(
+      `/muqtadis/${id}/verify`,
+      payload ?? {},
+    );
     return response.data;
   },
 
   async reject(id: string): Promise<{ id: string; isVerified: boolean }> {
-    const response = await api.patch<{ id: string; isVerified: boolean }>(`/muqtadis/${id}/reject`);
+    const response = await api.patch<{ id: string; isVerified: boolean }>(
+      `/muqtadis/${id}/reject`,
+    );
     return response.data;
   },
 
-  async enableLogin(id: string, payload: EnableMuqtadiLoginPayload): Promise<EnableMuqtadiLoginResponse> {
-    const response = await api.post<EnableMuqtadiLoginResponse>(`/muqtadis/${id}/enable-login`, payload);
+  async enableLogin(
+    id: string,
+    payload: EnableMuqtadiLoginPayload,
+  ): Promise<EnableMuqtadiLoginResponse> {
+    const response = await api.post<EnableMuqtadiLoginResponse>(
+      `/muqtadis/${id}/enable-login`,
+      payload,
+    );
     return response.data;
   },
 
-  async generateResetPasswordLink(id: string): Promise<MuqtadiResetLinkResponse> {
-    const response = await api.post<MuqtadiResetLinkResponse>(`/muqtadis/${id}/reset-password-link`);
+  async generateResetPasswordLink(
+    id: string,
+  ): Promise<MuqtadiResetLinkResponse> {
+    const response = await api.post<MuqtadiResetLinkResponse>(
+      `/muqtadis/${id}/reset-password-link`,
+    );
     return response.data;
   },
 
-  async createAccount(id: string, payload: CreateMuqtadiAccountPayload): Promise<CreateMuqtadiAccountResponse> {
-    const response = await api.post<CreateMuqtadiAccountResponse>(`/muqtadis/${id}/create-account`, payload);
+  async createAccount(
+    id: string,
+    payload: CreateMuqtadiAccountPayload,
+  ): Promise<CreateMuqtadiAccountResponse> {
+    const response = await api.post<CreateMuqtadiAccountResponse>(
+      `/muqtadis/${id}/create-account`,
+      payload,
+    );
     return response.data;
   },
 
-  async includeInCurrentCycle(id: string): Promise<{ included: boolean; alreadyIncluded: boolean; dueId: string }> {
-    const response = await api.post<{ included: boolean; alreadyIncluded: boolean; dueId: string }>(`/muqtadis/${id}/include-in-cycle`);
+  async includeInCurrentCycle(
+    id: string,
+  ): Promise<{ included: boolean; alreadyIncluded: boolean; dueId: string }> {
+    const response = await api.post<{
+      included: boolean;
+      alreadyIncluded: boolean;
+      dueId: string;
+    }>(`/muqtadis/${id}/include-in-cycle`);
     return response.data;
   },
 
-  async removeFromCurrentCycle(id: string): Promise<{ removed: boolean; notFound: boolean; dueId?: string }> {
-    const response = await api.post<{ removed: boolean; notFound: boolean; dueId?: string }>(`/muqtadis/${id}/remove-from-cycle`);
+  async removeFromCurrentCycle(
+    id: string,
+  ): Promise<{ removed: boolean; notFound: boolean; dueId?: string }> {
+    const response = await api.post<{
+      removed: boolean;
+      notFound: boolean;
+      dueId?: string;
+    }>(`/muqtadis/${id}/remove-from-cycle`);
     return response.data;
   },
 
@@ -820,7 +1013,8 @@ export const muqtadisService = {
   },
 
   async getDashboard(): Promise<MuqtadiDashboardApiResponse> {
-    const response = await api.get<MuqtadiDashboardApiResponse>('/muqtadi/dashboard');
+    const response =
+      await api.get<MuqtadiDashboardApiResponse>("/muqtadi/dashboard");
     return response.data;
   },
 
@@ -830,7 +1024,7 @@ export const muqtadisService = {
     upiDeepLink: string;
     amount: number;
     month: { month: number; year: number };
-    status: 'INITIATED' | 'PENDING' | 'VERIFIED' | 'REJECTED';
+    status: "INITIATED" | "PENDING" | "VERIFIED" | "REJECTED";
     paymentMethods: {
       upiId?: string | null;
       bankAccount?: string | null;
@@ -838,31 +1032,47 @@ export const muqtadisService = {
       phoneNumber?: string | null;
     };
   }> {
-    const response = await api.post('/muqtadis/my/pay', payload);
+    const response = await api.post("/muqtadis/my/pay", payload);
     return response.data;
   },
 
-  async verifyPayment(transactionId: string): Promise<{ id: string; status: 'PENDING' | 'VERIFIED' }> {
-    const response = await api.post('/muqtadis/payments/verify', { transactionId });
+  async verifyPayment(
+    transactionId: string,
+  ): Promise<{ id: string; status: "PENDING" | "VERIFIED" }> {
+    const response = await api.post("/muqtadis/payments/verify", {
+      transactionId,
+    });
     return response.data;
   },
 
-  async verifyPaymentByIntent(intentId: string, reference?: string): Promise<{ id: string; status: 'PENDING' | 'VERIFIED' }> {
-    const response = await api.post('/payments/verify', { intentId, reference });
+  async verifyPaymentByIntent(
+    intentId: string,
+    reference?: string,
+  ): Promise<{ id: string; status: "PENDING" | "VERIFIED" }> {
+    const response = await api.post("/payments/verify", {
+      intentId,
+      reference,
+    });
     return response.data;
   },
 
-  async getMyDues(params?: { page?: number; limit?: number }): Promise<MyDuesResponse> {
+  async getMyDues(params?: {
+    page?: number;
+    limit?: number;
+  }): Promise<MyDuesResponse> {
     const query = new URLSearchParams();
-    if (params?.page) query.append('page', String(params.page));
-    if (params?.limit) query.append('limit', String(params.limit));
+    if (params?.page) query.append("page", String(params.page));
+    if (params?.limit) query.append("limit", String(params.limit));
 
     const suffix = query.toString();
-    const response = await api.get(`/muqtadis/my/dues${suffix ? `?${suffix}` : ''}`);
+    const response = await api.get(
+      `/muqtadis/my/dues${suffix ? `?${suffix}` : ""}`,
+    );
     const body = (response.data as Record<string, unknown> | null) ?? null;
     const data = Array.isArray(body?.data) ? (body.data as MuqtadiDue[]) : [];
     const meta = (body?.meta as Record<string, unknown> | undefined) ?? {};
-    const summary = (body?.summary as Record<string, unknown> | undefined) ?? {};
+    const summary =
+      (body?.summary as Record<string, unknown> | undefined) ?? {};
     return {
       data,
       total: Number(meta.total ?? data.length),
@@ -894,7 +1104,7 @@ export const muqtadisService = {
     status: MuqtadiStatus;
     householdLocked: boolean;
   }> {
-    const response = await api.get('/muqtadis/my/profile');
+    const response = await api.get("/muqtadis/my/profile");
     return response.data;
   },
 
@@ -907,7 +1117,7 @@ export const muqtadisService = {
     dependentNames?: string[];
     notes?: string;
   }) {
-    const response = await api.post('/muqtadis/my/profile', payload);
+    const response = await api.post("/muqtadis/my/profile", payload);
     return response.data;
   },
 };

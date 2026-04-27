@@ -155,6 +155,8 @@ export interface Muqtadi {
   category?: string | null;
   phone?: string | null;
   notes?: string | null;
+  previousDue?: number;
+  creditBalance?: number;
   totalDue?: number;
   totalPaid?: number;
   expectedAmount?: number;

@@ -243,6 +243,7 @@ export default function PayPage() {
 
   const dues = useMemo(() => duesQuery.data?.data ?? [], [duesQuery.data?.data]);
   const historyRows = useMemo(() => dashboardQuery.data?.history ?? [], [dashboardQuery.data?.history]);
+  const balance = dashboardQuery.data?.outstandingAmount ?? 0;
 
   useEffect(() => {
     if (duesQuery.error) {
@@ -309,10 +310,10 @@ export default function PayPage() {
 
   const showPayLoader = useMinimumLoading(duesQuery.isLoading && !duesQuery.data);
 
-  const currentDue = useMemo(() => {
+  const totalBalance  = useMemo(() => {
     return Number(duesQuery.data?.summary?.outstandingAmount ?? 0);
   }, [duesQuery.data?.summary?.outstandingAmount]);
-  const allDuesPaid = currentDue <= 0.0001;
+  const allDuesPaid = totalBalance  <= 0.0001;
 
   const remainingDue = useMemo(() => {
     if (!selectedDue) return 0;
@@ -321,7 +322,7 @@ export default function PayPage() {
 
   const parsedAmount = useMemo(() => parseStrictAmountInput(amount), [amount]);
   const amountIsValid = parsedAmount !== null && parsedAmount > 0;
-  const amountExceedsRemaining = amountIsValid && selectedDue ? (parsedAmount as number) > remainingDue : false;
+  // const amountExceedsRemaining = amountIsValid && selectedDue ? (parsedAmount as number) > remainingDue : false;
 
   const upiDeepLink = useMemo(() => {
     if (!paymentConfig?.upiId?.trim()) return '';
@@ -371,11 +372,11 @@ export default function PayPage() {
       }
       return;
     }
-    if (selectedDue.status === 'PAID' || remainingDue <= 0) {
-      setAmount('0');
-      return;
-    }
-    setAmount(String(remainingDue));
+    // if (selectedDue.status === 'PAID' || remainingDue <= 0) {
+    //   setAmount('0');
+    //   return;
+    // }
+    setAmount("");
   }, [exactResumeMatched, remainingDue, resumeProofMode, selectedDue]);
 
   const availableMethods = useMemo<PaymentMethod[]>(() => {
@@ -441,24 +442,24 @@ export default function PayPage() {
   const ensureSoftDraftFromCopyIntent = async (method: PaymentMethod) => {
     const numericAmount = parseStrictAmountInput(amount);
 
-    if (!selectedCycleId || numericAmount === null || numericAmount <= 0) {
+    if ( numericAmount === null || numericAmount <= 0) {
       toast.error('Select a month and enter a valid amount');
       return false;
     }
 
-    if (selectedDue?.status === 'PAID' || remainingDue <= 0) {
-      toast.error('This month is already fully paid');
-      return false;
-    }
+    // if (selectedDue?.status === 'PAID' || remainingDue <= 0) {
+    //   toast.error('This month is already fully paid');
+    //   return false;
+    // }
 
-    if (selectedDue && numericAmount > remainingDue) {
-      toast.error(`Amount cannot exceed remaining due (${formatCurrency(remainingDue)})`);
-      return false;
-    }
+    // if (selectedDue && numericAmount > remainingDue) {
+    //   toast.error(`Amount cannot exceed remaining due (${formatCurrency(remainingDue)})`);
+    //   return false;
+    // }
 
     try {
       await muqtadisService.initiateMyPayment({
-        cycleId: selectedCycleId,
+        cycleId: selectedCycleId || "",
         amount: numericAmount,
         method: method === 'PHONE' ? 'UPI' : method,
         reference: `COPY_${method}`,
@@ -802,7 +803,7 @@ export default function PayPage() {
       }
 
       await muqtadisService.initiateMyPayment({
-        cycleId: selectedCycleId,
+        cycleId: selectedCycleId || "",
         amount: numericAmount,
         method: selectedMethod === 'PHONE' ? 'UPI' : selectedMethod,
         utr: utr.trim() || undefined,
@@ -840,6 +841,10 @@ export default function PayPage() {
     <div className="ds-stack">
       <div className="rounded-xl border p-4">
         <MuqtadiBackButton />
+
+        {balance > 0 && <p>Pending: ₹{balance}</p>}
+{balance < 0 && <p>Credit: ₹{Math.abs(balance)}</p>}
+{balance === 0 && <p>All settled</p>}
       </div>
 
       <Card>
@@ -854,10 +859,32 @@ export default function PayPage() {
             </p>
           ) : null}
 
-          <div className="rounded-xl border p-4">
+          {/* <div className="rounded-xl border p-4">
             <p className="text-xs text-muted-foreground">Current Due</p>
             <p className="mt-1 text-3xl font-bold">{formatCurrency(currentDue)}</p>
-          </div>
+          </div> */}
+
+          <div className="rounded-xl border p-4">
+  <p className="text-xs text-muted-foreground">Balance</p>
+
+  {totalBalance > 0 && (
+    <p className="mt-1 text-3xl font-bold text-red-600">
+      {formatCurrency(totalBalance)}
+    </p>
+  )}
+
+  {totalBalance < 0 && (
+    <p className="mt-1 text-3xl font-bold text-green-600">
+      Credit: {formatCurrency(Math.abs(totalBalance))}
+    </p>
+  )}
+
+  {totalBalance === 0 && (
+    <p className="mt-1 text-3xl font-bold text-gray-500">
+      All settled
+    </p>
+  )}
+</div>
 
           {initiatedDraft?.cycleId ? (
             <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2">
@@ -957,13 +984,23 @@ export default function PayPage() {
             )}
           </div>
 
-          <div className="space-y-2">
+          {/* <div className="space-y-2">
             <Label>Amount due</Label>
             <Input type="text" inputMode="decimal" value={amount} readOnly disabled />
             {amountExceedsRemaining ? (
               <p className="text-xs text-red-600">Amount exceeds remaining due ({formatCurrency(remainingDue)}).</p>
             ) : null}
-          </div>
+          </div> */}
+
+          <div className="space-y-2">
+  <Label>Amount</Label>
+  <Input
+    type="text"
+    inputMode="decimal"
+    value={amount}
+    onChange={(e) => setAmount(e.target.value)}
+  />
+</div>
 
           <div className="space-y-2">
             <Label>Payment Method</Label>
@@ -1058,7 +1095,7 @@ export default function PayPage() {
                 || selectedDue?.status === 'PAID'
                 || remainingDue <= 0
                 || !amountIsValid
-                || amountExceedsRemaining
+                // || amountExceedsRemaining
                 || !paymentConfig?.upiId?.trim()
               }
               className="h-11 w-full text-base font-semibold"
@@ -1077,7 +1114,7 @@ export default function PayPage() {
                 || selectedDue?.status === 'PAID'
                 || remainingDue <= 0
                 || !amountIsValid
-                || amountExceedsRemaining
+                // || amountExceedsRemaining
               }
               className="h-11 w-full text-base font-semibold"
             >

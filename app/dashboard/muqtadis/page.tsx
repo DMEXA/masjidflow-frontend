@@ -1,20 +1,14 @@
-'use client';
+"use client";
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import {
-  Loader2,
-  Plus,
-  Copy,
-  ExternalLink,
-  ImageOff,
-} from 'lucide-react';
-import { toast } from 'sonner';
-import { PageHeader } from '@/components/dashboard/page-header';
-import { Card, CardContent } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { Loader2, Plus, Copy, ExternalLink, ImageOff } from "lucide-react";
+import { toast } from "sonner";
+import { PageHeader } from "@/components/dashboard/page-header";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
@@ -23,10 +17,10 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Textarea } from '@/components/ui/textarea';
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -36,43 +30,50 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-import type { Muqtadi } from '@/types';
+} from "@/components/ui/alert-dialog";
+import type { Muqtadi } from "@/types";
 import {
   muqtadisService,
   type ImamSalaryCycle,
   type MuqtadiDetails,
   type MuqtadiStatus,
-} from '@/services/muqtadis.service';
-import { usePermission } from '@/hooks/usePermission';
-import { getErrorMessage } from '@/src/utils/error';
-import { invalidateMoneyQueries, invalidateMuqtadiMutationQueries } from '@/lib/money-cache';
-import { queryKeys } from '@/lib/query-keys';
-import { formatCurrency, formatDate, formatCycleLabel, getCycleStatus } from '@/src/utils/format';
-import { ListEmptyState } from '@/components/common/list-empty-state';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useAuthStore } from '@/src/store/auth.store';
+} from "@/services/muqtadis.service";
+import { usePermission } from "@/hooks/usePermission";
+import { getErrorMessage } from "@/src/utils/error";
 import {
-  debugInvalidate,
-  debugInvalidateByFilters,
-} from '@/lib/query-debug';
-import MuqtadiStats from '@/components/muqtadis/MuqtadiStats';
-import MuqtadiFilters from '@/components/muqtadis/MuqtadiFilters';
-import MuqtadiList from '@/components/muqtadis/MuqtadiList';
-import MuqtadiDetailsModal from '@/components/muqtadis/MuqtadiDetailsModal';
+  invalidateMoneyQueries,
+  invalidateMuqtadiMutationQueries,
+} from "@/lib/money-cache";
+import { queryKeys } from "@/lib/query-keys";
 import {
-  useMuqtadis,
-} from '@/hooks/useMuqtadis';
-import { parseStrictAmountInput, parseStrictIntegerInput } from '@/src/utils/numeric-input';
-import { isValidIndianPhone, normalizeIndianPhone } from '@/src/utils/phone';
+  formatCurrency,
+  formatDate,
+  formatCycleLabel,
+  getCycleStatus,
+} from "@/src/utils/format";
+import { ListEmptyState } from "@/components/common/list-empty-state";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useAuthStore } from "@/src/store/auth.store";
+import { debugInvalidate, debugInvalidateByFilters } from "@/lib/query-debug";
+import MuqtadiStats from "@/components/muqtadis/MuqtadiStats";
+import MuqtadiFilters from "@/components/muqtadis/MuqtadiFilters";
+import MuqtadiList from "@/components/muqtadis/MuqtadiList";
+import MuqtadiDetailsModal from "@/components/muqtadis/MuqtadiDetailsModal";
+import { useMuqtadis } from "@/hooks/useMuqtadis";
+import {
+  parseStrictAmountInput,
+  parseStrictIntegerInput,
+} from "@/src/utils/numeric-input";
+import { isValidIndianPhone, normalizeIndianPhone } from "@/src/utils/phone";
 
 const EMPTY_FORM = {
-  name: '',
-  fatherName: '',
-  householdMembers: '1',
+  name: "",
+  fatherName: "",
+  householdMembers: "1",
   dependents: [] as string[],
-  whatsappNumber: '',
-  notes: '',
+  whatsappNumber: "",
+  notes: "",
+  previousDue: "0",
 };
 
 export default function MuqtadisPage() {
@@ -83,7 +84,7 @@ export default function MuqtadisPage() {
   const { canManageMembers } = usePermission();
 
   const [isAddOpen, setIsAddOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<'active' | 'trash'>('active');
+  const [activeTab, setActiveTab] = useState<"active" | "trash">("active");
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isPaymentOpen, setIsPaymentOpen] = useState(false);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -93,49 +94,88 @@ export default function MuqtadisPage() {
   const [isTrashLoading, setIsTrashLoading] = useState(false);
 
   const [selectedMuqtadi, setSelectedMuqtadi] = useState<Muqtadi | null>(null);
-  const [selectedDetails, setSelectedDetails] = useState<MuqtadiDetails | null>(null);
+  const [selectedDetails, setSelectedDetails] = useState<MuqtadiDetails | null>(
+    null,
+  );
 
   const [form, setForm] = useState(EMPTY_FORM);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  const [paymentMode, setPaymentMode] = useState<'new' | 'adjustment'>('new');
-  const [pendingPaymentVerificationId, setPendingPaymentVerificationId] = useState<string | null>(null);
+  const [paymentMode, setPaymentMode] = useState<"new" | "adjustment">("new");
+  const [pendingPaymentVerificationId, setPendingPaymentVerificationId] =
+    useState<string | null>(null);
   const [editingPaymentId, setEditingPaymentId] = useState<string | null>(null);
-  const [pendingPaymentDeleteId, setPendingPaymentDeleteId] = useState<string | null>(null);
-  const [pendingPaymentRejectId, setPendingPaymentRejectId] = useState<string | null>(null);
-  const [selectedPaymentDetailId, setSelectedPaymentDetailId] = useState<string | null>(null);
-  const [paymentDetailImageFailed, setPaymentDetailImageFailed] = useState(false);
+  const [pendingPaymentDeleteId, setPendingPaymentDeleteId] = useState<
+    string | null
+  >(null);
+  const [pendingPaymentRejectId, setPendingPaymentRejectId] = useState<
+    string | null
+  >(null);
+  const [selectedPaymentDetailId, setSelectedPaymentDetailId] = useState<
+    string | null
+  >(null);
+  const [paymentDetailImageFailed, setPaymentDetailImageFailed] =
+    useState(false);
   const [isIncludingInCycle, setIsIncludingInCycle] = useState(false);
   const [isRemovingFromCycle, setIsRemovingFromCycle] = useState(false);
   const [isGeneratingLoginLink, setIsGeneratingLoginLink] = useState(false);
   const [isSendingResetLink, setIsSendingResetLink] = useState(false);
   const [authLinksByMuqtadiId, setAuthLinksByMuqtadiId] = useState<
-    Record<string, { link: string; expiresInMinutes: number; createdAt: string; mode: 'login' | 'reset' }>
+    Record<
+      string,
+      {
+        link: string;
+        expiresInMinutes: number;
+        createdAt: string;
+        mode: "login" | "reset";
+      }
+    >
   >({});
-  const [inviteLink, setInviteLink] = useState('');
-  const [inviteUsageMeta, setInviteUsageMeta] = useState<{ maxUses?: number | null; usedCount?: number }>({});
+  const [inviteLink, setInviteLink] = useState("");
+  const [inviteUsageMeta, setInviteUsageMeta] = useState<{
+    maxUses?: number | null;
+    usedCount?: number;
+  }>({});
   const [isInviteLinkDialogOpen, setIsInviteLinkDialogOpen] = useState(false);
   const [isInviteLimitDialogOpen, setIsInviteLimitDialogOpen] = useState(false);
-  const [inviteLimit, setInviteLimit] = useState('1');
+  const [inviteLimit, setInviteLimit] = useState("1");
   const [isInviteLinkLoading, setIsInviteLinkLoading] = useState(false);
-  const [selectedCycleId, setSelectedCycleId] = useState('');
-  const [paymentAmount, setPaymentAmount] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'UPI' | 'BANK'>('CASH');
-  const [paymentUtr, setPaymentUtr] = useState('');
-  const [paymentReference, setPaymentReference] = useState('');
-  const [paymentNotes, setPaymentNotes] = useState('');
-  const [imamFundSummary, setImamFundSummary] = useState({ totalIncome: 0, totalExpense: 0, balance: 0 });
-  const resizeDependents = (householdMembersValue: string, currentDependents: string[]) => {
+  const [selectedCycleId, setSelectedCycleId] = useState("");
+  const [paymentAmount, setPaymentAmount] = useState("");
+  const totalDue = selectedDetails?.overview?.totalDue ?? 0;
+  const totalPaid = selectedDetails?.overview?.totalPaid ?? 0;
+  const remaining = selectedDetails?.overview?.outstandingAmount ?? 0;
+  const totalCredit =
+    selectedDetails?.overview?.credit ?? selectedDetails?.creditBalance ?? 0;
+  const [paymentMethod, setPaymentMethod] = useState<"CASH" | "UPI" | "BANK">(
+    "CASH",
+  );
+  const [paymentUtr, setPaymentUtr] = useState("");
+  const [paymentReference, setPaymentReference] = useState("");
+  const [paymentNotes, setPaymentNotes] = useState("");
+  const [imamFundSummary, setImamFundSummary] = useState({
+    totalIncome: 0,
+    totalExpense: 0,
+    balance: 0,
+  });
+  const resizeDependents = (
+    householdMembersValue: string,
+    currentDependents: string[],
+  ) => {
     const parsed = parseStrictIntegerInput(householdMembersValue);
-    const householdCount = parsed !== null && parsed > 0 ? Math.min(parsed, 50) : 1;
+    const householdCount =
+      parsed !== null && parsed > 0 ? Math.min(parsed, 50) : 1;
     const dependentsCount = Math.max(householdCount - 1, 0);
-    return Array.from({ length: dependentsCount }, (_, index) => currentDependents[index] ?? '');
+    return Array.from(
+      { length: dependentsCount },
+      (_, index) => currentDependents[index] ?? "",
+    );
   };
 
   useEffect(() => {
     if (!canManageMembers) {
-      router.replace('/dashboard');
+      router.replace("/dashboard");
     }
   }, [canManageMembers, router]);
 
@@ -155,11 +195,18 @@ export default function MuqtadisPage() {
 
   useEffect(() => {
     if (cyclesQuery.error) {
-      toast.error(getErrorMessage(cyclesQuery.error, 'Failed to load salary months'));
+      toast.error(
+        getErrorMessage(cyclesQuery.error, "Failed to load salary months"),
+      );
     }
   }, [cyclesQuery.error]);
 
   const cycles = useMemo(() => cyclesQuery.data ?? [], [cyclesQuery.data]);
+
+  const activeCycle = useMemo(
+    () => cycles.find((c) => c.status === "ACTIVE"),
+    [cycles],
+  );
 
   const fetchImamFundSummary = useCallback(async () => {
     try {
@@ -175,55 +222,97 @@ export default function MuqtadisPage() {
   }, []);
 
   useEffect(() => {
+    if (activeCycle?.id) {
+      setSelectedCycleId(activeCycle.id);
+    }
+  }, [activeCycle]);
+
+  useEffect(() => {
     fetchImamFundSummary();
   }, [fetchImamFundSummary]);
 
-  const buildPreviewDetails = useCallback((item: Muqtadi): MuqtadiDetails => ({
-    id: item.id,
-    userId: item.userId ?? null,
-    accountState: item.accountState ?? 'OFFLINE',
-    setupLinkExpiresAt: item.setupLinkExpiresAt ?? null,
-    setupLinkExpiresInMinutes: item.setupLinkExpiresInMinutes ?? null,
-    name: item.name,
-    fatherName: item.fatherName ?? '',
-    email: item.email ?? null,
-    householdMembers: item.householdMembers ?? 1,
-    memberNames: Array.isArray(item.memberNames) ? item.memberNames : [item.name].filter(Boolean),
-    whatsappNumber: item.whatsappNumber ?? null,
-    isVerified: item.isVerified ?? false,
-    category: item.category ?? null,
-    phone: item.phone ?? null,
-    notes: item.notes ?? null,
-    status: item.status ?? 'ACTIVE',
-    hasCycle: false,
-    isHouseholdInCycle: false,
-    overview: {
-      totalDue: 0,
-      totalPaid: 0,
-      outstandingAmount: 0,
+  const buildPreviewDetails = useCallback(
+    (item: Muqtadi): MuqtadiDetails => ({
+      id: item.id,
+      userId: item.userId ?? null,
+      accountState: item.accountState ?? "OFFLINE",
+      setupLinkExpiresAt: item.setupLinkExpiresAt ?? null,
+      setupLinkExpiresInMinutes: item.setupLinkExpiresInMinutes ?? null,
+      name: item.name,
+      fatherName: item.fatherName ?? "",
+      email: item.email ?? null,
+      householdMembers: item.householdMembers ?? 1,
+      memberNames: Array.isArray(item.memberNames)
+        ? item.memberNames
+        : [item.name].filter(Boolean),
+      whatsappNumber: item.whatsappNumber ?? null,
+      isVerified: item.isVerified ?? false,
+      category: item.category ?? null,
+      phone: item.phone ?? null,
+      notes: item.notes ?? null,
+      previousDue: item.previousDue ?? 0,
+      creditBalance: item.creditBalance ?? 0,
+      status: item.status ?? "ACTIVE",
+      hasCycle: false,
+      isHouseholdInCycle: false,
+      overview: {
+        totalDue: 0,
+        totalPaid: 0,
+        outstandingAmount: 0,
+        credit: item.creditBalance ?? 0,
+      },
+      dues: [],
+      payments: [],
+      history: [],
+    }),
+    [],
+  );
+
+  const patchDetailCache = useCallback(
+    (
+      id: string,
+      updater: (old: MuqtadiDetails | undefined) => MuqtadiDetails | undefined,
+    ) => {
+      const queryKey = queryKeys.muqtadiDetail(id);
+      queryClient.setQueryData(queryKey, (old: MuqtadiDetails | undefined) =>
+        updater(old),
+      );
+      setSelectedDetails((old) =>
+        old?.id === id ? (updater(old) ?? old) : old,
+      );
     },
-    dues: [],
-    payments: [],
-    history: [],
-  }), []);
+    [queryClient],
+  );
 
-  const patchDetailCache = useCallback((id: string, updater: (old: MuqtadiDetails | undefined) => MuqtadiDetails | undefined) => {
-    const queryKey = queryKeys.muqtadiDetail(id);
-    queryClient.setQueryData(queryKey, (old: MuqtadiDetails | undefined) => updater(old));
-    setSelectedDetails((old) => (old?.id === id ? updater(old) ?? old : old));
-  }, [queryClient]);
+  const invalidateDetailQueries = useCallback(
+    async (id: string) => {
+      await Promise.all([
+        debugInvalidate(queryClient, queryKeys.muqtadiDetail(id), {
+          exact: true,
+        }),
+        debugInvalidate(queryClient, queryKeys.muqtadiDues(id), {
+          exact: true,
+        }),
+        debugInvalidate(queryClient, queryKeys.muqtadiPayments(id), {
+          exact: true,
+        }),
+        debugInvalidate(queryClient, queryKeys.muqtadiHistory(id), {
+          exact: true,
+        }),
+      ]);
+    },
+    [queryClient],
+  );
 
-  const invalidateDetailQueries = useCallback(async (id: string) => {
-    await Promise.all([
-      debugInvalidate(queryClient, queryKeys.muqtadiDetail(id), { exact: true }),
-      debugInvalidate(queryClient, queryKeys.muqtadiDues(id), { exact: true }),
-      debugInvalidate(queryClient, queryKeys.muqtadiPayments(id), { exact: true }),
-      debugInvalidate(queryClient, queryKeys.muqtadiHistory(id), { exact: true }),
-    ]);
-  }, [queryClient]);
+  const summaryQuery = useQuery({
+    queryKey: ["salary-summary"],
+    queryFn: () => muqtadisService.getSalarySummary(),
+  });
+
+  const isCyclePaused = summaryQuery.data?.isCyclePaused ?? false;
 
   const dependentMutation = useMutation({
-    mutationKey: ['muqtadi-dependent'],
+    mutationKey: ["muqtadi-dependent"],
     mutationFn: async ({
       muqtadiId,
       memberNames,
@@ -241,22 +330,35 @@ export default function MuqtadisPage() {
     },
     onMutate: async ({ muqtadiId, memberNames, householdMembers }) => {
       await Promise.all([
-        queryClient.cancelQueries({ queryKey: queryKeys.muqtadiDetail(muqtadiId), exact: true }),
-        queryClient.cancelQueries({ queryKey: queryKeys.muqtadiDues(muqtadiId), exact: true }),
+        queryClient.cancelQueries({
+          queryKey: queryKeys.muqtadiDetail(muqtadiId),
+          exact: true,
+        }),
+        queryClient.cancelQueries({
+          queryKey: queryKeys.muqtadiDues(muqtadiId),
+          exact: true,
+        }),
       ]);
 
-      const previousDetail = queryClient.getQueryData<MuqtadiDetails>(queryKeys.muqtadiDetail(muqtadiId));
-      const previousDues = queryClient.getQueryData<MuqtadiDetails['dues']>(queryKeys.muqtadiDues(muqtadiId));
+      const previousDetail = queryClient.getQueryData<MuqtadiDetails>(
+        queryKeys.muqtadiDetail(muqtadiId),
+      );
+      const previousDues = queryClient.getQueryData<MuqtadiDetails["dues"]>(
+        queryKeys.muqtadiDues(muqtadiId),
+      );
       const previousItems = items;
 
-      queryClient.setQueryData(queryKeys.muqtadiDetail(muqtadiId), (old: MuqtadiDetails | undefined) => {
-        if (!old) return old;
-        return {
-          ...old,
-          memberNames,
-          householdMembers,
-        };
-      });
+      queryClient.setQueryData(
+        queryKeys.muqtadiDetail(muqtadiId),
+        (old: MuqtadiDetails | undefined) => {
+          if (!old) return old;
+          return {
+            ...old,
+            memberNames,
+            householdMembers,
+          };
+        },
+      );
 
       setSelectedDetails((old) => {
         if (!old || old.id !== muqtadiId) return old;
@@ -267,22 +369,30 @@ export default function MuqtadisPage() {
         };
       });
 
-      setItems((prev) => prev.map((entry) => (
-        entry.id === muqtadiId
-          ? {
-              ...entry,
-              memberNames,
-              householdMembers,
-            }
-          : entry
-      )));
+      setItems((prev) =>
+        prev.map((entry) =>
+          entry.id === muqtadiId
+            ? {
+                ...entry,
+                memberNames,
+                householdMembers,
+              }
+            : entry,
+        ),
+      );
 
       return { previousDetail, previousDues, previousItems, muqtadiId };
     },
     onError: (_error, _variables, context) => {
       if (context?.muqtadiId) {
-        queryClient.setQueryData(queryKeys.muqtadiDetail(context.muqtadiId), context.previousDetail);
-        queryClient.setQueryData(queryKeys.muqtadiDues(context.muqtadiId), context.previousDues ?? []);
+        queryClient.setQueryData(
+          queryKeys.muqtadiDetail(context.muqtadiId),
+          context.previousDetail,
+        );
+        queryClient.setQueryData(
+          queryKeys.muqtadiDues(context.muqtadiId),
+          context.previousDues ?? [],
+        );
       }
       if (context?.previousItems) {
         setItems(context.previousItems);
@@ -296,29 +406,47 @@ export default function MuqtadisPage() {
           return previousDetail;
         });
       }
-      toast.error('Failed to update household. Please try again.');
+      toast.error("Failed to update household. Please try again.");
     },
     onSuccess: (updatedDetail, variables) => {
-      queryClient.setQueryData(queryKeys.muqtadiDetail(variables.muqtadiId), updatedDetail);
-      queryClient.setQueryData(queryKeys.muqtadiDues(variables.muqtadiId), updatedDetail.dues ?? []);
-      setSelectedDetails((old) => (old?.id === variables.muqtadiId ? updatedDetail : old));
+      queryClient.setQueryData(
+        queryKeys.muqtadiDetail(variables.muqtadiId),
+        updatedDetail,
+      );
+      queryClient.setQueryData(
+        queryKeys.muqtadiDues(variables.muqtadiId),
+        updatedDetail.dues ?? [],
+      );
+      setSelectedDetails((old) =>
+        old?.id === variables.muqtadiId ? updatedDetail : old,
+      );
 
-      setItems((prev) => prev.map((entry) => (
-        entry.id === variables.muqtadiId
-          ? {
-              ...entry,
-              memberNames: updatedDetail.memberNames,
-              householdMembers: updatedDetail.householdMembers,
-            }
-          : entry
-      )));
+      setItems((prev) =>
+        prev.map((entry) =>
+          entry.id === variables.muqtadiId
+            ? {
+                ...entry,
+                memberNames: updatedDetail.memberNames,
+                householdMembers: updatedDetail.householdMembers,
+              }
+            : entry,
+        ),
+      );
 
       void debugInvalidate(queryClient, queryKeys.muqtadis(), { exact: false });
     },
     onSettled: async (_data, _error, variables) => {
       await Promise.all([
-        debugInvalidate(queryClient, queryKeys.muqtadiDetail(variables.muqtadiId), { exact: true }),
-        debugInvalidate(queryClient, queryKeys.muqtadiDues(variables.muqtadiId), { exact: true }),
+        debugInvalidate(
+          queryClient,
+          queryKeys.muqtadiDetail(variables.muqtadiId),
+          { exact: true },
+        ),
+        debugInvalidate(
+          queryClient,
+          queryKeys.muqtadiDues(variables.muqtadiId),
+          { exact: true },
+        ),
       ]);
     },
   });
@@ -326,7 +454,7 @@ export default function MuqtadisPage() {
   const isUpdatingDependents = dependentMutation.isPending;
 
   const createMuqtadiMutation = useMutation({
-    mutationKey: ['muqtadi'],
+    mutationKey: ["muqtadi"],
     mutationFn: async (payload: {
       apiPayload: Parameters<typeof muqtadisService.create>[0];
     }) => muqtadisService.create(payload.apiPayload),
@@ -341,7 +469,7 @@ export default function MuqtadisPage() {
         whatsappNumber: newData.apiPayload.whatsappNumber,
         phone: newData.apiPayload.phone,
         notes: newData.apiPayload.notes,
-        status: 'ACTIVE',
+        status: "ACTIVE",
         isDisabled: false,
         isVerified: false,
         createdAt: new Date().toISOString(),
@@ -349,26 +477,38 @@ export default function MuqtadisPage() {
       } as Muqtadi & { isOptimistic: boolean };
 
       await Promise.all([
-        queryClient.cancelQueries({ queryKey: queryKeys.muqtadis(), exact: false }),
-        queryClient.cancelQueries({ queryKey: queryKeys.muqtadiStats, exact: false }),
+        queryClient.cancelQueries({
+          queryKey: queryKeys.muqtadis(),
+          exact: false,
+        }),
+        queryClient.cancelQueries({
+          queryKey: queryKeys.muqtadiStats,
+          exact: false,
+        }),
       ]);
 
       const previousMuqtadiQueries = queryClient.getQueriesData({
         queryKey: queryKeys.muqtadis(),
         exact: false,
       });
-      const previousMuqtadiStats = queryClient.getQueryData(queryKeys.muqtadiStats);
+      const previousMuqtadiStats = queryClient.getQueryData(
+        queryKeys.muqtadiStats,
+      );
       const previousItems = items;
 
-      queryClient.setQueriesData({ queryKey: queryKeys.muqtadis(), exact: false }, (old: any) => {
-        if (!old || !Array.isArray(old.data)) return old;
-        if (old.data.some((item: any) => item?.id === optimisticId)) return old;
-        return {
-          ...old,
-          total: Number(old.total ?? old.data.length) + 1,
-          data: [optimisticItem, ...old.data],
-        };
-      });
+      queryClient.setQueriesData(
+        { queryKey: queryKeys.muqtadis(), exact: false },
+        (old: any) => {
+          if (!old || !Array.isArray(old.data)) return old;
+          if (old.data.some((item: any) => item?.id === optimisticId))
+            return old;
+          return {
+            ...old,
+            total: Number(old.total ?? old.data.length) + 1,
+            data: [optimisticItem, ...old.data],
+          };
+        },
+      );
 
       queryClient.setQueryData(queryKeys.muqtadiStats, (old: any) => {
         if (!old) return old;
@@ -392,7 +532,10 @@ export default function MuqtadisPage() {
       context?.previousMuqtadiQueries?.forEach(([key, data]) => {
         queryClient.setQueryData(key, data);
       });
-      queryClient.setQueryData(queryKeys.muqtadiStats, context?.previousMuqtadiStats);
+      queryClient.setQueryData(
+        queryKeys.muqtadiStats,
+        context?.previousMuqtadiStats,
+      );
       if (context?.previousItems) {
         setItems(context.previousItems);
       }
@@ -401,29 +544,38 @@ export default function MuqtadisPage() {
       const optimisticId = context?.optimisticId;
       if (!optimisticId) return;
 
-      queryClient.setQueriesData({ queryKey: queryKeys.muqtadis(), exact: false }, (old: any) => {
-        if (!old || !Array.isArray(old.data)) return old;
-        const withoutTemp = old.data.filter((item: any) => item?.id !== optimisticId);
-        const hasReal = withoutTemp.some((item: any) => item?.id === createdMuqtadi.id);
-        return {
-          ...old,
-          data: hasReal ? withoutTemp : [createdMuqtadi, ...withoutTemp],
-        };
-      });
+      queryClient.setQueriesData(
+        { queryKey: queryKeys.muqtadis(), exact: false },
+        (old: any) => {
+          if (!old || !Array.isArray(old.data)) return old;
+          const withoutTemp = old.data.filter(
+            (item: any) => item?.id !== optimisticId,
+          );
+          const hasReal = withoutTemp.some(
+            (item: any) => item?.id === createdMuqtadi.id,
+          );
+          return {
+            ...old,
+            data: hasReal ? withoutTemp : [createdMuqtadi, ...withoutTemp],
+          };
+        },
+      );
 
       setItems((prev) => {
         const withoutTemp = prev.filter((item) => item.id !== optimisticId);
-        const hasReal = withoutTemp.some((item) => item.id === createdMuqtadi.id);
+        const hasReal = withoutTemp.some(
+          (item) => item.id === createdMuqtadi.id,
+        );
         return hasReal ? withoutTemp : [createdMuqtadi, ...withoutTemp];
       });
     },
     onSettled: async () => {
       await debugInvalidateByFilters(queryClient, {
         predicate: ({ queryKey }) => {
-          const root = String(queryKey?.[0] ?? '');
+          const root = String(queryKey?.[0] ?? "");
           return (
-            root === queryKeys.muqtadiSalarySummary[0]
-            || root === queryKeys.dashboardOverview(mosqueId)[0]
+            root === queryKeys.muqtadiSalarySummary[0] ||
+            root === queryKeys.dashboardOverview(mosqueId)[0]
           );
         },
       });
@@ -431,19 +583,21 @@ export default function MuqtadisPage() {
   });
 
   const createPaymentMutation = useMutation({
-    mutationKey: ['muqtadi-payment'],
+    mutationKey: ["muqtadi-payment"],
     mutationFn: async (payload: {
       muqtadiId: string;
-      cycleId: string;
+      // cycleId: string;
+      //  cycleId: string[];
+      cycleId?: string;
       amount: number;
-      method: 'CASH' | 'UPI' | 'BANK';
+      method: "CASH" | "UPI" | "BANK";
       utr?: string;
       reference?: string;
       notes?: string;
     }) => {
       await muqtadisService.recordPayment({
         muqtadiId: payload.muqtadiId,
-        cycleId: payload.cycleId,
+        // cycleId:  [selectedCycleId],
         amount: payload.amount,
         method: payload.method,
         utr: payload.utr,
@@ -454,23 +608,33 @@ export default function MuqtadisPage() {
     onMutate: async (newData) => {
       const tempId = `temp-${Date.now()}`;
       await Promise.all([
-        queryClient.cancelQueries({ queryKey: queryKeys.muqtadiDetail(newData.muqtadiId), exact: true }),
-        queryClient.cancelQueries({ queryKey: queryKeys.muqtadiPayments(newData.muqtadiId), exact: true }),
+        queryClient.cancelQueries({
+          queryKey: queryKeys.muqtadiDetail(newData.muqtadiId),
+          exact: true,
+        }),
+        queryClient.cancelQueries({
+          queryKey: queryKeys.muqtadiPayments(newData.muqtadiId),
+          exact: true,
+        }),
       ]);
 
-      const previousDetail = queryClient.getQueryData<MuqtadiDetails>(queryKeys.muqtadiDetail(newData.muqtadiId));
-      const previousPayments = queryClient.getQueryData<MuqtadiDetails['payments']>(queryKeys.muqtadiPayments(newData.muqtadiId));
+      const previousDetail = queryClient.getQueryData<MuqtadiDetails>(
+        queryKeys.muqtadiDetail(newData.muqtadiId),
+      );
+      const previousPayments = queryClient.getQueryData<
+        MuqtadiDetails["payments"]
+      >(queryKeys.muqtadiPayments(newData.muqtadiId));
 
       const optimisticEntry = {
         id: tempId,
-        action: 'PAYMENT_RECORDED',
+        action: "PAYMENT_RECORDED",
         createdAt: new Date().toISOString(),
         isOptimistic: true,
         details: {
           amount: newData.amount,
           method: newData.method,
           cycleId: newData.cycleId,
-          status: 'PENDING',
+          status: "PENDING",
           utr: newData.utr,
           reference: newData.reference,
         },
@@ -484,18 +648,32 @@ export default function MuqtadisPage() {
         };
       });
 
-      queryClient.setQueryData(queryKeys.muqtadiPayments(newData.muqtadiId), (old: MuqtadiDetails['payments'] | undefined) => {
-        const current = old ?? [];
-        if (current.some((entry) => entry.id === tempId)) return current;
-        return [optimisticEntry, ...current];
-      });
+      queryClient.setQueryData(
+        queryKeys.muqtadiPayments(newData.muqtadiId),
+        (old: MuqtadiDetails["payments"] | undefined) => {
+          const current = old ?? [];
+          if (current.some((entry) => entry.id === tempId)) return current;
+          return [optimisticEntry, ...current];
+        },
+      );
 
-      return { tempId, previousDetail, previousPayments, muqtadiId: newData.muqtadiId };
+      return {
+        tempId,
+        previousDetail,
+        previousPayments,
+        muqtadiId: newData.muqtadiId,
+      };
     },
     onError: (_error, _newData, context) => {
       if (!context?.muqtadiId) return;
-      queryClient.setQueryData(queryKeys.muqtadiDetail(context.muqtadiId), context.previousDetail);
-      queryClient.setQueryData(queryKeys.muqtadiPayments(context.muqtadiId), context.previousPayments ?? []);
+      queryClient.setQueryData(
+        queryKeys.muqtadiDetail(context.muqtadiId),
+        context.previousDetail,
+      );
+      queryClient.setQueryData(
+        queryKeys.muqtadiPayments(context.muqtadiId),
+        context.previousPayments ?? [],
+      );
     },
     onSuccess: (_data, _newData, context) => {
       if (!context?.muqtadiId || !context?.tempId) return;
@@ -503,22 +681,27 @@ export default function MuqtadisPage() {
         if (!old) return old;
         return {
           ...old,
-          payments: (old.payments ?? []).filter((entry) => entry.id !== context.tempId),
+          payments: (old.payments ?? []).filter(
+            (entry) => entry.id !== context.tempId,
+          ),
         };
       });
-      queryClient.setQueryData(queryKeys.muqtadiPayments(context.muqtadiId), (old: MuqtadiDetails['payments'] | undefined) =>
-        (old ?? []).filter((entry) => entry.id !== context.tempId));
+      queryClient.setQueryData(
+        queryKeys.muqtadiPayments(context.muqtadiId),
+        (old: MuqtadiDetails["payments"] | undefined) =>
+          (old ?? []).filter((entry) => entry.id !== context.tempId),
+      );
     },
     onSettled: async (_data, _error, variables) => {
       await Promise.all([
         invalidateDetailQueries(variables.muqtadiId),
         debugInvalidateByFilters(queryClient, {
           predicate: ({ queryKey }) => {
-            const root = String(queryKey?.[0] ?? '');
+            const root = String(queryKey?.[0] ?? "");
             return (
-              root === queryKeys.fundsRoot[0]
-              || root === queryKeys.dashboardOverview(mosqueId)[0]
-              || root === queryKeys.muqtadiStats[0]
+              root === queryKeys.fundsRoot[0] ||
+              root === queryKeys.dashboardOverview(mosqueId)[0] ||
+              root === queryKeys.muqtadiStats[0]
             );
           },
         }),
@@ -542,10 +725,17 @@ export default function MuqtadisPage() {
   });
 
   const isDeletedMuqtadi = useCallback((item: Muqtadi) => {
-    return Boolean((item as Muqtadi & { isDeleted?: boolean }).isDeleted || item.isDisabled || item.status === 'DISABLED');
+    return Boolean(
+      (item as Muqtadi & { isDeleted?: boolean }).isDeleted ||
+      item.isDisabled ||
+      item.status === "DISABLED",
+    );
   }, []);
 
-  const activeItems = useMemo(() => filteredItems.filter((item) => !isDeletedMuqtadi(item)), [filteredItems, isDeletedMuqtadi]);
+  const activeItems = useMemo(
+    () => filteredItems.filter((item) => !isDeletedMuqtadi(item)),
+    [filteredItems, isDeletedMuqtadi],
+  );
 
   const fetchTrashItems = useCallback(async (page: number) => {
     setIsTrashLoading(true);
@@ -554,19 +744,19 @@ export default function MuqtadisPage() {
       setTrashItems(result.data);
       setTrashTotalPages(Math.max(result.totalPages || 1, 1));
     } catch (error) {
-      toast.error(getErrorMessage(error, 'Failed to load deleted households'));
+      toast.error(getErrorMessage(error, "Failed to load deleted households"));
     } finally {
       setIsTrashLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    if (!canManageMembers || activeTab !== 'trash') return;
+    if (!canManageMembers || activeTab !== "trash") return;
     void fetchTrashItems(trashPage);
   }, [activeTab, canManageMembers, fetchTrashItems, trashPage]);
 
   useEffect(() => {
-    if (activeTab === 'trash') {
+    if (activeTab === "trash") {
       setTrashPage(1);
     }
   }, [activeTab]);
@@ -577,56 +767,81 @@ export default function MuqtadisPage() {
 
   const openEdit = useCallback((item: Muqtadi) => {
     const memberNames = Array.isArray(item.memberNames)
-      ? item.memberNames.map((name) => String(name ?? '').trim()).filter(Boolean)
+      ? item.memberNames
+          .map((name) => String(name ?? "").trim())
+          .filter(Boolean)
       : [];
-    const resolvedHouseholdMembers = item.householdMembers ?? Math.max(memberNames.length, 1);
-    const dependentsFromMemberNames = memberNames.length > 0
-      ? memberNames.slice(1)
-      : resizeDependents(String(resolvedHouseholdMembers), []);
+    const resolvedHouseholdMembers =
+      item.householdMembers ?? Math.max(memberNames.length, 1);
+    const dependentsFromMemberNames =
+      memberNames.length > 0
+        ? memberNames.slice(1)
+        : resizeDependents(String(resolvedHouseholdMembers), []);
 
     setSelectedMuqtadi(item);
     setForm({
       name: item.name,
       fatherName: item.fatherName,
       householdMembers: String(resolvedHouseholdMembers),
-      dependents: resizeDependents(String(resolvedHouseholdMembers), dependentsFromMemberNames),
-      whatsappNumber: item.whatsappNumber || '',
-      notes: item.notes || '',
+      dependents: resizeDependents(
+        String(resolvedHouseholdMembers),
+        dependentsFromMemberNames,
+      ),
+      whatsappNumber: item.whatsappNumber || "",
+      notes: item.notes || "",
+      previousDue: String(item.previousDue ?? 0),
     });
     setIsEditOpen(true);
   }, []);
 
-  const openPayment = useCallback((item: Muqtadi) => {
-    setSelectedMuqtadi(item);
-    setPaymentMode('new');
-    setEditingPaymentId(null);
-    setSelectedCycleId(cycles[0]?.id || '');
-    setPaymentAmount('');
-    setPaymentMethod('CASH');
-    setPaymentUtr('');
-    setPaymentReference('');
-    setPaymentNotes('');
-    setIsPaymentOpen(true);
-  }, [cycles]);
+  const openPayment = useCallback(
+    (item: Muqtadi) => {
+      // if (isCyclePaused) {
+      //   toast.error("Cycle is paused. Payments are disabled.");
+      //   return;
+      // }
+      setSelectedMuqtadi(item);
+      setPaymentMode("new");
+      setEditingPaymentId(null);
+      setSelectedCycleId(activeCycle?.id || "");
+      setPaymentAmount("");
+      setPaymentMethod("CASH");
+      setPaymentUtr("");
+      setPaymentReference("");
+      setPaymentNotes("");
+      setIsPaymentOpen(true);
+    },
+    [activeCycle],
+  );
 
-  const openPaymentDetails = useCallback((item: Muqtadi) => {
-    const cached = queryClient.getQueryData<MuqtadiDetails>(queryKeys.muqtadiDetail(item.id));
-    setSelectedMuqtadi(item);
-    setSelectedDetails(cached ?? buildPreviewDetails(item));
-    setSelectedPaymentDetailId(null);
-    setPaymentDetailImageFailed(false);
-    setIsDrawerOpen(true);
-  }, [buildPreviewDetails, queryClient]);
+  const openPaymentDetails = useCallback(
+    (item: Muqtadi) => {
+      const cached = queryClient.getQueryData<MuqtadiDetails>(
+        queryKeys.muqtadiDetail(item.id),
+      );
+      setSelectedMuqtadi(item);
+      setSelectedDetails(cached ?? buildPreviewDetails(item));
+      setSelectedPaymentDetailId(null);
+      setPaymentDetailImageFailed(false);
+      setIsDrawerOpen(true);
+    },
+    [buildPreviewDetails, queryClient],
+  );
 
-  const openPaymentAdjustment = (item: Muqtadi, payment: MuqtadiDetails['payments'][number]) => {
+  const openPaymentAdjustment = (
+    item: Muqtadi,
+    payment: MuqtadiDetails["payments"][number],
+  ) => {
     setSelectedMuqtadi(item);
-    setPaymentMode('adjustment');
+    setPaymentMode("adjustment");
     setEditingPaymentId(payment.id);
-    setSelectedCycleId(String(payment.details?.cycleId || ''));
-    setPaymentAmount(String(Number(payment.details?.amount || 0) || ''));
-    setPaymentMethod((String(payment.details?.method || 'CASH') as 'CASH' | 'UPI' | 'BANK'));
-    setPaymentUtr(String(payment.details?.utr || ''));
-    setPaymentReference(String(payment.details?.reference || ''));
+    setSelectedCycleId(String(payment.details?.cycleId || ""));
+    setPaymentAmount(String(Number(payment.details?.amount || 0) || ""));
+    setPaymentMethod(
+      String(payment.details?.method || "CASH") as "CASH" | "UPI" | "BANK",
+    );
+    setPaymentUtr(String(payment.details?.utr || ""));
+    setPaymentReference(String(payment.details?.reference || ""));
     setPaymentNotes(`Adjustment for transaction ${payment.id}`);
     setIsPaymentOpen(true);
   };
@@ -635,22 +850,32 @@ export default function MuqtadisPage() {
     if (!value) return;
     try {
       await navigator.clipboard.writeText(value);
-      toast.success('UTR copied');
+      toast.success("UTR copied");
     } catch {
-      toast.error('Failed to copy UTR');
+      toast.error("Failed to copy UTR");
     }
   };
 
   const handleAddMuqtadi = async () => {
     const householdMembers = parseStrictIntegerInput(form.householdMembers);
-    if (!form.name.trim() || !form.fatherName.trim() || householdMembers === null || householdMembers < 1) {
-      toast.error('Name, father name, and valid household members are required');
+    if (
+      !form.name.trim() ||
+      !form.fatherName.trim() ||
+      householdMembers === null ||
+      householdMembers < 1
+    ) {
+      toast.error(
+        "Name, father name, and valid household members are required",
+      );
       return;
     }
 
-    const dependents = resizeDependents(form.householdMembers, form.dependents).map((name) => name.trim());
+    const dependents = resizeDependents(
+      form.householdMembers,
+      form.dependents,
+    ).map((name) => name.trim());
     if (dependents.some((name) => !name)) {
-      toast.error('All dependents names are required');
+      toast.error("All dependents names are required");
       return;
     }
 
@@ -667,19 +892,21 @@ export default function MuqtadisPage() {
           whatsappNumber: form.whatsappNumber.trim() || undefined,
           phone: form.whatsappNumber.trim() || undefined,
           notes: form.notes.trim() || undefined,
+          previousDue: Number(form.previousDue || 0),
         },
       });
-      toast.success('Household added');
+      toast.success("Household added");
       setIsAddOpen(false);
       setForm(EMPTY_FORM);
     } catch (error) {
-      const message = getErrorMessage(error, 'Failed to add household');
+      const message = getErrorMessage(error, "Failed to add household");
       const normalized = message.toLowerCase();
       if (
-        normalized.includes('muqtadi already exists')
-        || (normalized.includes('unique constraint') && normalized.includes('phone'))
+        normalized.includes("muqtadi already exists") ||
+        (normalized.includes("unique constraint") &&
+          normalized.includes("phone"))
       ) {
-        toast.error('Muqtadi with this phone already exists');
+        toast.error("Muqtadi with this phone already exists");
       } else {
         toast.error(message);
       }
@@ -692,14 +919,24 @@ export default function MuqtadisPage() {
     if (!selectedMuqtadi) return;
 
     const householdMembers = parseStrictIntegerInput(form.householdMembers);
-    if (!form.name.trim() || !form.fatherName.trim() || householdMembers === null || householdMembers < 1) {
-      toast.error('Name, father name, and valid household members are required');
+    if (
+      !form.name.trim() ||
+      !form.fatherName.trim() ||
+      householdMembers === null ||
+      householdMembers < 1
+    ) {
+      toast.error(
+        "Name, father name, and valid household members are required",
+      );
       return;
     }
 
-    const dependents = resizeDependents(form.householdMembers, form.dependents).map((name) => name.trim());
+    const dependents = resizeDependents(
+      form.householdMembers,
+      form.dependents,
+    ).map((name) => name.trim());
     if (dependents.some((name) => !name)) {
-      toast.error('All dependents names are required');
+      toast.error("All dependents names are required");
       return;
     }
 
@@ -714,13 +951,13 @@ export default function MuqtadisPage() {
         phone: form.whatsappNumber.trim() || undefined,
         notes: form.notes.trim() || undefined,
       });
-      toast.success('Household updated');
+      toast.success("Household updated");
       setIsEditOpen(false);
       await actions.fetchItems();
       await invalidateDetailQueries(selectedMuqtadi.id);
       await invalidateMuqtadiMutationQueries(queryClient, mosqueId);
     } catch (error) {
-      toast.error(getErrorMessage(error, 'Failed to update household'));
+      toast.error(getErrorMessage(error, "Failed to update household"));
     } finally {
       setSubmitting(false);
     }
@@ -731,18 +968,22 @@ export default function MuqtadisPage() {
 
     const amount = parseStrictAmountInput(paymentAmount);
     if (!selectedCycleId || amount === null || amount <= 0) {
-      toast.error('Month and valid amount are required');
+      toast.error("Month and valid amount are required");
       return;
     }
 
-    if (!paymentUtr.trim()) {
-      toast.error('Provide UTR or payment screenshot');
+    // if (!paymentUtr.trim()) {
+    //   toast.error("Provide UTR or payment screenshot");
+    //   return;
+    // }
+    if (paymentMethod !== "CASH" && !paymentUtr.trim()) {
+      toast.error("UTR required for UPI/Bank");
       return;
     }
 
     setSubmitting(true);
     try {
-      if (paymentMode === 'adjustment' && editingPaymentId) {
+      if (paymentMode === "adjustment" && editingPaymentId) {
         await muqtadisService.updatePayment(editingPaymentId, {
           muqtadiId: selectedMuqtadi.id,
           cycleId: selectedCycleId,
@@ -752,20 +993,20 @@ export default function MuqtadisPage() {
           reference: paymentReference.trim() || undefined,
         });
         await invalidateMoneyQueries(queryClient, mosqueId);
-        toast.success('Payment adjustment recorded');
+        toast.success("Payment adjustment recorded");
         setIsPaymentOpen(false);
         setEditingPaymentId(null);
         patchDetailCache(selectedMuqtadi.id, (old) => {
           if (!old) return old;
           const optimisticEntry = {
             id: editingPaymentId,
-            action: 'PAYMENT_ADJUSTED',
+            action: "PAYMENT_ADJUSTED",
             createdAt: new Date().toISOString(),
             details: {
               amount,
               method: paymentMethod,
               cycleId: selectedCycleId,
-              status: 'PENDING',
+              status: "PENDING",
               utr: paymentUtr.trim() || undefined,
               reference: paymentReference.trim() || undefined,
             },
@@ -775,22 +1016,25 @@ export default function MuqtadisPage() {
             payments: [optimisticEntry, ...(old.payments ?? [])],
           };
         });
-        queryClient.setQueryData(queryKeys.muqtadiPayments(selectedMuqtadi.id), (old: MuqtadiDetails['payments'] | undefined) => {
-          const optimisticEntry = {
-            id: editingPaymentId,
-            action: 'PAYMENT_ADJUSTED',
-            createdAt: new Date().toISOString(),
-            details: {
-              amount,
-              method: paymentMethod,
-              cycleId: selectedCycleId,
-              status: 'PENDING',
-              utr: paymentUtr.trim() || undefined,
-              reference: paymentReference.trim() || undefined,
-            },
-          };
-          return [optimisticEntry, ...(old ?? [])];
-        });
+        queryClient.setQueryData(
+          queryKeys.muqtadiPayments(selectedMuqtadi.id),
+          (old: MuqtadiDetails["payments"] | undefined) => {
+            const optimisticEntry = {
+              id: editingPaymentId,
+              action: "PAYMENT_ADJUSTED",
+              createdAt: new Date().toISOString(),
+              details: {
+                amount,
+                method: paymentMethod,
+                cycleId: selectedCycleId,
+                status: "PENDING",
+                utr: paymentUtr.trim() || undefined,
+                reference: paymentReference.trim() || undefined,
+              },
+            };
+            return [optimisticEntry, ...(old ?? [])];
+          },
+        );
         await actions.fetchItems();
         await fetchImamFundSummary();
         await invalidateDetailQueries(selectedMuqtadi.id);
@@ -804,12 +1048,12 @@ export default function MuqtadisPage() {
           reference: paymentReference.trim() || undefined,
           notes: paymentNotes.trim() || undefined,
         });
-        toast.success('Payment recorded');
+        toast.success("Payment recorded");
         setIsPaymentOpen(false);
         setEditingPaymentId(null);
       }
     } catch (error) {
-      toast.error(getErrorMessage(error, 'Failed to record payment'));
+      toast.error(getErrorMessage(error, "Failed to record payment"));
     } finally {
       setSubmitting(false);
     }
@@ -819,16 +1063,22 @@ export default function MuqtadisPage() {
     if (!selectedDetails) return;
     const trimmed = name.trim();
     if (!trimmed) {
-      toast.error('Dependent name is required');
+      toast.error("Dependent name is required");
       return;
     }
 
-    const confirmed = window.confirm('Are you sure? This will update current dues for this household.');
+    const confirmed = window.confirm(
+      "Are you sure? This will update current dues for this household.",
+    );
     if (!confirmed) return;
 
-    const currentMembers = Array.isArray(selectedDetails.memberNames) && selectedDetails.memberNames.length > 0
-      ? selectedDetails.memberNames.filter((entry) => Boolean(String(entry || '').trim()))
-      : [selectedDetails.name].filter(Boolean);
+    const currentMembers =
+      Array.isArray(selectedDetails.memberNames) &&
+      selectedDetails.memberNames.length > 0
+        ? selectedDetails.memberNames.filter((entry) =>
+            Boolean(String(entry || "").trim()),
+          )
+        : [selectedDetails.name].filter(Boolean);
     const nextMembers = [...currentMembers, trimmed];
 
     try {
@@ -837,7 +1087,7 @@ export default function MuqtadisPage() {
         householdMembers: nextMembers.length,
         memberNames: nextMembers,
       });
-      toast.success('Dependent added');
+      toast.success("Dependent added");
     } catch {
       // Error toast handled in mutation onError.
     }
@@ -846,22 +1096,30 @@ export default function MuqtadisPage() {
   const handleRemoveDependent = async (index: number) => {
     if (!selectedDetails) return;
 
-    const currentMembers = Array.isArray(selectedDetails.memberNames) && selectedDetails.memberNames.length > 0
-      ? selectedDetails.memberNames.filter((entry) => Boolean(String(entry || '').trim()))
-      : [selectedDetails.name].filter(Boolean);
+    const currentMembers =
+      Array.isArray(selectedDetails.memberNames) &&
+      selectedDetails.memberNames.length > 0
+        ? selectedDetails.memberNames.filter((entry) =>
+            Boolean(String(entry || "").trim()),
+          )
+        : [selectedDetails.name].filter(Boolean);
 
     if (currentMembers.length <= 1) {
-      toast.error('At least one household member is required');
+      toast.error("At least one household member is required");
       return;
     }
 
-    const nextMembers = currentMembers.filter((_, memberIndex) => memberIndex !== index);
+    const nextMembers = currentMembers.filter(
+      (_, memberIndex) => memberIndex !== index,
+    );
     if (nextMembers.length === 0) {
-      toast.error('At least one household member is required');
+      toast.error("At least one household member is required");
       return;
     }
 
-    const confirmed = window.confirm('Are you sure? This will update current dues for this household.');
+    const confirmed = window.confirm(
+      "Are you sure? This will update current dues for this household.",
+    );
     if (!confirmed) return;
 
     try {
@@ -870,7 +1128,7 @@ export default function MuqtadisPage() {
         householdMembers: nextMembers.length,
         memberNames: nextMembers,
       });
-      toast.success('Dependent removed');
+      toast.success("Dependent removed");
     } catch {
       // Error toast handled in mutation onError.
     }
@@ -881,16 +1139,20 @@ export default function MuqtadisPage() {
 
     setIsIncludingInCycle(true);
     try {
-      const result = await muqtadisService.includeInCurrentCycle(selectedDetails.id);
+      const result = await muqtadisService.includeInCurrentCycle(
+        selectedDetails.id,
+      );
       if (result.alreadyIncluded) {
-        toast.success('Household is already included in current cycle');
+        toast.success("Household is already included in current cycle");
       } else {
-        toast.success('Household included in current cycle');
+        toast.success("Household included in current cycle");
       }
       await invalidateDetailQueries(selectedDetails.id);
       await invalidateMuqtadiMutationQueries(queryClient, mosqueId);
     } catch (error) {
-      toast.error(getErrorMessage(error, 'Failed to include household in current cycle'));
+      toast.error(
+        getErrorMessage(error, "Failed to include household in current cycle"),
+      );
     } finally {
       setIsIncludingInCycle(false);
     }
@@ -901,16 +1163,20 @@ export default function MuqtadisPage() {
 
     setIsRemovingFromCycle(true);
     try {
-      const result = await muqtadisService.removeFromCurrentCycle(selectedDetails.id);
+      const result = await muqtadisService.removeFromCurrentCycle(
+        selectedDetails.id,
+      );
       if (result.notFound) {
-        toast.success('Household is not included in current cycle');
+        toast.success("Household is not included in current cycle");
       } else if (result.removed) {
-        toast.success('Household removed from current cycle');
+        toast.success("Household removed from current cycle");
       }
       await invalidateDetailQueries(selectedDetails.id);
       await invalidateMuqtadiMutationQueries(queryClient, mosqueId);
     } catch (error) {
-      toast.error(getErrorMessage(error, 'Failed to remove household from current cycle'));
+      toast.error(
+        getErrorMessage(error, "Failed to remove household from current cycle"),
+      );
     } finally {
       setIsRemovingFromCycle(false);
     }
@@ -918,25 +1184,29 @@ export default function MuqtadisPage() {
 
   const handleGenerateLoginLink = async () => {
     if (!selectedDetails) return;
-    const accountState = selectedDetails.accountState || 'OFFLINE';
-    if (accountState === 'ACTIVE') {
-      toast.error('Active accounts cannot generate login links. Use reset password instead.');
+    const accountState = selectedDetails.accountState || "OFFLINE";
+    if (accountState === "ACTIVE") {
+      toast.error(
+        "Active accounts cannot generate login links. Use reset password instead.",
+      );
       return;
     }
 
     const phone = selectedDetails.phone || selectedDetails.whatsappNumber;
     if (!phone || !isValidIndianPhone(phone)) {
-      toast.error('Valid phone is required to generate login link');
+      toast.error("Valid phone is required to generate login link");
       return;
     }
 
     const normalizedPhone = normalizeIndianPhone(phone);
     if (!normalizedPhone) {
-      toast.error('Valid phone is required to generate login link');
+      toast.error("Valid phone is required to generate login link");
       return;
     }
 
-    const confirmed = window.confirm(`Generate secure login link for ${normalizedPhone}?`);
+    const confirmed = window.confirm(
+      `Generate secure login link for ${normalizedPhone}?`,
+    );
     if (!confirmed) return;
 
     setIsGeneratingLoginLink(true);
@@ -951,14 +1221,14 @@ export default function MuqtadisPage() {
           link: result.resetLink,
           expiresInMinutes: result.expiresInMinutes,
           createdAt: new Date().toISOString(),
-          mode: 'login',
+          mode: "login",
         },
       }));
-      toast.success('Login link generated');
+      toast.success("Login link generated");
       await actions.fetchItems();
       await invalidateDetailQueries(selectedDetails.id);
     } catch (error) {
-      toast.error(getErrorMessage(error, 'Failed to generate login link'));
+      toast.error(getErrorMessage(error, "Failed to generate login link"));
     } finally {
       setIsGeneratingLoginLink(false);
     }
@@ -967,29 +1237,33 @@ export default function MuqtadisPage() {
   const handleSendResetLink = async () => {
     if (!selectedDetails) return;
 
-    const accountState = selectedDetails.accountState || 'OFFLINE';
-    if (accountState !== 'ACTIVE') {
-      toast.error('Reset password is only available for active accounts');
+    const accountState = selectedDetails.accountState || "OFFLINE";
+    if (accountState !== "ACTIVE") {
+      toast.error("Reset password is only available for active accounts");
       return;
     }
 
     setIsSendingResetLink(true);
     try {
-      const response = await muqtadisService.generateResetPasswordLink(selectedDetails.id);
+      const response = await muqtadisService.generateResetPasswordLink(
+        selectedDetails.id,
+      );
       setAuthLinksByMuqtadiId((prev) => ({
         ...prev,
         [selectedDetails.id]: {
           link: response.resetLink,
           expiresInMinutes: response.expiresInMinutes,
           createdAt: new Date().toISOString(),
-          mode: 'reset',
+          mode: "reset",
         },
       }));
-      toast.success('Admin reset link generated');
+      toast.success("Admin reset link generated");
       await actions.fetchItems();
       await invalidateDetailQueries(selectedDetails.id);
     } catch (error) {
-      toast.error(getErrorMessage(error, 'Failed to generate admin reset link'));
+      toast.error(
+        getErrorMessage(error, "Failed to generate admin reset link"),
+      );
     } finally {
       setIsSendingResetLink(false);
     }
@@ -1001,21 +1275,29 @@ export default function MuqtadisPage() {
     if (!value) return;
     try {
       await navigator.clipboard.writeText(value);
-      toast.success('Link copied');
+      toast.success("Link copied");
     } catch {
-      toast.error('Failed to copy link');
+      toast.error("Failed to copy link");
     }
   };
 
-  const handleVerifyPendingHousehold = async () => {
+  const handleVerifyPendingHousehold = async (previousDueValue = "0") => {
     if (!selectedMuqtadi || loading.pendingVerificationId) return;
 
     try {
-      await actions.verifyMuqtadi(selectedMuqtadi);
+      await actions.verifyMuqtadi(
+        selectedMuqtadi,
+        Number(
+          previousDueValue ??
+            selectedDetails?.previousDue ??
+            selectedMuqtadi.previousDue ??
+            0,
+        ),
+      );
       await invalidateDetailQueries(selectedMuqtadi.id);
       await invalidateMuqtadiMutationQueries(queryClient, mosqueId);
     } catch (error) {
-      toast.error(getErrorMessage(error, 'Failed to verify household'));
+      toast.error(getErrorMessage(error, "Failed to verify household"));
     }
   };
 
@@ -1027,7 +1309,9 @@ export default function MuqtadisPage() {
       await invalidateDetailQueries(selectedMuqtadi.id);
       await invalidateMuqtadiMutationQueries(queryClient, mosqueId);
     } catch (error) {
-      toast.error(getErrorMessage(error, 'Failed to update household verification'));
+      toast.error(
+        getErrorMessage(error, "Failed to update household verification"),
+      );
     }
   };
 
@@ -1037,13 +1321,13 @@ export default function MuqtadisPage() {
     setSubmitting(true);
     try {
       await muqtadisService.verifyPayment(transactionId);
-      toast.success('Payment marked as verified');
+      toast.success("Payment marked as verified");
       await invalidateMoneyQueries(queryClient, mosqueId);
       await actions.fetchItems();
       await fetchImamFundSummary();
       await invalidateDetailQueries(selectedMuqtadi.id);
     } catch (error) {
-      toast.error(getErrorMessage(error, 'Failed to verify payment'));
+      toast.error(getErrorMessage(error, "Failed to verify payment"));
     } finally {
       setSubmitting(false);
     }
@@ -1054,14 +1338,16 @@ export default function MuqtadisPage() {
 
     setSubmitting(true);
     try {
-      await muqtadisService.updatePayment(transactionId, { status: 'REJECTED' });
-      toast.success('Payment marked as rejected');
+      await muqtadisService.updatePayment(transactionId, {
+        status: "REJECTED",
+      });
+      toast.success("Payment marked as rejected");
       await invalidateMoneyQueries(queryClient, mosqueId);
       await actions.fetchItems();
       await fetchImamFundSummary();
       await invalidateDetailQueries(selectedMuqtadi.id);
     } catch (error) {
-      toast.error(getErrorMessage(error, 'Failed to reject payment'));
+      toast.error(getErrorMessage(error, "Failed to reject payment"));
     } finally {
       setSubmitting(false);
       setPendingPaymentRejectId(null);
@@ -1074,13 +1360,13 @@ export default function MuqtadisPage() {
     setSubmitting(true);
     try {
       await muqtadisService.deletePayment(transactionId);
-      toast.success('Payment deleted');
+      toast.success("Payment deleted");
       await invalidateMoneyQueries(queryClient, mosqueId);
       await actions.fetchItems();
       await fetchImamFundSummary();
       await invalidateDetailQueries(selectedMuqtadi.id);
     } catch (error) {
-      toast.error(getErrorMessage(error, 'Failed to delete payment'));
+      toast.error(getErrorMessage(error, "Failed to delete payment"));
     } finally {
       setSubmitting(false);
       setPendingPaymentDeleteId(null);
@@ -1090,20 +1376,27 @@ export default function MuqtadisPage() {
   const handleCreateInviteLink = async () => {
     const parsedLimit = parseStrictIntegerInput(inviteLimit);
     if (parsedLimit === null || parsedLimit < 1) {
-      toast.error('Invite limit must be a whole number greater than or equal to 1');
+      toast.error(
+        "Invite limit must be a whole number greater than or equal to 1",
+      );
       return;
     }
 
     setIsInviteLinkLoading(true);
     try {
-      const response = await muqtadisService.createInvite({ maxUses: parsedLimit });
+      const response = await muqtadisService.createInvite({
+        maxUses: parsedLimit,
+      });
       setInviteLink(response.inviteUrl);
-      setInviteUsageMeta({ maxUses: response.maxUses, usedCount: response.usedCount });
+      setInviteUsageMeta({
+        maxUses: response.maxUses,
+        usedCount: response.usedCount,
+      });
       setIsInviteLimitDialogOpen(false);
       setIsInviteLinkDialogOpen(true);
-      toast.success('Invite link generated');
+      toast.success("Invite link generated");
     } catch (error) {
-      toast.error(getErrorMessage(error, 'Failed to generate invite link'));
+      toast.error(getErrorMessage(error, "Failed to generate invite link"));
     } finally {
       setIsInviteLinkLoading(false);
     }
@@ -1113,155 +1406,213 @@ export default function MuqtadisPage() {
     if (!inviteLink) return;
     try {
       await navigator.clipboard.writeText(inviteLink);
-      toast.success('Invite link copied');
+      toast.success("Invite link copied");
     } catch {
-      toast.error('Failed to copy invite link');
+      toast.error("Failed to copy invite link");
     }
   };
 
-  const toggleStatus = useCallback(async (item: Muqtadi, status: MuqtadiStatus) => {
-    if (actionLoadingId === item.id) return;
-    setActionLoadingId(item.id);
-    try {
-      if (status === 'DISABLED') {
-        await muqtadisService.disable(item.id);
-        toast.success('Household disabled');
-        setItems((prev) =>
-          prev.map((entry) =>
-            entry.id === item.id
-              ? {
-                  ...entry,
-                  isDisabled: true,
-                  status: 'DISABLED',
-                }
-              : entry,
-          ),
-        );
-        if (activeTab === 'trash') {
-          await fetchTrashItems(trashPage);
-        }
-      } else {
-        await muqtadisService.enable(item.id);
-        toast.success('Household restored');
-        const restoredItem = {
-          ...item,
-          isDisabled: false,
-          status: 'ACTIVE' as const,
-        };
-        if (item.isVerified) {
+  const toggleStatus = useCallback(
+    async (item: Muqtadi, status: MuqtadiStatus) => {
+      if (actionLoadingId === item.id) return;
+      setActionLoadingId(item.id);
+      try {
+        if (status === "DISABLED") {
+          await muqtadisService.disable(item.id);
+          toast.success("Household disabled");
           setItems((prev) =>
-            prev.some((entry) => entry.id === item.id)
-              ? prev.map((entry) =>
-                  entry.id === item.id
-                    ? {
-                        ...entry,
-                        isDisabled: false,
-                        status: 'ACTIVE',
-                      }
-                    : entry,
-                )
-              : [restoredItem, ...prev],
+            prev.map((entry) =>
+              entry.id === item.id
+                ? {
+                    ...entry,
+                    isDisabled: true,
+                    status: "DISABLED",
+                  }
+                : entry,
+            ),
           );
+          if (activeTab === "trash") {
+            await fetchTrashItems(trashPage);
+          }
+        } else {
+          await muqtadisService.enable(item.id);
+          toast.success("Household restored");
+          const restoredItem = {
+            ...item,
+            isDisabled: false,
+            status: "ACTIVE" as const,
+          };
+          if (item.isVerified) {
+            setItems((prev) =>
+              prev.some((entry) => entry.id === item.id)
+                ? prev.map((entry) =>
+                    entry.id === item.id
+                      ? {
+                          ...entry,
+                          isDisabled: false,
+                          status: "ACTIVE",
+                        }
+                      : entry,
+                  )
+                : [restoredItem, ...prev],
+            );
+          }
+          setTrashItems((prev) => prev.filter((entry) => entry.id !== item.id));
+          await actions.fetchItems();
+          await invalidateMuqtadiMutationQueries(queryClient, mosqueId);
         }
-        setTrashItems((prev) => prev.filter((entry) => entry.id !== item.id));
-        await actions.fetchItems();
-        await invalidateMuqtadiMutationQueries(queryClient, mosqueId);
+      } catch (error) {
+        toast.error(getErrorMessage(error, "Failed to update status"));
+      } finally {
+        setActionLoadingId(null);
       }
-    } catch (error) {
-      toast.error(getErrorMessage(error, 'Failed to update status'));
-    } finally {
-      setActionLoadingId(null);
-    }
-  }, [
-    actionLoadingId,
-    actions,
-    activeTab,
-    fetchTrashItems,
-    mosqueId,
-    queryClient,
-    setItems,
-    trashPage,
-  ]);
+    },
+    [
+      actionLoadingId,
+      actions,
+      activeTab,
+      fetchTrashItems,
+      mosqueId,
+      queryClient,
+      setItems,
+      trashPage,
+    ],
+  );
 
   const sortedCycles = useMemo(() => {
     return [...cycles].sort((a, b) => {
-      const left = new Date(a.createdAt).getTime();
-      const right = new Date(b.createdAt).getTime();
-      return filters.sortOrder === 'newest' ? right - left : left - right;
+      if (a.year !== b.year) {
+        return filters.sortOrder === "newest"
+          ? b.year - a.year
+          : a.year - b.year;
+      }
+
+      return filters.sortOrder === "newest"
+        ? b.month - a.month
+        : a.month - b.month;
     });
   }, [cycles, filters.sortOrder]);
 
   const selectedPaymentDetail = useMemo(
-    () => selectedDetails?.payments.find((entry) => entry.id === selectedPaymentDetailId) ?? null,
+    () =>
+      selectedDetails?.payments.find(
+        (entry) => entry.id === selectedPaymentDetailId,
+      ) ?? null,
     [selectedDetails?.payments, selectedPaymentDetailId],
   );
 
   const primaryFilter = useMemo(() => {
-    if (filters.statusFilter === 'disabled') return 'disabled';
-    if (filters.verificationFilter === 'verified') return 'verified';
-    if (filters.verificationFilter === 'pending') return 'pending';
-    return 'all';
+    if (filters.statusFilter === "disabled") return "disabled";
+    if (filters.verificationFilter === "verified") return "verified";
+    if (filters.verificationFilter === "pending") return "pending";
+    return "all";
   }, [filters.statusFilter, filters.verificationFilter]);
 
-  const applyPrimaryFilter = useCallback((value: 'all' | 'verified' | 'pending' | 'disabled') => {
-    if (value === 'disabled') {
-      setActiveTab('trash');
-      setFilters.setStatusFilter('active');
-      setFilters.setVerificationFilter('all');
-      return;
-    }
+  const applyPrimaryFilter = useCallback(
+    (value: "all" | "verified" | "pending" | "disabled") => {
+      if (value === "disabled") {
+        setActiveTab("trash");
+        setFilters.setStatusFilter("active");
+        setFilters.setVerificationFilter("all");
+        return;
+      }
 
-    if (activeTab === 'trash') {
-      setActiveTab('active');
-    }
+      if (activeTab === "trash") {
+        setActiveTab("active");
+      }
 
-    setFilters.setStatusFilter('active');
-    if (value === 'verified') {
-      setFilters.setVerificationFilter('verified');
-      return;
-    }
-    if (value === 'pending') {
-      setFilters.setVerificationFilter('pending');
-      return;
-    }
-    setFilters.setVerificationFilter('all');
-  }, [activeTab, setFilters]);
+      setFilters.setStatusFilter("active");
+      if (value === "verified") {
+        setFilters.setVerificationFilter("verified");
+        return;
+      }
+      if (value === "pending") {
+        setFilters.setVerificationFilter("pending");
+        return;
+      }
+      setFilters.setVerificationFilter("all");
+    },
+    [activeTab, setFilters],
+  );
 
   const clearAllMuqtadiFilters = useCallback(() => {
-    if (activeTab === 'trash') {
-      setActiveTab('active');
+    if (activeTab === "trash") {
+      setActiveTab("active");
     }
-    setFilters.setSearch('');
-    setFilters.setStatusFilter('active');
-    setFilters.setVerificationFilter('all');
-    setFilters.setAccountFilter('all');
-    setFilters.setCycleFilter('all');
-    setFilters.setPaymentFilter('all');
-    setFilters.setSortOrder('newest');
+    setFilters.setSearch("");
+    setFilters.setStatusFilter("active");
+    setFilters.setVerificationFilter("all");
+    setFilters.setAccountFilter("all");
+    setFilters.setCycleFilter("all");
+    setFilters.setPaymentFilter("all");
+    setFilters.setSortOrder("newest");
     setFilters.setPage(1);
   }, [activeTab, setFilters]);
 
   return (
     <div className="ds-section ds-stack">
-      <PageHeader title="Households" description="Manage imam salary households and dues">
+      <PageHeader
+        title="Households"
+        description="Manage imam salary households and dues"
+      >
         <div className="space-y-2">
           <div className="flex items-center gap-4">
             <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
               <DialogTrigger asChild>
-                <Button className=''>
+                <Button className="">
                   <Plus className="mr-2 h-4 w-4" />
                   Add
                 </Button>
               </DialogTrigger>
-              <DialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-lg">
+              {/* <DialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-lg"> */}
+              <DialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-lg max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle>Add Household</DialogTitle>
-                  <DialogDescription>Create an offline household profile.</DialogDescription>
+                  <DialogDescription>
+                    Create an offline household profile.
+                  </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-3">
-                  <div className="space-y-2"><Label>Name</Label><Input value={form.name} onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))} /></div>
-                  <div className="space-y-2"><Label>Father Name</Label><Input value={form.fatherName} onChange={(e) => setForm((prev) => ({ ...prev, fatherName: e.target.value }))} /></div>
-                  <div className="space-y-2"><Label>Household Members</Label><Input type="text" inputMode="numeric" pattern="^\d+$" value={form.householdMembers} onChange={(e) => setForm((prev) => ({ ...prev, householdMembers: e.target.value, dependents: resizeDependents(e.target.value, prev.dependents) }))} /></div>
+                  <div className="space-y-2">
+                    <Label>Name</Label>
+                    <Input
+                      value={form.name}
+                      onChange={(e) =>
+                        setForm((prev) => ({ ...prev, name: e.target.value }))
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Father Name</Label>
+                    <Input
+                      value={form.fatherName}
+                      onChange={(e) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          fatherName: e.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Household Members</Label>
+                    <Input
+                      type="text"
+                      inputMode="numeric"
+                      pattern="^\d+$"
+                      value={form.householdMembers}
+                      onChange={(e) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          householdMembers: e.target.value,
+                          dependents: resizeDependents(
+                            e.target.value,
+                            prev.dependents,
+                          ),
+                        }))
+                      }
+                    />
+                  </div>
                   {form.dependents.length > 0 ? (
                     <div className="space-y-2">
                       <Label>Dependents</Label>
@@ -1283,13 +1634,60 @@ export default function MuqtadisPage() {
                       </div>
                     </div>
                   ) : null}
-                  <div className="space-y-2"><Label>WhatsApp Number</Label><Input value={form.whatsappNumber} onChange={(e) => setForm((prev) => ({ ...prev, whatsappNumber: e.target.value }))} /></div>
-                  <div className="space-y-2"><Label>Notes</Label><Textarea rows={3} value={form.notes} onChange={(e) => setForm((prev) => ({ ...prev, notes: e.target.value }))} /></div>
+                  <div className="space-y-2">
+                    <Label>WhatsApp Number</Label>
+                    <Input
+                      value={form.whatsappNumber}
+                      onChange={(e) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          whatsappNumber: e.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Previous Due (₹)</Label>
+                    <Input
+                      type="text"
+                      inputMode="decimal"
+                      pattern="^\d+(?:\.\d{1,2})?$"
+                      value={form.previousDue}
+                      onChange={(e) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          previousDue: e.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Notes</Label>
+                    <Textarea
+                      rows={3}
+                      value={form.notes}
+                      onChange={(e) =>
+                        setForm((prev) => ({ ...prev, notes: e.target.value }))
+                      }
+                    />
+                  </div>
                 </div>
                 <DialogFooter>
-                  <Button className="w-full sm:w-auto" variant="outline" onClick={() => setIsAddOpen(false)}>Cancel</Button>
-                  <Button className="w-full sm:w-auto" onClick={handleAddMuqtadi} disabled={submitting}>
-                    {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  <Button
+                    className="w-full sm:w-auto"
+                    variant="outline"
+                    onClick={() => setIsAddOpen(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    className="w-full sm:w-auto"
+                    onClick={handleAddMuqtadi}
+                    disabled={submitting}
+                  >
+                    {submitting ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : null}
                     Save
                   </Button>
                 </DialogFooter>
@@ -1307,13 +1705,16 @@ export default function MuqtadisPage() {
             </Button>
           </div>
         </div>
-
       </PageHeader>
 
-      <MuqtadiStats stats={stats} imamFundSummary={imamFundSummary} isLoading={loading.isLoading} />
+      <MuqtadiStats
+        stats={stats}
+        imamFundSummary={imamFundSummary}
+        isLoading={loading.isLoading}
+      />
 
       <div className="space-y-4">
-        {activeTab === 'active' ? (
+        {activeTab === "active" ? (
           <MuqtadiFilters
             primaryFilter={primaryFilter}
             setPrimaryFilter={applyPrimaryFilter}
@@ -1334,7 +1735,10 @@ export default function MuqtadisPage() {
           />
         ) : null}
 
-        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'active' | 'trash')}>
+        <Tabs
+          value={activeTab}
+          onValueChange={(value) => setActiveTab(value as "active" | "trash")}
+        >
           <TabsList>
             <TabsTrigger value="active">Active</TabsTrigger>
             <TabsTrigger value="trash">Trash</TabsTrigger>
@@ -1380,15 +1784,19 @@ export default function MuqtadisPage() {
                   <CardContent className="flex items-center justify-between gap-3 pt-4">
                     <div>
                       <p className="text-sm font-medium">{item.name}</p>
-                      <p className="text-xs text-muted-foreground">{item.phone || item.whatsappNumber || item.email || '-'}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {item.phone || item.whatsappNumber || item.email || "-"}
+                      </p>
                     </div>
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => toggleStatus(item, 'ACTIVE')}
+                      onClick={() => toggleStatus(item, "ACTIVE")}
                       disabled={submitting || actionLoadingId === item.id}
                     >
-                      {actionLoadingId === item.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                      {actionLoadingId === item.id ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : null}
                       Restore
                     </Button>
                   </CardContent>
@@ -1400,7 +1808,7 @@ export default function MuqtadisPage() {
 
         <div className="flex items-center justify-between gap-3">
           <p className="text-xs text-muted-foreground">
-            {activeTab === 'active'
+            {activeTab === "active"
               ? `Page ${filters.page} of ${filters.totalPages || 1}`
               : `Page ${trashPage} of ${trashTotalPages || 1}`}
           </p>
@@ -1409,14 +1817,14 @@ export default function MuqtadisPage() {
               variant="outline"
               size="sm"
               onClick={() => {
-                if (activeTab === 'active') {
+                if (activeTab === "active") {
                   setFilters.setPage((current) => Math.max(current - 1, 1));
                   return;
                 }
                 setTrashPage((current) => Math.max(current - 1, 1));
               }}
               disabled={
-                activeTab === 'active'
+                activeTab === "active"
                   ? filters.page <= 1 || loading.isLoading
                   : trashPage <= 1 || isTrashLoading
               }
@@ -1427,15 +1835,20 @@ export default function MuqtadisPage() {
               variant="outline"
               size="sm"
               onClick={() => {
-                if (activeTab === 'active') {
-                  setFilters.setPage((current) => Math.min(current + 1, filters.totalPages || 1));
+                if (activeTab === "active") {
+                  setFilters.setPage((current) =>
+                    Math.min(current + 1, filters.totalPages || 1),
+                  );
                   return;
                 }
-                setTrashPage((current) => Math.min(current + 1, trashTotalPages || 1));
+                setTrashPage((current) =>
+                  Math.min(current + 1, trashTotalPages || 1),
+                );
               }}
               disabled={
-                activeTab === 'active'
-                  ? filters.page >= (filters.totalPages || 1) || loading.isLoading
+                activeTab === "active"
+                  ? filters.page >= (filters.totalPages || 1) ||
+                    loading.isLoading
                   : trashPage >= (trashTotalPages || 1) || isTrashLoading
               }
             >
@@ -1446,12 +1859,49 @@ export default function MuqtadisPage() {
       </div>
 
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-        <DialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-lg">
-          <DialogHeader><DialogTitle>Edit Household</DialogTitle></DialogHeader>
+        {/* <DialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-lg"> */}
+        <DialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit Household</DialogTitle>
+          </DialogHeader>
           <div className="space-y-3">
-            <div className="space-y-2"><Label>Name</Label><Input value={form.name} onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))} /></div>
-            <div className="space-y-2"><Label>Father Name</Label><Input value={form.fatherName} onChange={(e) => setForm((prev) => ({ ...prev, fatherName: e.target.value }))} /></div>
-            <div className="space-y-2"><Label>Household Members</Label><Input type="text" inputMode="numeric" pattern="^\d+$" value={form.householdMembers} onChange={(e) => setForm((prev) => ({ ...prev, householdMembers: e.target.value, dependents: resizeDependents(e.target.value, prev.dependents) }))} /></div>
+            <div className="space-y-2">
+              <Label>Name</Label>
+              <Input
+                value={form.name}
+                onChange={(e) =>
+                  setForm((prev) => ({ ...prev, name: e.target.value }))
+                }
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Father Name</Label>
+              <Input
+                value={form.fatherName}
+                onChange={(e) =>
+                  setForm((prev) => ({ ...prev, fatherName: e.target.value }))
+                }
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Household Members</Label>
+              <Input
+                type="text"
+                inputMode="numeric"
+                pattern="^\d+$"
+                value={form.householdMembers}
+                onChange={(e) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    householdMembers: e.target.value,
+                    dependents: resizeDependents(
+                      e.target.value,
+                      prev.dependents,
+                    ),
+                  }))
+                }
+              />
+            </div>
             {form.dependents.length > 0 ? (
               <div className="space-y-2">
                 <Label>Dependents</Label>
@@ -1473,57 +1923,165 @@ export default function MuqtadisPage() {
                 </div>
               </div>
             ) : null}
-            <div className="space-y-2"><Label>WhatsApp Number</Label><Input value={form.whatsappNumber} onChange={(e) => setForm((prev) => ({ ...prev, whatsappNumber: e.target.value }))} /></div>
-            <div className="space-y-2"><Label>Notes</Label><Textarea rows={3} value={form.notes} onChange={(e) => setForm((prev) => ({ ...prev, notes: e.target.value }))} /></div>
+            <div className="space-y-2">
+              <Label>WhatsApp Number</Label>
+              <Input
+                value={form.whatsappNumber}
+                onChange={(e) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    whatsappNumber: e.target.value,
+                  }))
+                }
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Notes</Label>
+              <Textarea
+                rows={3}
+                value={form.notes}
+                onChange={(e) =>
+                  setForm((prev) => ({ ...prev, notes: e.target.value }))
+                }
+              />
+            </div>
           </div>
           <DialogFooter>
-            <Button className="w-full sm:w-auto" variant="outline" onClick={() => setIsEditOpen(false)}>Cancel</Button>
-            <Button className="w-full sm:w-auto" onClick={handleUpdateMuqtadi} disabled={submitting}>{submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}Save</Button>
+            <Button
+              className="w-full sm:w-auto"
+              variant="outline"
+              onClick={() => setIsEditOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              className="w-full sm:w-auto"
+              onClick={handleUpdateMuqtadi}
+              disabled={submitting}
+            >
+              {submitting ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : null}
+              Save
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       <Dialog open={isPaymentOpen} onOpenChange={setIsPaymentOpen}>
-        <DialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-lg">
+        {/* <DialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-lg"> */}
+        <DialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{paymentMode === 'adjustment' ? 'Edit Payment (Adjustment)' : 'Record Payment'}</DialogTitle>
+            <DialogTitle>
+              {paymentMode === "adjustment"
+                ? "Edit Payment (Adjustment)"
+                : "Record Payment"}
+            </DialogTitle>
             <DialogDescription>
-              {paymentMode === 'adjustment'
-                ? 'This creates an adjustment transaction using existing backend payment APIs.'
-                : 'Record a manual verified payment for the selected month.'}
+              {paymentMode === "adjustment"
+                ? "This creates an adjustment transaction using existing backend payment APIs."
+                : "Record a manual verified payment for the selected month."}
             </DialogDescription>
           </DialogHeader>
+
+          <div className="text-sm space-y-1">
+              <p>Total Due: {formatCurrency(totalDue)}</p>
+              <p>Total Paid: {formatCurrency(totalPaid)}</p>
+              <p>Credit: {formatCurrency(totalCredit)}</p>
+              <p className="font-semibold">Outstanding: {formatCurrency(remaining)}</p>
+            </div>
+
           <div className="space-y-3">
+            {isCyclePaused && (
+              <p className="text-red-500 text-sm">
+                Payments are disabled because the cycle is paused.
+              </p>
+            )}
             <div className="space-y-2">
               <Label>Month</Label>
-              <select className="w-full rounded-xl border bg-background px-3 py-2 text-sm" value={selectedCycleId} onChange={(e) => setSelectedCycleId(e.target.value)}>
+              <select
+                className="w-full rounded-xl border bg-background px-3 py-2 text-sm"
+                value={selectedCycleId}
+                onChange={(e) => setSelectedCycleId(e.target.value)}
+                disabled={isCyclePaused}
+              >
                 <option value="">Select month</option>
                 {sortedCycles.map((cycle) => (
-                  <option key={cycle.id} value={cycle.id}>{`${formatCycleLabel(cycle.month, cycle.year)} (${getCycleStatus(cycle.month, cycle.year)}) - ${formatCurrency(cycle.ratePerPerson)} per person`}</option>
+                  <option
+                    key={cycle.id}
+                    value={cycle.id}
+                  >{`${formatCycleLabel(cycle.month, cycle.year)} (${cycle.status}) - ${formatCurrency(cycle.ratePerPerson)} per person`}</option>
                 ))}
               </select>
             </div>
-            <div className="space-y-2"><Label>Amount</Label><Input type="text" inputMode="decimal" pattern="^\d+(?:\.\d{1,2})?$" value={paymentAmount} onChange={(e) => setPaymentAmount(e.target.value)} /></div>
+            <div className="space-y-2">
+              <Label>Amount</Label>
+              <Input
+                type="text"
+                inputMode="decimal"
+                pattern="^\d+(?:\.\d{1,2})?$"
+                value={paymentAmount}
+                onChange={(e) => setPaymentAmount(e.target.value)}
+              />
+            </div>
             <div className="space-y-2">
               <Label>Method</Label>
-              <select className="w-full rounded-xl border bg-background px-3 py-2 text-sm" value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value as 'CASH' | 'UPI' | 'BANK')}>
+              <select
+                className="w-full rounded-xl border bg-background px-3 py-2 text-sm"
+                value={paymentMethod}
+                onChange={(e) =>
+                  setPaymentMethod(e.target.value as "CASH" | "UPI" | "BANK") 
+                }
+                disabled={isCyclePaused}
+              >
                 <option value="CASH">Cash</option>
                 <option value="UPI">UPI</option>
                 <option value="BANK">Bank</option>
               </select>
             </div>
+            {paymentMethod !== "CASH" && (
+  <div className="space-y-2">
+    <Label>UTR</Label>
+    <Input
+      value={paymentUtr}
+      onChange={(e) => setPaymentUtr(e.target.value)}
+      placeholder="Enter UTR"
+    />
+  </div>
+)}
             <div className="space-y-2">
-              <Label>UTR</Label>
-              <Input value={paymentUtr} onChange={(e) => setPaymentUtr(e.target.value)} placeholder="Optional" />
+              <Label>Reference</Label>
+              <Input
+                value={paymentReference}
+                onChange={(e) => setPaymentReference(e.target.value)}
+              />
             </div>
-            <div className="space-y-2"><Label>Reference</Label><Input value={paymentReference} onChange={(e) => setPaymentReference(e.target.value)} /></div>
-            <div className="space-y-2"><Label>Notes</Label><Textarea rows={3} value={paymentNotes} onChange={(e) => setPaymentNotes(e.target.value)} /></div>
+            <div className="space-y-2">
+              <Label>Notes</Label>
+              <Textarea
+                rows={3}
+                value={paymentNotes}
+                onChange={(e) => setPaymentNotes(e.target.value)}
+              />
+            </div>
           </div>
           <DialogFooter>
-            <Button className="w-full sm:w-auto" variant="outline" onClick={() => setIsPaymentOpen(false)}>Cancel</Button>
-            <Button className="w-full sm:w-auto" onClick={handleRecordPayment} disabled={submitting}>
-              {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              {paymentMode === 'adjustment' ? 'Save Adjustment' : 'Record'}
+            <Button
+              className="w-full sm:w-auto"
+              variant="outline"
+              onClick={() => setIsPaymentOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              className="w-full sm:w-auto"
+              onClick={handleRecordPayment}
+              disabled={submitting || isCyclePaused}
+            >
+              {submitting ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : null}
+              {paymentMode === "adjustment" ? "Save Adjustment" : "Record"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1539,11 +2097,23 @@ export default function MuqtadisPage() {
         formatCurrency={formatCurrency}
         formatCycleLabel={formatCycleLabel}
         getCycleStatus={getCycleStatus}
+        // onOpenRecordPayment={() => {
+        //   if (selectedMuqtadi) {
+        //     openPayment(selectedMuqtadi);
+        //   }
+        // }}
         onOpenRecordPayment={() => {
-          if (selectedMuqtadi) {
-            openPayment(selectedMuqtadi);
-          }
-        }}
+  if (!selectedMuqtadi) return;
+
+  // 🔥 FULL RESET (this is what you were missing)
+  setIsDrawerOpen(false);
+  setSelectedDetails(null);
+  setSelectedPaymentDetailId(null);
+
+  setTimeout(() => {
+    openPayment(selectedMuqtadi);
+  }, 150);
+}}
         onOpenEditDetails={() => {
           if (selectedMuqtadi) {
             openEdit(selectedMuqtadi);
@@ -1551,7 +2121,7 @@ export default function MuqtadisPage() {
         }}
         onVerifyPending={handleVerifyPendingHousehold}
         onRejectPending={handleRejectPendingHousehold}
-        onOpenCreateCycle={() => router.push('/dashboard/imam-salary/cycles')}
+        onOpenCreateCycle={() => router.push("/dashboard/imam-salary/cycles")}
         onOpenPaymentDetail={(paymentId: string) => {
           setSelectedPaymentDetailId(paymentId);
           setPaymentDetailImageFailed(false);
@@ -1569,28 +2139,48 @@ export default function MuqtadisPage() {
         isGeneratingLoginLink={isGeneratingLoginLink}
         isSendingResetLink={isSendingResetLink}
         isPendingActionLoading={Boolean(loading.pendingVerificationId)}
-        authLinkState={selectedDetails ? authLinksByMuqtadiId[selectedDetails.id] ?? null : null}
+        authLinkState={
+          selectedDetails
+            ? (authLinksByMuqtadiId[selectedDetails.id] ?? null)
+            : null
+        }
       />
 
-      <Dialog open={isInviteLinkDialogOpen} onOpenChange={setIsInviteLinkDialogOpen}>
-        <DialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-lg">
+      <Dialog
+        open={isInviteLinkDialogOpen}
+        onOpenChange={setIsInviteLinkDialogOpen}
+      >
+        {/* <DialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-lg"> */}
+        <DialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Invite Muqtadi</DialogTitle>
             <DialogDescription>
-              Share this secure link so a muqtadi can join using the invite token.
+              Share this secure link so a muqtadi can join using the invite
+              token.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
             <p className="text-xs text-muted-foreground">Invite Link</p>
             <Input value={inviteLink} readOnly />
-            {typeof inviteUsageMeta.maxUses === 'number' ? (
+            {typeof inviteUsageMeta.maxUses === "number" ? (
               <p className="text-xs text-muted-foreground">
-                Uses left: {Math.max((inviteUsageMeta.maxUses ?? 0) - (inviteUsageMeta.usedCount ?? 0), 0)} / {inviteUsageMeta.maxUses}
+                Uses left:{" "}
+                {Math.max(
+                  (inviteUsageMeta.maxUses ?? 0) -
+                    (inviteUsageMeta.usedCount ?? 0),
+                  0,
+                )}{" "}
+                / {inviteUsageMeta.maxUses}
               </p>
             ) : null}
           </div>
           <DialogFooter>
-            <Button className="w-full sm:w-auto" variant="outline" onClick={handleCopyInviteLink} disabled={!inviteLink}>
+            <Button
+              className="w-full sm:w-auto"
+              variant="outline"
+              onClick={handleCopyInviteLink}
+              disabled={!inviteLink}
+            >
               <Copy className="mr-2 h-4 w-4" />
               Copy Link
             </Button>
@@ -1598,8 +2188,12 @@ export default function MuqtadisPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={isInviteLimitDialogOpen} onOpenChange={setIsInviteLimitDialogOpen}>
-        <DialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-lg">
+      <Dialog
+        open={isInviteLimitDialogOpen}
+        onOpenChange={setIsInviteLimitDialogOpen}
+      >
+        {/* <DialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-lg"> */}
+        <DialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Invite Muqtadi</DialogTitle>
             <DialogDescription>
@@ -1620,11 +2214,22 @@ export default function MuqtadisPage() {
             />
           </div>
           <DialogFooter>
-            <Button className="w-full sm:w-auto" variant="outline" onClick={() => setIsInviteLimitDialogOpen(false)} disabled={isInviteLinkLoading}>
+            <Button
+              className="w-full sm:w-auto"
+              variant="outline"
+              onClick={() => setIsInviteLimitDialogOpen(false)}
+              disabled={isInviteLinkLoading}
+            >
               Cancel
             </Button>
-            <Button className="w-full sm:w-auto" onClick={handleCreateInviteLink} disabled={isInviteLinkLoading}>
-              {isInviteLinkLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            <Button
+              className="w-full sm:w-auto"
+              onClick={handleCreateInviteLink}
+              disabled={isInviteLinkLoading}
+            >
+              {isInviteLinkLoading ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : null}
               Confirm
             </Button>
           </DialogFooter>
@@ -1665,7 +2270,8 @@ export default function MuqtadisPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete payment?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will remove the payment and its linked imam fund income entry.
+              This will remove the payment and its linked imam fund income
+              entry.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -1709,7 +2315,10 @@ export default function MuqtadisPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      <Dialog open={Boolean(selectedPaymentDetail)} onOpenChange={(open) => !open && setSelectedPaymentDetailId(null)}>
+      <Dialog
+        open={Boolean(selectedPaymentDetail)}
+        onOpenChange={(open) => !open && setSelectedPaymentDetailId(null)}
+      >
         <DialogContent className="h-[92dvh] w-[96vw] max-w-none overflow-y-auto p-0 sm:h-auto sm:max-w-2xl">
           {selectedPaymentDetail ? (
             <div className="flex h-full flex-col">
@@ -1718,34 +2327,83 @@ export default function MuqtadisPage() {
                   <span>Payment Details</span>
                   <Badge
                     className={
-                      (selectedPaymentDetail.details?.status as string) === 'VERIFIED'
-                        ? 'bg-emerald-100 text-emerald-700'
-                        : (selectedPaymentDetail.details?.status as string) === 'REJECTED'
-                          ? 'bg-red-100 text-red-700'
-                          : 'bg-amber-100 text-amber-700'
+                      (selectedPaymentDetail.details?.status as string) ===
+                      "VERIFIED"
+                        ? "bg-emerald-100 text-emerald-700"
+                        : (selectedPaymentDetail.details?.status as string) ===
+                            "REJECTED"
+                          ? "bg-red-100 text-red-700"
+                          : "bg-amber-100 text-amber-700"
                     }
                   >
-                    {(selectedPaymentDetail.details?.status as string) || '-'}
+                    {(selectedPaymentDetail.details?.status as string) || "-"}
                   </Badge>
                 </DialogTitle>
                 <DialogDescription>
-                  {selectedDetails?.name || 'Muqtadi'} • {selectedPaymentDetail.details?.month && selectedPaymentDetail.details?.year
-                    ? formatCycleLabel(Number(selectedPaymentDetail.details.month), Number(selectedPaymentDetail.details.year))
-                    : 'Cycle unavailable'}
+                  {selectedDetails?.name || "Muqtadi"} •{" "}
+                  {selectedPaymentDetail.details?.month &&
+                  selectedPaymentDetail.details?.year
+                    ? formatCycleLabel(
+                        Number(selectedPaymentDetail.details.month),
+                        Number(selectedPaymentDetail.details.year),
+                      )
+                    : "Cycle unavailable"}
                 </DialogDescription>
               </DialogHeader>
 
               <div className="flex-1 space-y-4 px-4 py-4 sm:px-6">
                 <Card>
                   <CardContent className="grid gap-2 pt-4 text-sm sm:grid-cols-2">
-                    <p><span className="text-muted-foreground">Amount paid:</span> {formatCurrency(Number(selectedPaymentDetail.details?.amount || 0))}</p>
-                    <p><span className="text-muted-foreground">Outstanding:</span> {formatCurrency(selectedDetails?.overview.outstandingAmount ?? 0)}</p>
-                    <p><span className="text-muted-foreground">Submitted at:</span> {formatDate(selectedPaymentDetail.createdAt, 'MMM dd, yyyy hh:mm a')}</p>
-                    <p><span className="text-muted-foreground">Method:</span> {String(selectedPaymentDetail.details?.method || '-')}</p>
-                    <p><span className="text-muted-foreground">Household size:</span> {selectedDetails?.householdMembers ?? '-'}</p>
-                    <p><span className="text-muted-foreground">UTR:</span> {String(selectedPaymentDetail.details?.utr || '-')}</p>
-                    <p className="sm:col-span-2"><span className="text-muted-foreground">Reference:</span> {String(selectedPaymentDetail.details?.reference || '-')}</p>
-                    <p className="sm:col-span-2"><span className="text-muted-foreground">Rejection reason:</span> {(selectedPaymentDetail.details as any)?.rejectionReason || '-'}</p>
+                    <p>
+                      <span className="text-muted-foreground">
+                        Amount paid:
+                      </span>{" "}
+                      {formatCurrency(
+                        Number(selectedPaymentDetail.details?.amount || 0),
+                      )}
+                    </p>
+                    <p>
+                      <span className="text-muted-foreground">
+                        Outstanding:
+                      </span>{" "}
+                      {formatCurrency(
+                        selectedDetails?.overview.outstandingAmount ?? 0,
+                      )}
+                    </p>
+                    <p>
+                      <span className="text-muted-foreground">
+                        Submitted at:
+                      </span>{" "}
+                      {formatDate(
+                        selectedPaymentDetail.createdAt,
+                        "MMM dd, yyyy hh:mm a",
+                      )}
+                    </p>
+                    <p>
+                      <span className="text-muted-foreground">Method:</span>{" "}
+                      {String(selectedPaymentDetail.details?.method || "-")}
+                    </p>
+                    <p>
+                      <span className="text-muted-foreground">
+                        Household size:
+                      </span>{" "}
+                      {selectedDetails?.householdMembers ?? "-"}
+                    </p>
+                    <p>
+                      <span className="text-muted-foreground">UTR:</span>{" "}
+                      {String(selectedPaymentDetail.details?.utr || "-")}
+                    </p>
+                    <p className="sm:col-span-2">
+                      <span className="text-muted-foreground">Reference:</span>{" "}
+                      {String(selectedPaymentDetail.details?.reference || "-")}
+                    </p>
+                    <p className="sm:col-span-2">
+                      <span className="text-muted-foreground">
+                        Rejection reason:
+                      </span>{" "}
+                      {(selectedPaymentDetail.details as any)
+                        ?.rejectionReason || "-"}
+                    </p>
                   </CardContent>
                 </Card>
 
@@ -1756,7 +2414,9 @@ export default function MuqtadisPage() {
                       <>
                         {!paymentDetailImageFailed ? (
                           <img
-                            src={String(selectedPaymentDetail.details.screenshotUrl)}
+                            src={String(
+                              selectedPaymentDetail.details.screenshotUrl,
+                            )}
                             alt="Payment proof"
                             className="max-h-96 w-full rounded-lg border object-contain"
                             onError={() => setPaymentDetailImageFailed(true)}
@@ -1772,9 +2432,16 @@ export default function MuqtadisPage() {
                           variant="outline"
                           className="w-full sm:w-auto"
                           onClick={() => {
-                            const proofUrl = String(selectedPaymentDetail.details?.screenshotUrl || '');
+                            const proofUrl = String(
+                              selectedPaymentDetail.details?.screenshotUrl ||
+                                "",
+                            );
                             if (!proofUrl) return;
-                            window.open(proofUrl, '_blank', 'noopener,noreferrer');
+                            window.open(
+                              proofUrl,
+                              "_blank",
+                              "noopener,noreferrer",
+                            );
                           }}
                         >
                           <ExternalLink className="mr-2 h-4 w-4" />
@@ -1782,7 +2449,9 @@ export default function MuqtadisPage() {
                         </Button>
                       </>
                     ) : (
-                      <p className="text-sm text-muted-foreground">No screenshot uploaded for this payment.</p>
+                      <p className="text-sm text-muted-foreground">
+                        No screenshot uploaded for this payment.
+                      </p>
                     )}
                   </CardContent>
                 </Card>
@@ -1790,13 +2459,18 @@ export default function MuqtadisPage() {
 
               <div className="sticky bottom-0 border-t bg-background px-4 py-3 sm:px-6">
                 <div className="flex flex-wrap gap-2">
-                  {(selectedPaymentDetail.details?.status as string) === 'PENDING' ? (
+                  {(selectedPaymentDetail.details?.status as string) ===
+                  "PENDING" ? (
                     <>
                       <Button
                         size="sm"
                         variant="outline"
                         disabled={submitting}
-                        onClick={() => setPendingPaymentVerificationId(selectedPaymentDetail.id)}
+                        onClick={() =>
+                          setPendingPaymentVerificationId(
+                            selectedPaymentDetail.id,
+                          )
+                        }
                       >
                         Verify
                       </Button>
@@ -1804,7 +2478,9 @@ export default function MuqtadisPage() {
                         size="sm"
                         variant="destructive"
                         disabled={submitting}
-                        onClick={() => setPendingPaymentRejectId(selectedPaymentDetail.id)}
+                        onClick={() =>
+                          setPendingPaymentRejectId(selectedPaymentDetail.id)
+                        }
                       >
                         Reject
                       </Button>
@@ -1814,7 +2490,13 @@ export default function MuqtadisPage() {
                     size="sm"
                     variant="outline"
                     disabled={submitting}
-                    onClick={() => selectedMuqtadi && openPaymentAdjustment(selectedMuqtadi, selectedPaymentDetail)}
+                    onClick={() =>
+                      selectedMuqtadi &&
+                      openPaymentAdjustment(
+                        selectedMuqtadi,
+                        selectedPaymentDetail,
+                      )
+                    }
                   >
                     Edit Payment
                   </Button>
@@ -1822,12 +2504,22 @@ export default function MuqtadisPage() {
                     size="sm"
                     variant="outline"
                     disabled={submitting}
-                    onClick={() => setPendingPaymentDeleteId(selectedPaymentDetail.id)}
+                    onClick={() =>
+                      setPendingPaymentDeleteId(selectedPaymentDetail.id)
+                    }
                   >
                     Delete Payment
                   </Button>
                   {selectedPaymentDetail.details?.utr ? (
-                    <Button size="sm" variant="ghost" onClick={() => handleCopyUtr(String(selectedPaymentDetail.details?.utr))}>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() =>
+                        handleCopyUtr(
+                          String(selectedPaymentDetail.details?.utr),
+                        )
+                      }
+                    >
                       <Copy className="mr-1 h-3.5 w-3.5" />
                       Copy UTR
                     </Button>
