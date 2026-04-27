@@ -110,9 +110,9 @@ export default function MuqtadiDetailsModal({
   }, [open]);
 
   useEffect(() => {
-    if (!detail || !isPendingHousehold) return;
+    if (!detail || detail.isVerified !== false) return;
     setPendingPreviousDue(String(detail.previousDue ?? 0));
-  }, [detail, isPendingHousehold]);
+  }, [detail]);
 
   useEffect(() => {
     if (detailQuery.data && onDetailsChange) {
