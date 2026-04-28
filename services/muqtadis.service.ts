@@ -1,3 +1,4 @@
+import axios from "axios";
 import api from "./api";
 import type { Muqtadi, PaginatedResponse } from "@/types";
 import type { AuthResponse } from "@/types";
@@ -96,6 +97,32 @@ const EMPTY_NEXT_CYCLE_INFO: NextCycleInfo = {
   settingsLockReason: null,
 };
 
+const EMPTY_SALARY_SUMMARY = {
+  contributionMode: "HOUSEHOLD" as ContributionMode,
+  contributionAmount: 0,
+  totalSalary: 0,
+  totalMuqtadies: 0,
+  registeredMuqtadies: 0,
+  perHead: 0,
+  totalDue: 0,
+  totalPaid: 0,
+  balance: 0,
+  isCyclePaused: false,
+};
+
+function isCycleSettingsMissingError(error: unknown): boolean {
+  if (!axios.isAxiosError(error)) {
+    return false;
+  }
+
+  const message = error.response?.data as { message?: string | string[] } | undefined;
+  const resolvedMessage = Array.isArray(message?.message)
+    ? message?.message[0]
+    : message?.message;
+
+  return error.response?.status === 400 && resolvedMessage === 'Cycle settings missing';
+}
+
 // export interface SalarySummaryResponse {
 //   payload: {
 //     contributionMode: string;
@@ -112,6 +139,12 @@ const EMPTY_NEXT_CYCLE_INFO: NextCycleInfo = {
 
 export interface SalarySummaryResponse {
   payload: {
+    contributionMode?: ContributionMode;
+    contributionAmount?: number;
+    totalSalary?: number;
+    totalMuqtadies?: number;
+    registeredMuqtadies?: number;
+    perHead?: number;
     totalDue: number;
     totalPaid: number;
     balance: number;
@@ -795,6 +828,12 @@ export const muqtadisService = {
 },
 
   async getSalarySummary(): Promise<{
+    contributionMode: ContributionMode;
+    contributionAmount: number;
+    totalSalary: number;
+    totalMuqtadies: number;
+    registeredMuqtadies: number;
+    perHead: number;
     // contributionMode: ContributionMode;
     // contributionType: ContributionMode;
     // contributionAmount: number;
@@ -808,35 +847,33 @@ export const muqtadisService = {
     balance: number;
     isCyclePaused: boolean;
   }> {
-    const response = await api.get<SalarySummaryResponse>("/salary/summary");
+    try {
+      const response = await api.get<SalarySummaryResponse>("/salary/summary");
 
-    const data = response.data;
+      const data = response.data;
+      const payload = data.payload;
+      const contributionMode = payload.contributionMode === "PERSON" ? "PERSON" : "HOUSEHOLD";
+      const contributionAmount = Number(payload.contributionAmount ?? payload.totalSalary ?? 0);
 
-    const payload = data.payload;
+      return {
+        contributionMode,
+        contributionAmount: Number.isFinite(contributionAmount) ? contributionAmount : 0,
+        totalSalary: Number(payload.totalSalary ?? 0),
+        totalMuqtadies: Number(payload.totalMuqtadies ?? 0),
+        registeredMuqtadies: Number(payload.registeredMuqtadies ?? 0),
+        perHead: Number(payload.perHead ?? 0),
+        totalDue: Number(payload.totalDue ?? 0),
+        totalPaid: Number(payload.totalPaid ?? 0),
+        balance: Number(payload.balance ?? 0),
+        isCyclePaused: data.isCyclePaused,
+      };
+    } catch (error) {
+      if (isCycleSettingsMissingError(error)) {
+        return EMPTY_SALARY_SUMMARY;
+      }
 
-    // const contributionMode: ContributionMode =
-    //   payload.contributionMode === "PERSON" ? "PERSON" : "HOUSEHOLD";
-
-    // const contributionAmount = Number(
-    //   payload.contributionAmount ?? payload.totalSalary ?? 0,
-    // );
-
-    return {
-      // contributionMode,
-      // contributionType: contributionMode,
-      // contributionAmount: Number.isFinite(contributionAmount)
-      //   ? contributionAmount
-      //   : 0,
-      // totalSalary: Number(payload.totalSalary ?? 0),
-      // totalMuqtadies: Number(payload.totalMuqtadies ?? 0),
-      // registeredMuqtadies: Number(payload.registeredMuqtadies ?? 0),
-      // perHead: Number(payload.perHead ?? 0),
-      // isCyclePaused: data.isCyclePaused, // ✅ NEW
-      totalDue: Number(payload.totalDue ?? 0),
-  totalPaid: Number(payload.totalPaid ?? 0),
-  balance: Number(payload.balance ?? 0),
-  isCyclePaused: data.isCyclePaused,
-    };
+      throw error;
+    }
   },
 
   async recordPayment(

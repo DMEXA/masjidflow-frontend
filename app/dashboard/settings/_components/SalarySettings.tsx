@@ -29,6 +29,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ListEmptyState } from "@/components/common/list-empty-state";
+import { PageSkeleton } from "@/components/common/loading-skeletons";
 import {
   muqtadisService,
   type ContributionMode,
@@ -70,6 +71,7 @@ export function SalarySettings() {
 
   const [nextCycleSaving, setNextCycleSaving] = useState(false);
   const [currentCycleSaving, setCurrentCycleSaving] = useState(false);
+  const [settingsLoading, setSettingsLoading] = useState(true);
   const [salarySettingsLockedFallback, setSalarySettingsLockedFallback] =
     useState(false);
   const [
@@ -132,6 +134,7 @@ export function SalarySettings() {
     salarySettingsLoadedRef.current = true;
 
     const loadSalarySettings = async () => {
+      setSettingsLoading(true);
       try {
         const settings = await muqtadisService.getSettings();
         setNextCycleForm({
@@ -151,6 +154,8 @@ export function SalarySettings() {
           contributionAmount: "",
         });
         toast.error(getErrorMessage(error, "Failed to load salary settings"));
+      } finally {
+        setSettingsLoading(false);
       }
     };
 
@@ -195,6 +200,11 @@ export function SalarySettings() {
 
   const isCyclePaused = summaryQuery.data?.isCyclePaused ?? false;
   const [pauseLoading, setPauseLoading] = useState(false);
+  const isInitialLoading =
+    settingsLoading ||
+    monthLoading ||
+    nextCycleInfoQuery.isLoading ||
+    summaryQuery.isLoading;
 
   const hasActiveCycle = nextCycleInfoQuery.data?.hasActiveCycle === true;
   const hasAnyCycle = hasActiveCycle || cycles.length > 0;
@@ -246,6 +256,10 @@ export function SalarySettings() {
   const cycleControlReason = hasActiveCycle
     ? "Current cycle is active. You can start a new cycle once it ends."
     : null;
+
+  if (isInitialLoading) {
+    return <PageSkeleton rows={2} cardCount={4} />;
+  }
 
   const currentCycleLocked = Boolean(
     nextCycleInfoQuery.data?.settingsLocked ?? salarySettingsLockedFallback,
