@@ -98,6 +98,7 @@ const EMPTY_NEXT_CYCLE_INFO: NextCycleInfo = {
 };
 
 const EMPTY_SALARY_SUMMARY = {
+  hasCycle: false,
   contributionMode: "HOUSEHOLD" as ContributionMode,
   contributionAmount: 0,
   totalSalary: 0,
@@ -138,7 +139,8 @@ function isCycleSettingsMissingError(error: unknown): boolean {
 // }
 
 export interface SalarySummaryResponse {
-  payload: {
+  hasCycle: boolean;
+  summary: null | {
     contributionMode?: ContributionMode;
     contributionAmount?: number;
     totalSalary?: number;
@@ -148,8 +150,8 @@ export interface SalarySummaryResponse {
     totalDue: number;
     totalPaid: number;
     balance: number;
+    isCyclePaused: boolean;
   };
-  isCyclePaused: boolean;
 }
 
 function extractDataPayload(input: unknown): unknown {
@@ -828,20 +830,13 @@ export const muqtadisService = {
 },
 
   async getSalarySummary(): Promise<{
+    hasCycle: boolean;
     contributionMode: ContributionMode;
     contributionAmount: number;
     totalSalary: number;
     totalMuqtadies: number;
     registeredMuqtadies: number;
     perHead: number;
-    // contributionMode: ContributionMode;
-    // contributionType: ContributionMode;
-    // contributionAmount: number;
-    // totalSalary: number;
-    // totalMuqtadies: number;
-    // registeredMuqtadies: number;
-    // perHead: number;
-    // isCyclePaused: boolean;
     totalDue: number;
     totalPaid: number;
     balance: number;
@@ -851,11 +846,30 @@ export const muqtadisService = {
       const response = await api.get<SalarySummaryResponse>("/salary/summary");
 
       const data = response.data;
-      const payload = data.payload;
+      const hasCycle = data.hasCycle;
+      const payload = data.summary;
+
+      if (!hasCycle || !payload) {
+        return {
+          hasCycle: false,
+          contributionMode: "HOUSEHOLD",
+          contributionAmount: 0,
+          totalSalary: 0,
+          totalMuqtadies: 0,
+          registeredMuqtadies: 0,
+          perHead: 0,
+          totalDue: 0,
+          totalPaid: 0,
+          balance: 0,
+          isCyclePaused: false,
+        };
+      }
+
       const contributionMode = payload.contributionMode === "PERSON" ? "PERSON" : "HOUSEHOLD";
       const contributionAmount = Number(payload.contributionAmount ?? payload.totalSalary ?? 0);
 
       return {
+        hasCycle: true,
         contributionMode,
         contributionAmount: Number.isFinite(contributionAmount) ? contributionAmount : 0,
         totalSalary: Number(payload.totalSalary ?? 0),
@@ -865,13 +879,9 @@ export const muqtadisService = {
         totalDue: Number(payload.totalDue ?? 0),
         totalPaid: Number(payload.totalPaid ?? 0),
         balance: Number(payload.balance ?? 0),
-        isCyclePaused: data.isCyclePaused,
+        isCyclePaused: payload.isCyclePaused ?? false,
       };
     } catch (error) {
-      if (isCycleSettingsMissingError(error)) {
-        return EMPTY_SALARY_SUMMARY;
-      }
-
       throw error;
     }
   },

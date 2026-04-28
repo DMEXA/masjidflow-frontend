@@ -206,9 +206,10 @@ export function SalarySettings() {
     nextCycleInfoQuery.isLoading ||
     summaryQuery.isLoading;
 
+  const hasCycleFromSummary = summaryQuery.data?.hasCycle ?? false;
   const hasActiveCycle = nextCycleInfoQuery.data?.hasActiveCycle === true;
-  const hasAnyCycle = hasActiveCycle || cycles.length > 0;
-  const isFirstTimeSetupMode = !hasAnyCycle;
+  const hasAnyCycle = hasCycleFromSummary || hasActiveCycle || cycles.length > 0;
+  const isFirstTimeSetupMode = !hasCycleFromSummary;
   const activeCyclePeriod = nextCycleInfoQuery.data?.currentCycle;
   const activeCycleMonth = activeCyclePeriod?.month ?? null;
   const activeCycleYear = activeCyclePeriod?.year ?? null;
