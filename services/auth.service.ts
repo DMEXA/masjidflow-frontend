@@ -7,6 +7,32 @@ import {
 } from '@/services/auth-session';
 import { clearAccessToken, getAccessToken, setAccessToken } from './access-token';
 
+async function warmupServer(): Promise<void> {
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL?.trim();
+  if (!baseUrl) return;
+
+  try {
+    await fetch(`${baseUrl.replace(/\/$/, '')}/health`);
+  } catch {
+    // Best-effort warmup only.
+  }
+}
+
+async function withWarmupRetry<T>(operation: () => Promise<T>): Promise<T> {
+  try {
+    await warmupServer();
+    return await operation();
+  } catch (firstError) {
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+    try {
+      await warmupServer();
+      return await operation();
+    } catch {
+      throw firstError;
+    }
+  }
+}
+
 export interface RegisterResponse {
   accessToken?: string;
   user?: AuthResponse['user'] | null;
@@ -129,22 +155,23 @@ export const authService = {
     | LoginTwoFactorSetupResponse
     | LoginTwoFactorRequiredResponse
   > {
-    const response = await api.post<
-      | AuthResponse
-      | LoginEmailOtpResponse
-      | LoginTotpResponse
-      | LoginTwoFactorSetupResponse
-      | LoginTwoFactorRequiredResponse
-    >(
-      '/auth/login',
-      credentials,
-    );
-    return response.data;
+    return withWarmupRetry(async () => {
+      const response = await api.post<
+        | AuthResponse
+        | LoginEmailOtpResponse
+        | LoginTotpResponse
+        | LoginTwoFactorSetupResponse
+        | LoginTwoFactorRequiredResponse
+      >('/auth/login', credentials);
+      return response.data;
+    });
   },
 
   async loginWithPhone(credentials: PhoneLoginCredentials): Promise<AuthResponse> {
-    const response = await api.post<AuthResponse>('/auth/login-phone', credentials);
-    return response.data;
+    return withWarmupRetry(async () => {
+      const response = await api.post<AuthResponse>('/auth/login-phone', credentials);
+      return response.data;
+    });
   },
 
   async verifyEmailOtp(payload: VerifySecondFactorPayload): Promise<AuthResponse> {
@@ -298,8 +325,10 @@ export const authService = {
   },
 
   async loginWithTwoFactor(payload: TwoFactorLoginPayload): Promise<AuthResponse> {
-    const response = await api.post<AuthResponse>('/auth/2fa/login', payload);
-    return response.data;
+    return withWarmupRetry(async () => {
+      const response = await api.post<AuthResponse>('/auth/2fa/login', payload);
+      return response.data;
+    });
   },
 
   async setEmailOtp(enabled: boolean): Promise<{ message: string }> {
