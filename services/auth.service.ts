@@ -7,12 +7,15 @@ import {
 } from '@/services/auth-session';
 import { clearAccessToken, getAccessToken, setAccessToken } from './access-token';
 
-async function warmupServer(): Promise<void> {
+function warmupServer(): void {
   const baseUrl = process.env.NEXT_PUBLIC_API_URL?.trim();
   if (!baseUrl) return;
 
   try {
-    await fetch(`${baseUrl.replace(/\/$/, '')}/health`);
+    void fetch(`${baseUrl.replace(/\/$/, '')}/health`, {
+      method: 'GET',
+      cache: 'no-store',
+    }).catch(() => {});
   } catch {
     // Best-effort warmup only.
   }
@@ -20,12 +23,12 @@ async function warmupServer(): Promise<void> {
 
 async function withWarmupRetry<T>(operation: () => Promise<T>): Promise<T> {
   try {
-    await warmupServer();
+    warmupServer();
     return await operation();
   } catch (firstError) {
     await new Promise((resolve) => setTimeout(resolve, 2000));
     try {
-      await warmupServer();
+      warmupServer();
       return await operation();
     } catch {
       throw firstError;
