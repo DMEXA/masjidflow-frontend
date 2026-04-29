@@ -1,14 +1,27 @@
-'use client';
+"use client";
 
-import { useState, useEffect, useMemo } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { Card, CardContent } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Badge } from '@/components/ui/badge';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { useState, useEffect, useMemo } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -18,26 +31,47 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-import { usePermission } from '@/hooks/usePermission';
-import { useAuthStore } from '@/src/store/auth.store';
-import { formatCurrency, formatDate, formatPaymentType } from '@/src/utils/format';
-import { donationsService } from '@/services/donations.service';
-import { Download, Loader2, SlidersHorizontal, ListChecks } from 'lucide-react';
-import { toast } from 'sonner';
-import { getErrorMessage } from '@/src/utils/error';
-import type { Donation } from '@/types';
-import { PAYMENT_TYPES } from '@/src/constants';
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { queryKeys } from '@/lib/query-keys';
-import { getSafeLimit } from '@/src/utils/pagination';
-import { collectPaginatedExportRows, downloadPdfExport, EXPORT_MAX_ROWS } from '@/src/utils/export';
-import { useFundsListQuery } from '@/hooks/useFundsListQuery';
-import { useDebounce } from '@/hooks/useDebounce';
-import { invalidateDonationMutationQueries, invalidateMoneyQueries } from '@/lib/money-cache';
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import { ListEmptyState } from '@/components/common/list-empty-state';
-import { API_BASE_URL } from '@/src/constants';
+} from "@/components/ui/alert-dialog";
+import { usePermission } from "@/hooks/usePermission";
+import { useAuthStore } from "@/src/store/auth.store";
+import {
+  formatCurrency,
+  formatDate,
+  formatPaymentType,
+} from "@/src/utils/format";
+import { donationsService } from "@/services/donations.service";
+import { Download, Loader2, SlidersHorizontal, ListChecks } from "lucide-react";
+import { toast } from "sonner";
+import { getErrorMessage } from "@/src/utils/error";
+import type { Donation } from "@/types";
+import { PAYMENT_TYPES } from "@/src/constants";
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
+import { queryKeys } from "@/lib/query-keys";
+import { getSafeLimit } from "@/src/utils/pagination";
+import {
+  collectPaginatedExportRows,
+  downloadPdfExport,
+  EXPORT_MAX_ROWS,
+} from "@/src/utils/export";
+import { useFundsListQuery } from "@/hooks/useFundsListQuery";
+import { useDebounce } from "@/hooks/useDebounce";
+import {
+  invalidateDonationMutationQueries,
+  invalidateMoneyQueries,
+} from "@/lib/money-cache";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import { ListEmptyState } from "@/components/common/list-empty-state";
+import { API_BASE_URL } from "@/src/constants";
 
 function resolveReceiptUrl(receipt: string, baseOrigin: string): string | null {
   const raw = receipt.trim();
@@ -49,15 +83,15 @@ function resolveReceiptUrl(receipt: string, baseOrigin: string): string | null {
 
   if (/^https?\/\//i.test(raw)) {
     return raw.replace(/^https?\/\//i, (match) =>
-      match.toLowerCase().startsWith('https') ? 'https://' : 'http://',
+      match.toLowerCase().startsWith("https") ? "https://" : "http://",
     );
   }
 
-  if (raw.startsWith('//')) {
+  if (raw.startsWith("//")) {
     return `https:${raw}`;
   }
 
-  if (raw.startsWith('/')) {
+  if (raw.startsWith("/")) {
     return `${baseOrigin}${raw}`;
   }
 
@@ -70,7 +104,8 @@ export default function DonationsPage() {
   const queryClient = useQueryClient();
   const { mosque, token, user } = useAuthStore();
   const mosqueId = mosque?.id;
-  const { canManageDonations, canDelete, isAdmin, isSuperAdmin, isTreasurer } = usePermission();
+  const { canManageDonations, canDelete, isAdmin, isSuperAdmin, isTreasurer } =
+    usePermission();
   const {
     canCreate: canCreateAction,
     canEdit: canEditAction,
@@ -78,36 +113,44 @@ export default function DonationsPage() {
   } = usePermission(user?.role);
   const canViewPendingCount = isAdmin || isSuperAdmin;
 
-  const [searchQuery, setSearchQuery] = useState('');
-  const [donationStatusFilter, setDonationStatusFilter] = useState<'all' | 'VERIFIED' | 'PENDING'>('all');
-  const [paymentTypeFilter, setPaymentTypeFilter] = useState<string>('all');
-  const [fundTypeFilter, setFundTypeFilter] = useState<string>('all');
+  const [searchQuery, setSearchQuery] = useState("");
+  const [donationStatusFilter, setDonationStatusFilter] = useState<
+    "all" | "VERIFIED" | "PENDING"
+  >("all");
+  const [paymentTypeFilter, setPaymentTypeFilter] = useState<string>("all");
+  const [fundTypeFilter, setFundTypeFilter] = useState<string>("all");
   const [page, setPage] = useState(1);
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
-  const [pendingStatusFilter, setPendingStatusFilter] = useState<'all' | 'VERIFIED' | 'PENDING'>('all');
-  const [pendingPaymentTypeFilter, setPendingPaymentTypeFilter] = useState<string>('all');
-  const [receiptModalDonation, setReceiptModalDonation] = useState<Donation | null>(null);
+  const [pendingStatusFilter, setPendingStatusFilter] = useState<
+    "all" | "VERIFIED" | "PENDING"
+  >("all");
+  const [pendingPaymentTypeFilter, setPendingPaymentTypeFilter] =
+    useState<string>("all");
+  const [receiptModalDonation, setReceiptModalDonation] =
+    useState<Donation | null>(null);
   const [receiptContentLoaded, setReceiptContentLoaded] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isSelectionMode, setIsSelectionMode] = useState(false);
-  const [bulkActionLoading, setBulkActionLoading] = useState<'approve' | 'reject' | 'delete' | null>(null);
+  const [bulkActionLoading, setBulkActionLoading] = useState<
+    "approve" | "reject" | "delete" | null
+  >(null);
   const [isBulkDeleteOpen, setIsBulkDeleteOpen] = useState(false);
   const [limit] = useState(() => getSafeLimit(20));
   const debouncedSearch = useDebounce(searchQuery);
-  const apiBaseUrl = API_BASE_URL ?? '';
-  const apiOrigin = apiBaseUrl.replace('/api/v1', '');
+  const apiBaseUrl = API_BASE_URL ?? "";
+  const apiOrigin = apiBaseUrl.replace("/api/v1", "");
 
   const fundsQuery = useFundsListQuery(mosqueId);
 
   const funds = useMemo(() => fundsQuery.data ?? [], [fundsQuery.data]);
 
   const selectedFundId = useMemo(() => {
-    if (fundTypeFilter === 'all') return undefined;
+    if (fundTypeFilter === "all") return undefined;
     const matched = funds.find((fund) => fund.type === fundTypeFilter);
-    return matched?.id ?? '__missing_fund__';
+    return matched?.id ?? "__missing_fund__";
   }, [fundTypeFilter, funds]);
 
   const donationsQuery = useQuery({
@@ -123,10 +166,15 @@ export default function DonationsPage() {
       donationsService.getAll({
         page,
         limit,
-        donationStatus: donationStatusFilter !== 'all' ? donationStatusFilter : undefined,
-        paymentType: paymentTypeFilter !== 'all' ? (paymentTypeFilter as any) : undefined,
+        donationStatus:
+          donationStatusFilter !== "all" ? donationStatusFilter : undefined,
+        paymentType:
+          paymentTypeFilter !== "all" ? (paymentTypeFilter as any) : undefined,
         fundId: selectedFundId,
-        search: debouncedSearch || undefined,
+        search:
+          debouncedSearch.trim() && isNaN(Number(debouncedSearch.trim()))
+            ? debouncedSearch
+            : undefined,
       }),
     enabled: Boolean(mosqueId) && Boolean(token),
     placeholderData: keepPreviousData,
@@ -161,10 +209,18 @@ export default function DonationsPage() {
         donationsService.getAll({
           page: nextPage,
           limit,
-          donationStatus: donationStatusFilter !== 'all' ? donationStatusFilter : undefined,
-          paymentType: paymentTypeFilter !== 'all' ? (paymentTypeFilter as any) : undefined,
+          donationStatus:
+            donationStatusFilter !== "all" ? donationStatusFilter : undefined,
+          paymentType:
+            paymentTypeFilter !== "all"
+              ? (paymentTypeFilter as any)
+              : undefined,
           fundId: selectedFundId,
-          search: debouncedSearch || undefined,
+          // search: debouncedSearch || undefined,
+          search:
+            debouncedSearch.trim() && isNaN(Number(debouncedSearch.trim()))
+              ? debouncedSearch
+              : undefined,
         }),
       staleTime: 5000,
     });
@@ -190,13 +246,18 @@ export default function DonationsPage() {
     refetchOnMount: false,
     refetchOnWindowFocus: false,
     initialData: () =>
-      queryClient.getQueryData<{ count: number }>(queryKeys.donationsPendingCount(mosqueId)),
+      queryClient.getQueryData<{ count: number }>(
+        queryKeys.donationsPendingCount(mosqueId),
+      ),
   });
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => donationsService.delete(id),
     onMutate: async (id: string) => {
-      await queryClient.cancelQueries({ queryKey: queryKeys.donationsRoot(mosqueId), exact: false });
+      await queryClient.cancelQueries({
+        queryKey: queryKeys.donationsRoot(mosqueId),
+        exact: false,
+      });
       const queryKey = queryKeys.donations(mosqueId, {
         page,
         limit,
@@ -224,7 +285,10 @@ export default function DonationsPage() {
     },
     onSuccess: async () => {
       await invalidateDonationMutationQueries(queryClient, mosqueId);
-      await queryClient.invalidateQueries({ queryKey: queryKeys.funds(mosqueId), exact: false });
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.funds(mosqueId),
+        exact: false,
+      });
       await invalidateMoneyQueries(queryClient, mosqueId);
     },
   });
@@ -238,19 +302,19 @@ export default function DonationsPage() {
   });
 
   useEffect(() => {
-    const status = (searchParams.get('status') || '').toLowerCase();
-    if (status === 'verified') {
-      setDonationStatusFilter('VERIFIED');
-      setPendingStatusFilter('VERIFIED');
+    const status = (searchParams.get("status") || "").toLowerCase();
+    if (status === "verified") {
+      setDonationStatusFilter("VERIFIED");
+      setPendingStatusFilter("VERIFIED");
       return;
     }
-    if (status === 'pending') {
-      setDonationStatusFilter('PENDING');
-      setPendingStatusFilter('PENDING');
+    if (status === "pending") {
+      setDonationStatusFilter("PENDING");
+      setPendingStatusFilter("PENDING");
       return;
     }
-    setDonationStatusFilter('all');
-    setPendingStatusFilter('all');
+    setDonationStatusFilter("all");
+    setPendingStatusFilter("all");
   }, [searchParams]);
 
   useEffect(() => {
@@ -263,7 +327,9 @@ export default function DonationsPage() {
 
   useEffect(() => {
     if (donationsQuery.error) {
-      toast.error(getErrorMessage(donationsQuery.error, 'Failed to load donations'));
+      toast.error(
+        getErrorMessage(donationsQuery.error, "Failed to load donations"),
+      );
     }
   }, [donationsQuery.error]);
 
@@ -273,9 +339,9 @@ export default function DonationsPage() {
     setLoadingId(id);
     try {
       await deleteMutation.mutateAsync(id);
-      toast.success('Donation deleted');
+      toast.success("Donation deleted");
     } catch (error) {
-      toast.error(getErrorMessage(error, 'Failed to delete donation'));
+      toast.error(getErrorMessage(error, "Failed to delete donation"));
     } finally {
       setLoadingId(null);
     }
@@ -289,10 +355,10 @@ export default function DonationsPage() {
     if (!canEditAction) return;
     try {
       await approveMutation.mutateAsync(id);
-      toast.success('Donation approved');
+      toast.success("Donation approved");
       await invalidateDonationQueries();
     } catch (error) {
-      toast.error(getErrorMessage(error, 'Failed to approve donation'));
+      toast.error(getErrorMessage(error, "Failed to approve donation"));
     }
   };
 
@@ -300,31 +366,38 @@ export default function DonationsPage() {
     if (!canEditAction) return;
     try {
       await rejectMutation.mutateAsync(id);
-      toast.success('Donation rejected');
+      toast.success("Donation rejected");
       await invalidateDonationQueries();
     } catch (error) {
-      toast.error(getErrorMessage(error, 'Failed to reject donation'));
+      toast.error(getErrorMessage(error, "Failed to reject donation"));
     }
   };
 
-  const handleBulkAction = async (action: 'approve' | 'reject') => {
+  const handleBulkAction = async (action: "approve" | "reject") => {
     if (!canEditAction) return;
 
     const targetIds = donations
-      .filter((item) => selectedIds.includes(item.id) && item.donationStatus === 'PENDING')
+      .filter(
+        (item) =>
+          selectedIds.includes(item.id) && item.donationStatus === "PENDING",
+      )
       .map((item) => item.id);
 
     if (targetIds.length === 0) {
-      toast.error('Select at least one pending donation');
+      toast.error("Select at least one pending donation");
       return;
     }
 
     setBulkActionLoading(action);
     try {
-      if (action === 'approve') {
-        await Promise.allSettled(targetIds.map((id) => donationsService.approvePending(id)));
+      if (action === "approve") {
+        await Promise.allSettled(
+          targetIds.map((id) => donationsService.approvePending(id)),
+        );
       } else {
-        await Promise.allSettled(targetIds.map((id) => donationsService.rejectPending(id)));
+        await Promise.allSettled(
+          targetIds.map((id) => donationsService.rejectPending(id)),
+        );
       }
       setSelectedIds([]);
       toast.success(`Bulk ${action} completed`);
@@ -344,8 +417,12 @@ export default function DonationsPage() {
           const response = await donationsService.getAll({
             page: currentPage,
             limit,
-            donationStatus: donationStatusFilter !== 'all' ? donationStatusFilter : undefined,
-            paymentType: paymentTypeFilter !== 'all' ? (paymentTypeFilter as any) : undefined,
+            donationStatus:
+              donationStatusFilter !== "all" ? donationStatusFilter : undefined,
+            paymentType:
+              paymentTypeFilter !== "all"
+                ? (paymentTypeFilter as any)
+                : undefined,
             fundId: selectedFundId,
             search: debouncedSearch || undefined,
           });
@@ -360,16 +437,28 @@ export default function DonationsPage() {
 
       await downloadPdfExport({
         filename: `donations-${Date.now()}.pdf`,
-        title: 'Donations Export',
+        title: "Donations Export",
         rows,
         columns: [
-          { header: 'Date', value: (row) => formatDate(row.createdAt) },
-          { header: 'Donor', value: (row) => row.donorName?.trim() || 'Anonymous' },
-          { header: 'Contact', value: (row) => row.donorPhone ?? row.donorEmail ?? '-' },
-          { header: 'Amount', value: (row) => formatCurrency(row.amount, row.currency ?? '₹') },
-          { header: 'Payment Type', value: (row) => formatPaymentType(row.paymentType) },
-          { header: 'Status', value: (row) => row.donationStatus },
-          { header: 'Recorded By', value: (row) => row.createdByName ?? '-' },
+          { header: "Date", value: (row) => formatDate(row.createdAt) },
+          {
+            header: "Donor",
+            value: (row) => row.donorName?.trim() || "Anonymous",
+          },
+          {
+            header: "Contact",
+            value: (row) => row.donorPhone ?? row.donorEmail ?? "-",
+          },
+          {
+            header: "Amount",
+            value: (row) => formatCurrency(row.amount, row.currency ?? "₹"),
+          },
+          {
+            header: "Payment Type",
+            value: (row) => formatPaymentType(row.paymentType),
+          },
+          { header: "Status", value: (row) => row.donationStatus },
+          { header: "Recorded By", value: (row) => row.createdByName ?? "-" },
         ],
       });
 
@@ -377,26 +466,69 @@ export default function DonationsPage() {
         toast.info(`Export capped at ${EXPORT_MAX_ROWS} rows`);
       }
     } catch (error) {
-      toast.error(getErrorMessage(error, 'Failed to export donations'));
+      toast.error(getErrorMessage(error, "Failed to export donations"));
     } finally {
       setIsExporting(false);
     }
   };
 
-  const donations = donationsQuery.data?.data ?? [];
+  // const donations = donationsQuery.data?.data ?? [];
+  // const currentPage = donationsQuery.data?.page ?? page;
+  // const currentLimit = donationsQuery.data?.pageSize ?? limit;
+  const rawDonations = donationsQuery.data?.data ?? [];
+
+  const donations = useMemo(() => {
+    const normalizedSearch = debouncedSearch.trim().toLowerCase();
+
+    if (!normalizedSearch) {
+      return rawDonations;
+    }
+
+    return rawDonations.filter((donation) => {
+      const searchableValues = [
+        donation.donorName,
+        donation.donorPhone,
+        donation.donorEmail,
+        donation.paymentType,
+        donation.donationStatus,
+        donation.createdByName,
+        donation.fund?.name,
+        donation.id,
+        // String(donation.amount ?? ""),
+        Number(donation.amount ?? 0).toFixed(2),
+        Number(donation.amount ?? 0).toString(),
+      ];
+
+      return searchableValues.some((value) =>
+        String(value ?? "")
+          .trim()
+          .toLowerCase()
+          .includes(normalizedSearch),
+      );
+    });
+  }, [rawDonations, debouncedSearch]);
+
   const currentPage = donationsQuery.data?.page ?? page;
   const currentLimit = donationsQuery.data?.pageSize ?? limit;
+  // const currentTotal = donationsQuery.data?.total ?? 0;
   const currentTotal = donationsQuery.data?.total ?? 0;
   const canGoPrevious = currentPage > 1;
   const canGoNext = currentPage * currentLimit < currentTotal;
   const isLoading = donationsQuery.isLoading;
 
   const pendingCount = pendingCountQuery.data?.count ?? 0;
-  const selectedDonations = donations.filter((item) => selectedIds.includes(item.id));
+  const selectedDonations = donations.filter((item) =>
+    selectedIds.includes(item.id),
+  );
   const hasSelectedItems = selectedDonations.length > 0;
-  const allSelectedPending = hasSelectedItems && selectedDonations.every((item) => item.donationStatus === 'PENDING');
+  const allSelectedPending =
+    hasSelectedItems &&
+    selectedDonations.every((item) => item.donationStatus === "PENDING");
   const selectableDonationIds = donations
-    .filter((item) => item.donationStatus === 'PENDING' || item.donationStatus === 'VERIFIED')
+    .filter(
+      (item) =>
+        item.donationStatus === "PENDING" || item.donationStatus === "VERIFIED",
+    )
     .map((item) => item.id);
 
   const toggleSelectionMode = () => {
@@ -420,16 +552,18 @@ export default function DonationsPage() {
     const targetIds = selectedDonations.map((item) => item.id);
 
     if (targetIds.length === 0) {
-      toast.error('Select at least one donation');
+      toast.error("Select at least one donation");
       return;
     }
 
-    setBulkActionLoading('delete');
+    setBulkActionLoading("delete");
     try {
-      await Promise.allSettled(targetIds.map((id) => donationsService.delete(id)));
+      await Promise.allSettled(
+        targetIds.map((id) => donationsService.delete(id)),
+      );
       setSelectedIds([]);
       setIsBulkDeleteOpen(false);
-      toast.success('Selected donations moved to trash');
+      toast.success("Selected donations moved to trash");
       await invalidateDonationQueries();
       await invalidateMoneyQueries(queryClient, mosqueId);
     } finally {
@@ -437,24 +571,33 @@ export default function DonationsPage() {
     }
   };
 
-  const tabs: Array<{ label: string; value: 'all' | 'PENDING' | 'VERIFIED' }> = [
-    { label: 'All', value: 'all' },
-    { label: 'Pending', value: 'PENDING' },
-    { label: 'Verified', value: 'VERIFIED' },
-  ];
+  const tabs: Array<{ label: string; value: "all" | "PENDING" | "VERIFIED" }> =
+    [
+      { label: "All", value: "all" },
+      { label: "Pending", value: "PENDING" },
+      { label: "Verified", value: "VERIFIED" },
+    ];
 
   return (
     <div className="ds-section ds-stack">
       <div className="space-y-2">
         <div className="flex items-center justify-between gap-2">
           <div>
-          <h1 className="text-xl font-semibold text-foreground">Donations</h1>
-          <p className="text-sm text-muted-foreground">Manage and track all donations received</p>
-        </div>
+            <h1 className="text-xl font-semibold text-foreground">Donations</h1>
+            <p className="text-sm text-muted-foreground">
+              Manage and track all donations received
+            </p>
+          </div>
           {canViewPendingCount ? (
-            <Button type="button" variant="outline" size="sm" className="h-8 rounded-md px-3" onClick={toggleSelectionMode}>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 rounded-md px-3"
+              onClick={toggleSelectionMode}
+            >
               <ListChecks className="mr-1 h-3.5 w-3.5" />
-              {isSelectionMode ? 'Done' : 'Select'}
+              {isSelectionMode ? "Done" : "Select"}
             </Button>
           ) : null}
         </div>
@@ -464,7 +607,9 @@ export default function DonationsPage() {
             <div key={tab.value} className="relative">
               <Button
                 type="button"
-                variant={donationStatusFilter === tab.value ? 'default' : 'outline'}
+                variant={
+                  donationStatusFilter === tab.value ? "default" : "outline"
+                }
                 size="sm"
                 onClick={() => {
                   setDonationStatusFilter(tab.value);
@@ -474,8 +619,13 @@ export default function DonationsPage() {
               >
                 <span className="truncate">{tab.label}</span>
               </Button>
-              {tab.value === 'PENDING' && canViewPendingCount && pendingCount > 0 ? (
-                <Badge variant="destructive" className="absolute -right-1 -top-1 h-4 min-w-4 rounded-full px-1 text-[10px] leading-none">
+              {tab.value === "PENDING" &&
+              canViewPendingCount &&
+              pendingCount > 0 ? (
+                <Badge
+                  variant="destructive"
+                  className="absolute -right-1 -top-1 h-4 min-w-4 rounded-full px-1 text-[10px] leading-none"
+                >
                   {pendingCount}
                 </Badge>
               ) : null}
@@ -494,29 +644,69 @@ export default function DonationsPage() {
             className="h-9 flex-1 rounded-md"
           />
           <div className="flex items-center gap-1">
-            <Button type="button" variant="outline" size="icon" className="h-9 w-9 rounded-md" onClick={() => setIsFiltersOpen(true)}>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="h-9 w-9 rounded-md"
+              onClick={() => setIsFiltersOpen(true)}
+            >
               <SlidersHorizontal className="h-4 w-4" />
             </Button>
-            <Button variant="outline" size="icon" className="h-9 w-9 rounded-md" onClick={handleExport} disabled={isExporting}>
-              {isExporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-9 w-9 rounded-md"
+              onClick={handleExport}
+              disabled={isExporting}
+            >
+              {isExporting ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Download className="h-4 w-4" />
+              )}
             </Button>
           </div>
         </div>
 
         {isSelectionMode ? (
           <div className="flex items-center gap-1">
-            <p className="text-xs font-semibold text-foreground">Selected: {selectedIds.length}</p>
-            <Button type="button" variant="outline" size="sm" className="h-8 rounded-md px-2 text-xs" onClick={selectAllPending}>
+            <p className="text-xs font-semibold text-foreground">
+              Selected: {selectedIds.length}
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 rounded-md px-2 text-xs"
+              onClick={selectAllPending}
+            >
               Select All
             </Button>
             {allSelectedPending ? (
               <>
-                <Button size="sm" variant="outline" className="h-8 rounded-md border border-green-200 bg-transparent px-2 text-xs text-green-600 hover:bg-green-50" disabled={bulkActionLoading !== null} onClick={() => handleBulkAction('approve')}>
-                  {bulkActionLoading === 'approve' ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-8 rounded-md border border-green-200 bg-transparent px-2 text-xs text-green-600 hover:bg-green-50"
+                  disabled={bulkActionLoading !== null}
+                  onClick={() => handleBulkAction("approve")}
+                >
+                  {bulkActionLoading === "approve" ? (
+                    <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                  ) : null}
                   Approve
                 </Button>
-                <Button size="sm" variant="outline" className="h-8 rounded-md border border-red-200 bg-transparent px-2 text-xs text-red-600 hover:bg-red-50" disabled={bulkActionLoading !== null} onClick={() => handleBulkAction('reject')}>
-                  {bulkActionLoading === 'reject' ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-8 rounded-md border border-red-200 bg-transparent px-2 text-xs text-red-600 hover:bg-red-50"
+                  disabled={bulkActionLoading !== null}
+                  onClick={() => handleBulkAction("reject")}
+                >
+                  {bulkActionLoading === "reject" ? (
+                    <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                  ) : null}
                   Reject
                 </Button>
               </>
@@ -528,11 +718,19 @@ export default function DonationsPage() {
                 disabled={bulkActionLoading !== null}
                 onClick={() => setIsBulkDeleteOpen(true)}
               >
-                {bulkActionLoading === 'delete' ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
+                {bulkActionLoading === "delete" ? (
+                  <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                ) : null}
                 Delete
               </Button>
             ) : null}
-            <Button type="button" variant="ghost" size="sm" className="h-8 rounded-md px-2 text-xs" onClick={() => setSelectedIds([])}>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-8 rounded-md px-2 text-xs"
+              onClick={() => setSelectedIds([])}
+            >
               Clear
             </Button>
           </div>
@@ -557,18 +755,26 @@ export default function DonationsPage() {
               <ListEmptyState
                 title="No donations yet"
                 description="Start by recording your first donation."
-                actionLabel={canManageDonations && canCreateAction ? 'Add Donation' : 'Clear Filters'}
-                actionHref={canManageDonations && canCreateAction ? '/dashboard/donations/add' : undefined}
+                actionLabel={
+                  canManageDonations && canCreateAction
+                    ? "Add Donation"
+                    : "Clear Filters"
+                }
+                actionHref={
+                  canManageDonations && canCreateAction
+                    ? "/dashboard/donations/add"
+                    : undefined
+                }
                 onAction={
                   canManageDonations && canCreateAction
                     ? undefined
                     : () => {
-                        setSearchQuery('');
-                        setDonationStatusFilter('all');
-                        setPendingStatusFilter('all');
-                        setPaymentTypeFilter('all');
-                        setPendingPaymentTypeFilter('all');
-                        setFundTypeFilter('all');
+                        setSearchQuery("");
+                        setDonationStatusFilter("all");
+                        setPendingStatusFilter("all");
+                        setPaymentTypeFilter("all");
+                        setPendingPaymentTypeFilter("all");
+                        setFundTypeFilter("all");
                         setPage(1);
                       }
                 }
@@ -578,21 +784,29 @@ export default function DonationsPage() {
         ) : (
           donations.map((donation) => {
             const isDeleting = loadingId === donation.id;
-            const canReview = canViewPendingCount && donation.donationStatus === 'PENDING';
-            const canEditDonation = canManageDonations && canEditAction && (
-              donation.donationStatus === 'PENDING' ||
-              (!isTreasurer && donation.donationStatus === 'VERIFIED')
-            );
-            const statusClass = donation.donationStatus === 'PENDING'
-              ? 'bg-amber-100 text-amber-900'
-              : 'bg-emerald-100 text-emerald-900';
-            const roleText = (donation.createdByRole ?? 'UNKNOWN').toUpperCase();
-            const roleClass = roleText === 'SUPER_ADMIN'
-              ? 'bg-emerald-100 text-emerald-800'
-              : roleText === 'ADMIN'
-                ? 'bg-green-100 text-green-700'
-                : 'bg-blue-100 text-blue-700';
-            const isSelectable = donation.donationStatus === 'PENDING' || donation.donationStatus === 'VERIFIED';
+            const canReview =
+              canViewPendingCount && donation.donationStatus === "PENDING";
+            const canEditDonation =
+              canManageDonations &&
+              canEditAction &&
+              (donation.donationStatus === "PENDING" ||
+                (!isTreasurer && donation.donationStatus === "VERIFIED"));
+            const statusClass =
+              donation.donationStatus === "PENDING"
+                ? "bg-amber-100 text-amber-900"
+                : "bg-emerald-100 text-emerald-900";
+            const roleText = (
+              donation.createdByRole ?? "UNKNOWN"
+            ).toUpperCase();
+            const roleClass =
+              roleText === "SUPER_ADMIN"
+                ? "bg-emerald-100 text-emerald-800"
+                : roleText === "ADMIN"
+                  ? "bg-green-100 text-green-700"
+                  : "bg-blue-100 text-blue-700";
+            const isSelectable =
+              donation.donationStatus === "PENDING" ||
+              donation.donationStatus === "VERIFIED";
             const toggleSelection = () => {
               if (!isSelectable) return;
               setSelectedIds((prev) =>
@@ -606,9 +820,9 @@ export default function DonationsPage() {
                 key={donation.id}
                 className={`space-y-2 rounded-lg border px-4 shadow-sm cursor-pointer ${
                   isSelectionMode && selectedIds.includes(donation.id)
-                    ? 'border-emerald-400 bg-emerald-50/40'
-                    : ''
-                } ${isSelectionMode ? 'py-2.5' : 'py-3'}`}
+                    ? "border-emerald-400 bg-emerald-50/40"
+                    : ""
+                } ${isSelectionMode ? "py-2.5" : "py-3"}`}
                 onClick={(e) => {
                   if (isSelectionMode) {
                     e.preventDefault();
@@ -631,83 +845,122 @@ export default function DonationsPage() {
                         className="mt-0.5"
                       />
                     ) : null}
-                    <p className="truncate text-base font-semibold text-foreground">{donation.donorName?.trim() || 'Anonymous'}</p>
+                    <p className="truncate text-base font-semibold text-foreground">
+                      {donation.donorName?.trim() || "Anonymous"}
+                    </p>
                   </div>
-                  <p className="font-semibold text-green-600">{formatCurrency(donation.amount, donation.currency ?? '₹')}</p>
+                  <p className="font-semibold text-green-600">
+                    {formatCurrency(donation.amount, donation.currency ?? "₹")}
+                  </p>
                 </div>
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-xs text-muted-foreground">
-                    {formatDate(donation.createdAt)} • {formatPaymentType(donation.paymentType)}
+                    {formatDate(donation.createdAt)} •{" "}
+                    {formatPaymentType(donation.paymentType)}
                   </p>
-                  <Badge className={`text-xs ${statusClass}`}>{donation.donationStatus}</Badge>
+                  <Badge className={`text-xs ${statusClass}`}>
+                    {donation.donationStatus}
+                  </Badge>
                 </div>
                 {/* <p className="text-xs text-muted-foreground">
                   Contact: {donation.donorPhone || donation.donorEmail || '-'}
                 </p> */}
                 <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-                  <p>{donation.fund?.name ?? '-'}</p>
-                  <Badge variant="secondary" className={`h-5 rounded-md px-2 text-[10px] ${roleClass}`}>{roleText}</Badge>
+                  <p>{donation.fund?.name ?? "-"}</p>
+                  <Badge
+                    variant="secondary"
+                    className={`h-5 rounded-md px-2 text-[10px] ${roleClass}`}
+                  >
+                    {roleText}
+                  </Badge>
                 </div>
                 <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-                  <p className="truncate">Added by: {donation.createdByName ?? 'Unknown'}</p>
+                  <p className="truncate">
+                    Added by: {donation.createdByName ?? "Unknown"}
+                  </p>
                   <span />
                 </div>
                 {!isSelectionMode ? (
-                  <div className="grid grid-cols-3 gap-1 pt-0.5" onClick={(e) => e.stopPropagation()}>
-                  {canReview ? (
-                    <>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-8 rounded-md border border-green-200 bg-transparent px-3 text-xs whitespace-nowrap text-green-600 hover:bg-green-50"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleApprove(donation.id);
-                        }}
-                      >
-                        Approve
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-8 rounded-md border border-red-200 bg-transparent px-3 text-xs whitespace-nowrap text-red-600 hover:bg-red-50"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleReject(donation.id);
-                        }}
-                      >
-                        Reject
-                      </Button>
-                    </>
-                  ) : null}
-                  {!canReview ? (
-                    <>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-8 rounded-md px-3 text-xs whitespace-nowrap"
-                        disabled={!canEditDonation}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (!canEditDonation) return;
-                          router.push(`/dashboard/donations/${donation.id}/edit`);
-                        }}
-                      >
-                        Edit
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-8 rounded-md border border-red-200 bg-red-50 px-3 text-xs whitespace-nowrap text-red-700 hover:bg-red-100"
-                        disabled={!(donation.donationStatus === 'VERIFIED' && canDelete && canDeleteAction) || isDeleting}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (!canDeleteAction || !canDelete) return;
-                          setConfirmDeleteId(donation.id);
-                        }}
-                      >
-                        Delete
-                      </Button>
+                  <div
+                    className="grid grid-cols-3 gap-1 pt-0.5"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {canReview ? (
+                      <>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-8 rounded-md border border-green-200 bg-transparent px-3 text-xs whitespace-nowrap text-green-600 hover:bg-green-50"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleApprove(donation.id);
+                          }}
+                        >
+                          Approve
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-8 rounded-md border border-red-200 bg-transparent px-3 text-xs whitespace-nowrap text-red-600 hover:bg-red-50"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleReject(donation.id);
+                          }}
+                        >
+                          Reject
+                        </Button>
+                      </>
+                    ) : null}
+                    {!canReview ? (
+                      <>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-8 rounded-md px-3 text-xs whitespace-nowrap"
+                          disabled={!canEditDonation}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (!canEditDonation) return;
+                            router.push(
+                              `/dashboard/donations/${donation.id}/edit`,
+                            );
+                          }}
+                        >
+                          Edit
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-8 rounded-md border border-red-200 bg-red-50 px-3 text-xs whitespace-nowrap text-red-700 hover:bg-red-100"
+                          disabled={
+                            !(
+                              donation.donationStatus === "VERIFIED" &&
+                              canDelete &&
+                              canDeleteAction
+                            ) || isDeleting
+                          }
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (!canDeleteAction || !canDelete) return;
+                            setConfirmDeleteId(donation.id);
+                          }}
+                        >
+                          Delete
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-8 rounded-md border border-gray-200 bg-transparent px-3 text-xs whitespace-nowrap text-muted-foreground hover:bg-gray-50"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setReceiptModalDonation(donation);
+                            setReceiptContentLoaded(false);
+                          }}
+                        >
+                          Receipt
+                        </Button>
+                      </>
+                    ) : (
                       <Button
                         variant="outline"
                         size="sm"
@@ -720,21 +973,7 @@ export default function DonationsPage() {
                       >
                         Receipt
                       </Button>
-                    </>
-                  ) : (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-8 rounded-md border border-gray-200 bg-transparent px-3 text-xs whitespace-nowrap text-muted-foreground hover:bg-gray-50"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setReceiptModalDonation(donation);
-                        setReceiptContentLoaded(false);
-                      }}
-                    >
-                      Receipt
-                    </Button>
-                  )}
+                    )}
                   </div>
                 ) : null}
               </div>
@@ -772,7 +1011,7 @@ export default function DonationsPage() {
       {canManageDonations && canCreateAction ? (
         <Button
           type="button"
-          onClick={() => router.push('/dashboard/donations/add')}
+          onClick={() => router.push("/dashboard/donations/add")}
           className="fixed bottom-20 right-4 h-14 w-14 rounded-full p-0 text-xl shadow-lg"
           aria-label="Add donation"
         >
@@ -786,7 +1025,10 @@ export default function DonationsPage() {
             <SheetTitle>Filters</SheetTitle>
           </SheetHeader>
           <div className="mt-4 ds-stack">
-            <Select value={pendingStatusFilter} onValueChange={(v) => setPendingStatusFilter(v as any)}>
+            <Select
+              value={pendingStatusFilter}
+              onValueChange={(v) => setPendingStatusFilter(v as any)}
+            >
               <SelectTrigger>
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
@@ -796,7 +1038,10 @@ export default function DonationsPage() {
                 <SelectItem value="PENDING">Pending</SelectItem>
               </SelectContent>
             </Select>
-            <Select value={pendingPaymentTypeFilter} onValueChange={setPendingPaymentTypeFilter}>
+            <Select
+              value={pendingPaymentTypeFilter}
+              onValueChange={setPendingPaymentTypeFilter}
+            >
               <SelectTrigger>
                 <SelectValue placeholder="Type" />
               </SelectTrigger>
@@ -836,13 +1081,21 @@ export default function DonationsPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Are you sure?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will delete this donation and move it to Trash. You can restore it later.
+              This will delete this donation and move it to Trash. You can
+              restore it later.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={Boolean(loadingId)}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={Boolean(loadingId)}>
+              Cancel
+            </AlertDialogCancel>
             <AlertDialogAction
-              disabled={!confirmDeleteId || Boolean(loadingId) || !canDeleteAction || !canDelete}
+              disabled={
+                !confirmDeleteId ||
+                Boolean(loadingId) ||
+                !canDeleteAction ||
+                !canDelete
+              }
               onClick={(e) => {
                 e.preventDefault();
                 if (!confirmDeleteId) return;
@@ -851,7 +1104,9 @@ export default function DonationsPage() {
                 });
               }}
             >
-              {loadingId ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              {loadingId ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : null}
               Delete
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -863,19 +1118,26 @@ export default function DonationsPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete selected items?</AlertDialogTitle>
             <AlertDialogDescription>
-              You are about to delete {selectedIds.length} items. They will be moved to trash.
+              You are about to delete {selectedIds.length} items. They will be
+              moved to trash.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={bulkActionLoading === 'delete'}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={bulkActionLoading === "delete"}>
+              Cancel
+            </AlertDialogCancel>
             <AlertDialogAction
-              disabled={bulkActionLoading === 'delete' || !canDeleteAction || !canDelete}
+              disabled={
+                bulkActionLoading === "delete" || !canDeleteAction || !canDelete
+              }
               onClick={(e) => {
                 e.preventDefault();
                 void handleBulkDelete();
               }}
             >
-              {bulkActionLoading === 'delete' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              {bulkActionLoading === "delete" ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : null}
               Delete
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -896,8 +1158,8 @@ export default function DonationsPage() {
             <DialogTitle>Donation Receipt</DialogTitle>
             <DialogDescription>
               {receiptModalDonation
-                ? `${receiptModalDonation.donorName?.trim() || 'Anonymous'} • ${formatCurrency(receiptModalDonation.amount, receiptModalDonation.currency ?? '₹')}`
-                : 'Receipt preview'}
+                ? `${receiptModalDonation.donorName?.trim() || "Anonymous"} • ${formatCurrency(receiptModalDonation.amount, receiptModalDonation.currency ?? "₹")}`
+                : "Receipt preview"}
             </DialogDescription>
           </DialogHeader>
 
@@ -910,23 +1172,35 @@ export default function DonationsPage() {
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Date</p>
-                  <p className="font-medium">{formatDate(receiptModalDonation.createdAt)}</p>
+                  <p className="font-medium">
+                    {formatDate(receiptModalDonation.createdAt)}
+                  </p>
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Status</p>
-                  <p className="font-medium">{receiptModalDonation.donationStatus}</p>
+                  <p className="font-medium">
+                    {receiptModalDonation.donationStatus}
+                  </p>
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Payment Type</p>
-                  <p className="font-medium">{formatPaymentType(receiptModalDonation.paymentType)}</p>
+                  <p className="font-medium">
+                    {formatPaymentType(receiptModalDonation.paymentType)}
+                  </p>
                 </div>
               </div>
 
               {!receiptContentLoaded ? (
-                receiptModalDonation.receipt || receiptModalDonation.donationStatus === 'VERIFIED' ? (
+                receiptModalDonation.receipt ||
+                receiptModalDonation.donationStatus === "VERIFIED" ? (
                   <div className="space-y-3 rounded-md border p-4">
-                    <p className="text-sm text-muted-foreground">Click to load receipt preview</p>
-                    <Button type="button" onClick={() => setReceiptContentLoaded(true)}>
+                    <p className="text-sm text-muted-foreground">
+                      Click to load receipt preview
+                    </p>
+                    <Button
+                      type="button"
+                      onClick={() => setReceiptContentLoaded(true)}
+                    >
                       Load Receipt
                     </Button>
                   </div>
@@ -944,10 +1218,14 @@ export default function DonationsPage() {
                     apiOrigin,
                   );
                   if (!url) {
-                    return <p className="text-sm text-muted-foreground">Receipt preview unavailable.</p>;
+                    return (
+                      <p className="text-sm text-muted-foreground">
+                        Receipt preview unavailable.
+                      </p>
+                    );
                   }
 
-                  const isPdf = url.toLowerCase().includes('.pdf');
+                  const isPdf = url.toLowerCase().includes(".pdf");
                   return (
                     <div className="space-y-2">
                       <p className="text-sm font-medium">Receipt Preview</p>
@@ -959,7 +1237,6 @@ export default function DonationsPage() {
                           className="h-105 w-full rounded-md border"
                         />
                       ) : (
-                         
                         <img
                           src={url}
                           alt="Receipt"
@@ -970,7 +1247,8 @@ export default function DonationsPage() {
                     </div>
                   );
                 })()
-              ) : receiptModalDonation?.intentId && receiptModalDonation.donationStatus === 'VERIFIED' ? (
+              ) : receiptModalDonation?.intentId &&
+                receiptModalDonation.donationStatus === "VERIFIED" ? (
                 <div className="space-y-2">
                   <p className="text-sm font-medium">Verified Receipt</p>
                   <iframe
@@ -1005,7 +1283,9 @@ export default function DonationsPage() {
             ) : receiptModalDonation?.intentId ? (
               <Button
                 onClick={() =>
-                  router.push(`${apiBaseUrl}${donationsService.getPublicReceiptPdfUrl(receiptModalDonation.intentId)}`)
+                  router.push(
+                    `${apiBaseUrl}${donationsService.getPublicReceiptPdfUrl(receiptModalDonation.intentId)}`,
+                  )
                 }
               >
                 Download
@@ -1017,4 +1297,3 @@ export default function DonationsPage() {
     </div>
   );
 }
-

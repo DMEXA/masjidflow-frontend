@@ -1,14 +1,20 @@
-'use client';
+"use client";
 
-import { useState, useEffect, useMemo } from 'react';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { Card, CardContent } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Badge } from '@/components/ui/badge';
-import { Checkbox } from '@/components/ui/checkbox';
+import { useState, useEffect, useMemo } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -18,29 +24,51 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-import { usePermission } from '@/hooks/usePermission';
-import { formatCurrency, formatDate, formatExpenseCategory } from '@/src/utils/format';
-import { getErrorMessage } from '@/src/utils/error';
-import { Download, Loader2, SlidersHorizontal, ListChecks } from 'lucide-react';
-import { toast } from 'sonner';
-import { expensesService } from '@/services/expenses.service';
-import { useAuthStore } from '@/src/store/auth.store';
-import type { Expense } from '@/types';
-import { EXPENSE_CATEGORIES } from '@/src/constants';
-import { collectPaginatedExportRows, downloadPdfExport, EXPORT_MAX_ROWS } from '@/src/utils/export';
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useFundsListQuery } from '@/hooks/useFundsListQuery';
-import { useDebounce } from '@/hooks/useDebounce';
-import { invalidateExpenseMutationQueries, invalidateMoneyQueries } from '@/lib/money-cache';
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import { ListEmptyState } from '@/components/common/list-empty-state';
-import { queryKeys } from '@/lib/query-keys';
-import { getSafeLimit } from '@/src/utils/pagination';
+} from "@/components/ui/alert-dialog";
+import { usePermission } from "@/hooks/usePermission";
+import {
+  formatCurrency,
+  formatDate,
+  formatExpenseCategory,
+} from "@/src/utils/format";
+import { getErrorMessage } from "@/src/utils/error";
+import { Download, Loader2, SlidersHorizontal, ListChecks } from "lucide-react";
+import { toast } from "sonner";
+import { expensesService } from "@/services/expenses.service";
+import { useAuthStore } from "@/src/store/auth.store";
+import type { Expense } from "@/types";
+import { EXPENSE_CATEGORIES } from "@/src/constants";
+import {
+  collectPaginatedExportRows,
+  downloadPdfExport,
+  EXPORT_MAX_ROWS,
+} from "@/src/utils/export";
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
+import { useFundsListQuery } from "@/hooks/useFundsListQuery";
+import { useDebounce } from "@/hooks/useDebounce";
+import {
+  invalidateExpenseMutationQueries,
+  invalidateMoneyQueries,
+} from "@/lib/money-cache";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import { ListEmptyState } from "@/components/common/list-empty-state";
+import { queryKeys } from "@/lib/query-keys";
+import { getSafeLimit } from "@/src/utils/pagination";
 
 export default function ExpensesPage() {
   const router = useRouter();
-  const { canManageExpenses, canDelete, isAdmin, isSuperAdmin, isTreasurer } = usePermission();
+  const { canManageExpenses, canDelete, isAdmin, isSuperAdmin, isTreasurer } =
+    usePermission();
   const canViewPendingCount = isAdmin || isSuperAdmin;
   const queryClient = useQueryClient();
   const { mosque, token, user } = useAuthStore();
@@ -49,22 +77,30 @@ export default function ExpensesPage() {
     canEdit: canEditAction,
     canDelete: canDeleteAction,
   } = usePermission(user?.role);
-  const mosqueId = mosque?.id ?? 'none';
-  const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'PENDING' | 'VERIFIED' | 'INITIATED'>('all');
-  const [categoryFilter, setCategoryFilter] = useState<string>('all');
-  const [fundTypeFilter, setFundTypeFilter] = useState<string>('all');
+  const mosqueId = mosque?.id ?? "none";
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<
+    "all" | "PENDING" | "VERIFIED" | "INITIATED"
+  >("all");
+  const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [fundTypeFilter, setFundTypeFilter] = useState<string>("all");
   const [page, setPage] = useState(1);
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
   const [isSelectionMode, setIsSelectionMode] = useState(false);
-  const [pendingStatusFilter, setPendingStatusFilter] = useState<'all' | 'PENDING' | 'VERIFIED' | 'INITIATED'>('all');
-  const [pendingCategoryFilter, setPendingCategoryFilter] = useState<string>('all');
-  const [pendingFundTypeFilter, setPendingFundTypeFilter] = useState<string>('all');
+  const [pendingStatusFilter, setPendingStatusFilter] = useState<
+    "all" | "PENDING" | "VERIFIED" | "INITIATED"
+  >("all");
+  const [pendingCategoryFilter, setPendingCategoryFilter] =
+    useState<string>("all");
+  const [pendingFundTypeFilter, setPendingFundTypeFilter] =
+    useState<string>("all");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [bulkActionLoading, setBulkActionLoading] = useState<'approve' | 'reject' | 'delete' | null>(null);
+  const [bulkActionLoading, setBulkActionLoading] = useState<
+    "approve" | "reject" | "delete" | null
+  >(null);
   const [isBulkDeleteOpen, setIsBulkDeleteOpen] = useState(false);
   const [limit] = useState(() => getSafeLimit(20));
   const debouncedSearch = useDebounce(searchQuery);
@@ -73,9 +109,9 @@ export default function ExpensesPage() {
   const funds = useMemo(() => fundsQuery.data ?? [], [fundsQuery.data]);
 
   const selectedFundId = useMemo(() => {
-    if (fundTypeFilter === 'all') return undefined;
+    if (fundTypeFilter === "all") return undefined;
     const matched = funds.find((fund) => fund.type === fundTypeFilter);
-    return matched?.id ?? '__missing_fund__';
+    return matched?.id ?? "__missing_fund__";
   }, [fundTypeFilter, funds]);
 
   useEffect(() => {
@@ -104,16 +140,21 @@ export default function ExpensesPage() {
         page,
         pageSize: limit,
         status:
-          statusFilter === 'all'
+          statusFilter === "all"
             ? undefined
-            : statusFilter === 'VERIFIED'
-              ? 'APPROVED'
-              : statusFilter === 'INITIATED'
-                ? 'REJECTED'
-                : 'PENDING',
-        category: categoryFilter !== 'all' ? (categoryFilter as any) : undefined,
+            : statusFilter === "VERIFIED"
+              ? "APPROVED"
+              : statusFilter === "INITIATED"
+                ? "REJECTED"
+                : "PENDING",
+        category:
+          categoryFilter !== "all" ? (categoryFilter as any) : undefined,
         fundId: selectedFundId,
-        search: debouncedSearch || undefined,
+        // search: debouncedSearch || undefined,
+        search:
+          debouncedSearch.trim() && isNaN(Number(debouncedSearch.trim()))
+            ? debouncedSearch
+            : undefined,
       }),
     enabled: Boolean(mosque?.id) && Boolean(token),
     placeholderData: keepPreviousData,
@@ -149,16 +190,21 @@ export default function ExpensesPage() {
           page: nextPage,
           pageSize: limit,
           status:
-            statusFilter === 'all'
+            statusFilter === "all"
               ? undefined
-              : statusFilter === 'VERIFIED'
-                ? 'APPROVED'
-                : statusFilter === 'INITIATED'
-                  ? 'REJECTED'
-                  : 'PENDING',
-          category: categoryFilter !== 'all' ? (categoryFilter as any) : undefined,
+              : statusFilter === "VERIFIED"
+                ? "APPROVED"
+                : statusFilter === "INITIATED"
+                  ? "REJECTED"
+                  : "PENDING",
+          category:
+            categoryFilter !== "all" ? (categoryFilter as any) : undefined,
           fundId: selectedFundId,
-          search: debouncedSearch || undefined,
+          // search: debouncedSearch || undefined,
+          search:
+            debouncedSearch.trim() && isNaN(Number(debouncedSearch.trim()))
+              ? debouncedSearch
+              : undefined,
         }),
       staleTime: 5000,
     });
@@ -179,7 +225,9 @@ export default function ExpensesPage() {
 
   useEffect(() => {
     if (expensesQuery.error) {
-      toast.error(getErrorMessage(expensesQuery.error, 'Failed to load expenses'));
+      toast.error(
+        getErrorMessage(expensesQuery.error, "Failed to load expenses"),
+      );
     }
   }, [expensesQuery.error]);
 
@@ -195,7 +243,10 @@ export default function ExpensesPage() {
   const deleteMutation = useMutation({
     mutationFn: (id: string) => expensesService.delete(id),
     onMutate: async (id: string) => {
-      await queryClient.cancelQueries({ queryKey: queryKeys.expensesRoot(mosqueId), exact: false });
+      await queryClient.cancelQueries({
+        queryKey: queryKeys.expensesRoot(mosqueId),
+        exact: false,
+      });
       const listQueryKey = queryKeys.expenses(mosqueId, {
         page,
         pageSize: limit,
@@ -223,7 +274,10 @@ export default function ExpensesPage() {
     },
     onSuccess: async () => {
       await invalidateExpenseMutationQueries(queryClient, mosque?.id);
-      await queryClient.invalidateQueries({ queryKey: queryKeys.funds(mosque?.id), exact: false });
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.funds(mosque?.id),
+        exact: false,
+      });
       await invalidateMoneyQueries(queryClient, mosque?.id);
     },
   });
@@ -242,9 +296,9 @@ export default function ExpensesPage() {
     setLoadingId(id);
     try {
       await deleteMutation.mutateAsync(id);
-      toast.success('Expense deleted');
+      toast.success("Expense deleted");
     } catch (error) {
-      toast.error(getErrorMessage(error, 'Failed to delete expense'));
+      toast.error(getErrorMessage(error, "Failed to delete expense"));
     } finally {
       setLoadingId(null);
     }
@@ -254,10 +308,10 @@ export default function ExpensesPage() {
     if (!canEditAction) return;
     try {
       await approveMutation.mutateAsync(id);
-      toast.success('Expense approved');
+      toast.success("Expense approved");
       await invalidateExpenseMutationQueries(queryClient, mosque?.id);
     } catch (error) {
-      toast.error(getErrorMessage(error, 'Failed to approve expense'));
+      toast.error(getErrorMessage(error, "Failed to approve expense"));
     }
   };
 
@@ -265,31 +319,37 @@ export default function ExpensesPage() {
     if (!canEditAction) return;
     try {
       await rejectMutation.mutateAsync(id);
-      toast.success('Expense rejected');
+      toast.success("Expense rejected");
       await invalidateExpenseMutationQueries(queryClient, mosque?.id);
     } catch (error) {
-      toast.error(getErrorMessage(error, 'Failed to reject expense'));
+      toast.error(getErrorMessage(error, "Failed to reject expense"));
     }
   };
 
-  const handleBulkAction = async (action: 'approve' | 'reject') => {
+  const handleBulkAction = async (action: "approve" | "reject") => {
     if (!canEditAction) return;
 
     const targetIds = expenses
-      .filter((item) => selectedIds.includes(item.id) && item.status === 'PENDING')
+      .filter(
+        (item) => selectedIds.includes(item.id) && item.status === "PENDING",
+      )
       .map((item) => item.id);
 
     if (targetIds.length === 0) {
-      toast.error('Select at least one pending expense');
+      toast.error("Select at least one pending expense");
       return;
     }
 
     setBulkActionLoading(action);
     try {
-      if (action === 'approve') {
-        await Promise.allSettled(targetIds.map((id) => expensesService.approve(id)));
+      if (action === "approve") {
+        await Promise.allSettled(
+          targetIds.map((id) => expensesService.approve(id)),
+        );
       } else {
-        await Promise.allSettled(targetIds.map((id) => expensesService.reject(id)));
+        await Promise.allSettled(
+          targetIds.map((id) => expensesService.reject(id)),
+        );
       }
       setSelectedIds([]);
       toast.success(`Bulk ${action} completed`);
@@ -310,16 +370,21 @@ export default function ExpensesPage() {
             page: currentPage,
             pageSize: limit,
             status:
-              statusFilter === 'all'
+              statusFilter === "all"
                 ? undefined
-                : statusFilter === 'VERIFIED'
-                  ? 'APPROVED'
-                  : statusFilter === 'INITIATED'
-                    ? 'REJECTED'
-                    : 'PENDING',
-            category: categoryFilter !== 'all' ? (categoryFilter as any) : undefined,
+                : statusFilter === "VERIFIED"
+                  ? "APPROVED"
+                  : statusFilter === "INITIATED"
+                    ? "REJECTED"
+                    : "PENDING",
+            category:
+              categoryFilter !== "all" ? (categoryFilter as any) : undefined,
             fundId: selectedFundId,
-            search: debouncedSearch || undefined,
+            // search: debouncedSearch || undefined,
+            search:
+              debouncedSearch.trim() && isNaN(Number(debouncedSearch.trim()))
+                ? debouncedSearch
+                : undefined,
           });
 
           return {
@@ -332,15 +397,21 @@ export default function ExpensesPage() {
 
       await downloadPdfExport({
         filename: `expenses-${Date.now()}.pdf`,
-        title: 'Expenses Export',
+        title: "Expenses Export",
         rows,
         columns: [
-          { header: 'Date', value: (row) => formatDate(row.createdAt) },
-          { header: 'Category', value: (row) => formatExpenseCategory(row.category) },
-          { header: 'Description', value: (row) => row.description },
-          { header: 'Vendor', value: (row) => row.vendor ?? '-' },
-          { header: 'Amount', value: (row) => formatCurrency(row.amount, row.currency) },
-          { header: 'Created By', value: (row) => row.createdByName ?? '-' },
+          { header: "Date", value: (row) => formatDate(row.createdAt) },
+          {
+            header: "Category",
+            value: (row) => formatExpenseCategory(row.category),
+          },
+          { header: "Description", value: (row) => row.description },
+          { header: "Vendor", value: (row) => row.vendor ?? "-" },
+          {
+            header: "Amount",
+            value: (row) => formatCurrency(row.amount, row.currency),
+          },
+          { header: "Created By", value: (row) => row.createdByName ?? "-" },
         ],
       });
 
@@ -348,13 +419,45 @@ export default function ExpensesPage() {
         toast.info(`Export capped at ${EXPORT_MAX_ROWS} rows`);
       }
     } catch (error) {
-      toast.error(getErrorMessage(error, 'Failed to export expenses'));
+      toast.error(getErrorMessage(error, "Failed to export expenses"));
     } finally {
       setIsExporting(false);
     }
   };
 
-  const expenses = expensesQuery.data?.data ?? [];
+  // const expenses = expensesQuery.data?.data ?? [];
+  const rawExpenses = expensesQuery.data?.data ?? [];
+
+  const expenses = useMemo(() => {
+    const normalizedSearch = debouncedSearch.trim().toLowerCase();
+
+    if (!normalizedSearch) {
+      return rawExpenses;
+    }
+
+    return rawExpenses.filter((expense) => {
+      const searchableValues = [
+        expense.description,
+        expense.vendor,
+        expense.category,
+        expense.status,
+        expense.createdByName,
+        expense.createdByRole,
+        expense.fund?.name,
+        expense.id,
+
+        Number(expense.amount ?? 0).toFixed(2),
+        Number(expense.amount ?? 0).toString(),
+      ];
+
+      return searchableValues.some((value) =>
+        String(value ?? "")
+          .trim()
+          .toLowerCase()
+          .includes(normalizedSearch),
+      );
+    });
+  }, [rawExpenses, debouncedSearch]);
   const currentPage = expensesQuery.data?.page ?? page;
   const currentLimit = expensesQuery.data?.pageSize ?? limit;
   const currentTotal = expensesQuery.data?.total ?? 0;
@@ -362,18 +465,25 @@ export default function ExpensesPage() {
   const canGoNext = currentPage * currentLimit < currentTotal;
   const isLoading = expensesQuery.isLoading;
   const pendingCount = pendingCountQuery.data?.count ?? 0;
-  const selectedExpenses = expenses.filter((item) => selectedIds.includes(item.id));
+  const selectedExpenses = expenses.filter((item) =>
+    selectedIds.includes(item.id),
+  );
   const hasSelectedItems = selectedExpenses.length > 0;
-  const allSelectedPending = hasSelectedItems && selectedExpenses.every((item) => item.status === 'PENDING');
+  const allSelectedPending =
+    hasSelectedItems &&
+    selectedExpenses.every((item) => item.status === "PENDING");
   const selectableExpenseIds = expenses
-    .filter((item) => item.status === 'PENDING' || item.status === 'APPROVED')
+    .filter((item) => item.status === "PENDING" || item.status === "APPROVED")
     .map((item) => item.id);
 
-  const tabs: Array<{ label: string; value: 'all' | 'PENDING' | 'VERIFIED' | 'INITIATED' }> = [
-    { label: 'All', value: 'all' },
-    { label: 'Pending', value: 'PENDING' },
-    { label: 'Verified', value: 'VERIFIED' },
-    { label: 'Initiated', value: 'INITIATED' },
+  const tabs: Array<{
+    label: string;
+    value: "all" | "PENDING" | "VERIFIED" | "INITIATED";
+  }> = [
+    { label: "All", value: "all" },
+    { label: "Pending", value: "PENDING" },
+    { label: "Verified", value: "VERIFIED" },
+    { label: "Initiated", value: "INITIATED" },
   ];
 
   const toggleSelectionMode = () => {
@@ -397,16 +507,18 @@ export default function ExpensesPage() {
     const targetIds = selectedExpenses.map((item) => item.id);
 
     if (targetIds.length === 0) {
-      toast.error('Select at least one expense');
+      toast.error("Select at least one expense");
       return;
     }
 
-    setBulkActionLoading('delete');
+    setBulkActionLoading("delete");
     try {
-      await Promise.allSettled(targetIds.map((id) => expensesService.delete(id)));
+      await Promise.allSettled(
+        targetIds.map((id) => expensesService.delete(id)),
+      );
       setSelectedIds([]);
       setIsBulkDeleteOpen(false);
-      toast.success('Selected expenses moved to trash');
+      toast.success("Selected expenses moved to trash");
       await invalidateExpenseMutationQueries(queryClient, mosque?.id);
       await invalidateMoneyQueries(queryClient, mosque?.id);
     } finally {
@@ -420,38 +532,51 @@ export default function ExpensesPage() {
         <div className="flex items-center justify-between gap-2">
           <div>
             <h1 className="text-xl font-semibold text-foreground">Expenses</h1>
-            <p className="text-sm text-muted-foreground">Track and manage all mosque expenses</p>
+            <p className="text-sm text-muted-foreground">
+              Track and manage all mosque expenses
+            </p>
           </div>
-          {(isAdmin || isSuperAdmin) ? (
-            <Button type="button" variant="outline" size="sm" className="h-8 rounded-md px-3" onClick={toggleSelectionMode}>
+          {isAdmin || isSuperAdmin ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 rounded-md px-3"
+              onClick={toggleSelectionMode}
+            >
               <ListChecks className="mr-1 h-3.5 w-3.5" />
-              {isSelectionMode ? 'Done' : 'Select'}
+              {isSelectionMode ? "Done" : "Select"}
             </Button>
           ) : null}
         </div>
 
         <div className="grid grid-cols-4 gap-1">
-            {tabs.map((tab) => (
-              <div key={tab.value} className="relative">
-                <Button
-                  type="button"
-                  variant={statusFilter === tab.value ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => {
-                    setStatusFilter(tab.value);
-                    setPage(1);
-                  }}
-                  className="h-8 w-full rounded-md px-2 text-[11px]"
+          {tabs.map((tab) => (
+            <div key={tab.value} className="relative">
+              <Button
+                type="button"
+                variant={statusFilter === tab.value ? "default" : "outline"}
+                size="sm"
+                onClick={() => {
+                  setStatusFilter(tab.value);
+                  setPage(1);
+                }}
+                className="h-8 w-full rounded-md px-2 text-[11px]"
+              >
+                <span className="truncate">{tab.label}</span>
+              </Button>
+              {tab.value === "PENDING" &&
+              canViewPendingCount &&
+              pendingCount > 0 ? (
+                <Badge
+                  variant="destructive"
+                  className="absolute -right-1 -top-1 h-4 min-w-4 rounded-full px-1 text-[10px] leading-none"
                 >
-                  <span className="truncate">{tab.label}</span>
-                </Button>
-                {tab.value === 'PENDING' && canViewPendingCount && pendingCount > 0 ? (
-                  <Badge variant="destructive" className="absolute -right-1 -top-1 h-4 min-w-4 rounded-full px-1 text-[10px] leading-none">
-                    {pendingCount}
-                  </Badge>
-                ) : null}
-              </div>
-            ))}
+                  {pendingCount}
+                </Badge>
+              ) : null}
+            </div>
+          ))}
         </div>
 
         <div className="flex items-center justify-between gap-2">
@@ -465,29 +590,69 @@ export default function ExpensesPage() {
             className="h-9 flex-1 rounded-md"
           />
           <div className="flex items-center gap-1">
-            <Button type="button" variant="outline" size="icon" className="h-9 w-9 rounded-md" onClick={() => setIsFiltersOpen(true)}>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="h-9 w-9 rounded-md"
+              onClick={() => setIsFiltersOpen(true)}
+            >
               <SlidersHorizontal className="h-4 w-4" />
             </Button>
-            <Button variant="outline" size="icon" className="h-9 w-9 rounded-md" onClick={handleExport} disabled={isExporting}>
-              {isExporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-9 w-9 rounded-md"
+              onClick={handleExport}
+              disabled={isExporting}
+            >
+              {isExporting ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Download className="h-4 w-4" />
+              )}
             </Button>
           </div>
         </div>
 
         {isSelectionMode ? (
           <div className="flex items-center gap-1">
-            <p className="text-xs font-semibold text-foreground">Selected: {selectedIds.length}</p>
-            <Button type="button" variant="outline" size="sm" className="h-8 rounded-md px-2 text-xs" onClick={selectAllPending}>
+            <p className="text-xs font-semibold text-foreground">
+              Selected: {selectedIds.length}
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 rounded-md px-2 text-xs"
+              onClick={selectAllPending}
+            >
               Select All
             </Button>
             {allSelectedPending ? (
               <>
-                <Button size="sm" variant="outline" className="h-8 rounded-md border border-green-200 bg-transparent px-2 text-xs text-green-600 hover:bg-green-50" disabled={bulkActionLoading !== null} onClick={() => handleBulkAction('approve')}>
-                  {bulkActionLoading === 'approve' ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-8 rounded-md border border-green-200 bg-transparent px-2 text-xs text-green-600 hover:bg-green-50"
+                  disabled={bulkActionLoading !== null}
+                  onClick={() => handleBulkAction("approve")}
+                >
+                  {bulkActionLoading === "approve" ? (
+                    <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                  ) : null}
                   Approve
                 </Button>
-                <Button size="sm" variant="outline" className="h-8 rounded-md border border-red-200 bg-transparent px-2 text-xs text-red-600 hover:bg-red-50" disabled={bulkActionLoading !== null} onClick={() => handleBulkAction('reject')}>
-                  {bulkActionLoading === 'reject' ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-8 rounded-md border border-red-200 bg-transparent px-2 text-xs text-red-600 hover:bg-red-50"
+                  disabled={bulkActionLoading !== null}
+                  onClick={() => handleBulkAction("reject")}
+                >
+                  {bulkActionLoading === "reject" ? (
+                    <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                  ) : null}
                   Reject
                 </Button>
               </>
@@ -499,11 +664,19 @@ export default function ExpensesPage() {
                 disabled={bulkActionLoading !== null}
                 onClick={() => setIsBulkDeleteOpen(true)}
               >
-                {bulkActionLoading === 'delete' ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
+                {bulkActionLoading === "delete" ? (
+                  <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                ) : null}
                 Delete
               </Button>
             ) : null}
-            <Button type="button" variant="ghost" size="sm" className="h-8 rounded-md px-2 text-xs" onClick={() => setSelectedIds([])}>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-8 rounded-md px-2 text-xs"
+              onClick={() => setSelectedIds([])}
+            >
               Clear
             </Button>
           </div>
@@ -528,19 +701,27 @@ export default function ExpensesPage() {
               <ListEmptyState
                 title="No expenses yet"
                 description="Record your first expense to start tracking outflow."
-                actionLabel={canManageExpenses && canCreateAction ? 'Add Expense' : 'Clear Filters'}
-                actionHref={canManageExpenses && canCreateAction ? '/dashboard/expenses/add' : undefined}
+                actionLabel={
+                  canManageExpenses && canCreateAction
+                    ? "Add Expense"
+                    : "Clear Filters"
+                }
+                actionHref={
+                  canManageExpenses && canCreateAction
+                    ? "/dashboard/expenses/add"
+                    : undefined
+                }
                 onAction={
                   canManageExpenses && canCreateAction
                     ? undefined
                     : () => {
-                        setSearchQuery('');
-                      setStatusFilter('all');
-                      setPendingStatusFilter('all');
-                        setCategoryFilter('all');
-                        setPendingCategoryFilter('all');
-                        setFundTypeFilter('all');
-                        setPendingFundTypeFilter('all');
+                        setSearchQuery("");
+                        setStatusFilter("all");
+                        setPendingStatusFilter("all");
+                        setCategoryFilter("all");
+                        setPendingCategoryFilter("all");
+                        setFundTypeFilter("all");
+                        setPendingFundTypeFilter("all");
                         setPage(1);
                       }
                 }
@@ -550,21 +731,25 @@ export default function ExpensesPage() {
         ) : (
           expenses.map((expense) => {
             const isDeleting = loadingId === expense.id;
-            const canReview = (isAdmin || isSuperAdmin) && expense.status === 'PENDING';
-            const canEditExpense = canManageExpenses && canEditAction && (
-              expense.status === 'PENDING' ||
-              !isTreasurer
-            );
-            const statusClass = expense.status === 'PENDING'
-              ? 'bg-amber-100 text-amber-900'
-              : 'bg-emerald-100 text-emerald-900';
-            const roleText = (expense.createdByRole ?? 'UNKNOWN').toUpperCase();
-            const roleClass = roleText === 'SUPER_ADMIN'
-              ? 'bg-emerald-100 text-emerald-800'
-              : roleText === 'ADMIN'
-                ? 'bg-green-100 text-green-700'
-                : 'bg-blue-100 text-blue-700';
-            const isSelectable = expense.status === 'PENDING' || expense.status === 'APPROVED';
+            const canReview =
+              (isAdmin || isSuperAdmin) && expense.status === "PENDING";
+            const canEditExpense =
+              canManageExpenses &&
+              canEditAction &&
+              (expense.status === "PENDING" || !isTreasurer);
+            const statusClass =
+              expense.status === "PENDING"
+                ? "bg-amber-100 text-amber-900"
+                : "bg-emerald-100 text-emerald-900";
+            const roleText = (expense.createdByRole ?? "UNKNOWN").toUpperCase();
+            const roleClass =
+              roleText === "SUPER_ADMIN"
+                ? "bg-emerald-100 text-emerald-800"
+                : roleText === "ADMIN"
+                  ? "bg-green-100 text-green-700"
+                  : "bg-blue-100 text-blue-700";
+            const isSelectable =
+              expense.status === "PENDING" || expense.status === "APPROVED";
             const toggleSelection = () => {
               if (!isSelectable) return;
               setSelectedIds((prev) =>
@@ -578,9 +763,9 @@ export default function ExpensesPage() {
                 key={expense.id}
                 className={`rounded-lg border px-4 shadow-sm cursor-pointer overflow-hidden ${
                   isSelectionMode && selectedIds.includes(expense.id)
-                    ? 'border-red-400 bg-red-50/40'
-                    : ''
-                } ${isSelectionMode ? 'py-2.5' : 'py-3'}`}
+                    ? "border-red-400 bg-red-50/40"
+                    : ""
+                } ${isSelectionMode ? "py-2.5" : "py-3"}`}
                 onClick={(e) => {
                   if (isSelectionMode) {
                     e.preventDefault();
@@ -605,110 +790,164 @@ export default function ExpensesPage() {
                     ) : null}
                     <p
                       className="truncate text-base font-semibold text-foreground"
-                      title={expense.description || 'Expense'}
+                      title={expense.description || "Expense"}
                     >
-                      {expense.description || 'Expense'}
+                      {expense.description || "Expense"}
                     </p>
                   </div>
-                  <p className="font-semibold text-red-600">-{formatCurrency(expense.amount, expense.currency)}</p>
+                  <p className="font-semibold text-red-600">
+                    -{formatCurrency(expense.amount, expense.currency)}
+                  </p>
                 </div>
 
                 <div className="mt-1 flex items-center justify-between gap-2">
-                  <p className="text-xs text-muted-foreground">{formatDate(expense.createdAt)} • Expense</p>
-                  <Badge className={`text-xs ${statusClass}`}>{expense.status}</Badge>
+                  <p className="text-xs text-muted-foreground">
+                    {formatDate(expense.createdAt)} • Expense
+                  </p>
+                  <Badge className={`text-xs ${statusClass}`}>
+                    {expense.status}
+                  </Badge>
                 </div>
 
                 <div className="flex items-center justify-between gap-2 text-sm text-muted-foreground">
                   <p className="truncate whitespace-nowrap">
-                    {expense.fund?.name ?? '-'} • {formatExpenseCategory(expense.category)}
+                    {expense.fund?.name ?? "-"} •{" "}
+                    {formatExpenseCategory(expense.category)}
                   </p>
                   <span />
                 </div>
                 <div className="mt-0.5 flex items-center justify-between gap-2 text-xs text-muted-foreground">
-                  <p className="truncate">Added by: {expense.createdByName ?? 'Unknown'}</p>
-                  <Badge variant="secondary" className={`h-5 rounded-md px-2 text-[10px] ${roleClass}`}>{roleText}</Badge>
+                  <p className="truncate">
+                    Added by: {expense.createdByName ?? "Unknown"}
+                  </p>
+                  <Badge
+                    variant="secondary"
+                    className={`h-5 rounded-md px-2 text-[10px] ${roleClass}`}
+                  >
+                    {roleText}
+                  </Badge>
                 </div>
 
                 {!isSelectionMode ? (
-                  <div className="mt-2 grid grid-cols-3 gap-1" onClick={(e) => e.stopPropagation()}>
-                  {canReview ? (
-                    <>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-8 rounded-md border border-green-200 bg-transparent px-3 text-xs whitespace-nowrap text-green-600 hover:bg-green-50"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleApprove(expense.id);
-                        }}
-                      >
-                        Approve
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-8 rounded-md border border-red-200 bg-transparent px-3 text-xs whitespace-nowrap text-red-600 hover:bg-red-50"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleReject(expense.id);
-                        }}
-                      >
-                        Reject
-                      </Button>
-                      {expense.receipt ? (
-                        <Button size="sm" variant="outline" className="h-8 rounded-md border border-gray-200 bg-transparent px-3 text-xs whitespace-nowrap text-muted-foreground hover:bg-gray-50" asChild>
-                          <Link href={expense.receipt} onClick={(e) => e.stopPropagation()}>Receipt</Link>
+                  <div
+                    className="mt-2 grid grid-cols-3 gap-1"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {canReview ? (
+                      <>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-8 rounded-md border border-green-200 bg-transparent px-3 text-xs whitespace-nowrap text-green-600 hover:bg-green-50"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleApprove(expense.id);
+                          }}
+                        >
+                          Approve
                         </Button>
-                      ) : (
-                        <Button size="sm" variant="outline" className="h-8 rounded-md border border-gray-200 bg-transparent px-3 text-xs whitespace-nowrap text-muted-foreground hover:bg-gray-50" disabled>
-                          Receipt
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-8 rounded-md border border-red-200 bg-transparent px-3 text-xs whitespace-nowrap text-red-600 hover:bg-red-50"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleReject(expense.id);
+                          }}
+                        >
+                          Reject
                         </Button>
-                      )}
-                    </>
-                  ) : null}
+                        {expense.receipt ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-8 rounded-md border border-gray-200 bg-transparent px-3 text-xs whitespace-nowrap text-muted-foreground hover:bg-gray-50"
+                            asChild
+                          >
+                            <Link
+                              href={expense.receipt}
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              Receipt
+                            </Link>
+                          </Button>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-8 rounded-md border border-gray-200 bg-transparent px-3 text-xs whitespace-nowrap text-muted-foreground hover:bg-gray-50"
+                            disabled
+                          >
+                            Receipt
+                          </Button>
+                        )}
+                      </>
+                    ) : null}
 
-                  {!canReview ? (
-                    <>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-8 rounded-md px-3 text-xs whitespace-nowrap"
-                        disabled={!canEditExpense}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (!canEditExpense) return;
-                          router.push(`/dashboard/expenses/${expense.id}/edit`);
-                        }}
-                      >
-                        Edit
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-8 rounded-md border border-red-200 bg-red-50 px-3 text-xs whitespace-nowrap text-red-700 hover:bg-red-100"
-                        disabled={!(expense.status !== 'PENDING' && canDelete && canDeleteAction) || isDeleting}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (!canDeleteAction || !canDelete) return;
-                          setConfirmDeleteId(expense.id);
-                        }}
-                      >
-                        Delete
-                      </Button>
-                      {expense.receipt ? (
-                        <Button size="sm" variant="outline" className="h-8 rounded-md border border-gray-200 bg-transparent px-3 text-xs whitespace-nowrap text-muted-foreground hover:bg-gray-50" asChild>
-                          <Link href={expense.receipt} onClick={(e) => e.stopPropagation()}>Receipt</Link>
+                    {!canReview ? (
+                      <>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-8 rounded-md px-3 text-xs whitespace-nowrap"
+                          disabled={!canEditExpense}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (!canEditExpense) return;
+                            router.push(
+                              `/dashboard/expenses/${expense.id}/edit`,
+                            );
+                          }}
+                        >
+                          Edit
                         </Button>
-                      ) : (
-                        <Button size="sm" variant="outline" className="h-8 rounded-md border border-gray-200 bg-transparent px-3 text-xs whitespace-nowrap text-muted-foreground hover:bg-gray-50" disabled>
-                          Receipt
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-8 rounded-md border border-red-200 bg-red-50 px-3 text-xs whitespace-nowrap text-red-700 hover:bg-red-100"
+                          disabled={
+                            !(
+                              expense.status !== "PENDING" &&
+                              canDelete &&
+                              canDeleteAction
+                            ) || isDeleting
+                          }
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (!canDeleteAction || !canDelete) return;
+                            setConfirmDeleteId(expense.id);
+                          }}
+                        >
+                          Delete
                         </Button>
-                      )}
-                    </>
-                  ) : null}
+                        {expense.receipt ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-8 rounded-md border border-gray-200 bg-transparent px-3 text-xs whitespace-nowrap text-muted-foreground hover:bg-gray-50"
+                            asChild
+                          >
+                            <Link
+                              href={expense.receipt}
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              Receipt
+                            </Link>
+                          </Button>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-8 rounded-md border border-gray-200 bg-transparent px-3 text-xs whitespace-nowrap text-muted-foreground hover:bg-gray-50"
+                            disabled
+                          >
+                            Receipt
+                          </Button>
+                        )}
+                      </>
+                    ) : null}
                   </div>
                 ) : null}
-
               </div>
             );
           })
@@ -744,7 +983,7 @@ export default function ExpensesPage() {
       {canManageExpenses && canCreateAction ? (
         <Button
           type="button"
-          onClick={() => router.push('/dashboard/expenses/add')}
+          onClick={() => router.push("/dashboard/expenses/add")}
           className="fixed bottom-20 right-4 h-14 w-14 rounded-full p-0 text-white shadow-lg"
           aria-label="Add expense"
         >
@@ -758,7 +997,10 @@ export default function ExpensesPage() {
             <SheetTitle>Filters</SheetTitle>
           </SheetHeader>
           <div className="mt-4 ds-stack">
-            <Select value={pendingCategoryFilter} onValueChange={setPendingCategoryFilter}>
+            <Select
+              value={pendingCategoryFilter}
+              onValueChange={setPendingCategoryFilter}
+            >
               <SelectTrigger>
                 <SelectValue placeholder="Category" />
               </SelectTrigger>
@@ -771,7 +1013,10 @@ export default function ExpensesPage() {
                 ))}
               </SelectContent>
             </Select>
-            <Select value={pendingFundTypeFilter} onValueChange={setPendingFundTypeFilter}>
+            <Select
+              value={pendingFundTypeFilter}
+              onValueChange={setPendingFundTypeFilter}
+            >
               <SelectTrigger>
                 <SelectValue placeholder="Fund" />
               </SelectTrigger>
@@ -782,7 +1027,10 @@ export default function ExpensesPage() {
                 <SelectItem value="ZAKAT">Zakat</SelectItem>
               </SelectContent>
             </Select>
-            <Select value={pendingStatusFilter} onValueChange={(v) => setPendingStatusFilter(v as any)}>
+            <Select
+              value={pendingStatusFilter}
+              onValueChange={(v) => setPendingStatusFilter(v as any)}
+            >
               <SelectTrigger>
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
@@ -821,13 +1069,21 @@ export default function ExpensesPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Are you sure?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will delete this expense and move it to Trash. You can restore it later.
+              This will delete this expense and move it to Trash. You can
+              restore it later.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={Boolean(loadingId)}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={Boolean(loadingId)}>
+              Cancel
+            </AlertDialogCancel>
             <AlertDialogAction
-              disabled={!confirmDeleteId || Boolean(loadingId) || !canDeleteAction || !canDelete}
+              disabled={
+                !confirmDeleteId ||
+                Boolean(loadingId) ||
+                !canDeleteAction ||
+                !canDelete
+              }
               onClick={(e) => {
                 e.preventDefault();
                 if (!confirmDeleteId) return;
@@ -836,7 +1092,9 @@ export default function ExpensesPage() {
                 });
               }}
             >
-              {loadingId ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              {loadingId ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : null}
               Delete
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -848,19 +1106,26 @@ export default function ExpensesPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete selected items?</AlertDialogTitle>
             <AlertDialogDescription>
-              You are about to delete {selectedIds.length} items. They will be moved to trash.
+              You are about to delete {selectedIds.length} items. They will be
+              moved to trash.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={bulkActionLoading === 'delete'}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={bulkActionLoading === "delete"}>
+              Cancel
+            </AlertDialogCancel>
             <AlertDialogAction
-              disabled={bulkActionLoading === 'delete' || !canDeleteAction || !canDelete}
+              disabled={
+                bulkActionLoading === "delete" || !canDeleteAction || !canDelete
+              }
               onClick={(e) => {
                 e.preventDefault();
                 void handleBulkDelete();
               }}
             >
-              {bulkActionLoading === 'delete' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              {bulkActionLoading === "delete" ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : null}
               Delete
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -869,4 +1134,3 @@ export default function ExpensesPage() {
     </div>
   );
 }
-

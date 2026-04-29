@@ -64,7 +64,7 @@ export default function MuqtadiFilters({
     <>
       <div className="space-y-2">
         <div className="overflow-x-auto pb-0.5">
-          <div className="grid min-w-90 grid-cols-4 gap-1">
+          <div className="grid min-w-85 grid-cols-4 gap-1">
             {primaryTabs.map((tab) => (
               <Button
                 key={tab.value}

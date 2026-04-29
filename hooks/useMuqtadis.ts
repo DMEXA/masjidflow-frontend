@@ -1,18 +1,27 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { toast } from 'sonner';
-import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { Muqtadi } from '@/types';
-import { muqtadisService } from '@/services/muqtadis.service';
-import { getErrorMessage } from '@/src/utils/error';
-import { useDebounce } from '@/hooks/useDebounce';
-import { queryKeys } from '@/lib/query-keys';
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
+import {
+  keepPreviousData,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
+import type { Muqtadi } from "@/types";
+import { muqtadisService } from "@/services/muqtadis.service";
+import { getErrorMessage } from "@/src/utils/error";
+import { useDebounce } from "@/hooks/useDebounce";
+import { queryKeys } from "@/lib/query-keys";
 
-export type SortOrder = 'newest' | 'oldest';
-export type AccountFilter = 'all' | 'account' | 'offline';
-export type VerificationFilter = 'all' | 'verified' | 'pending';
-export type StatusFilter = 'all' | 'active' | 'disabled';
-export type CycleFilter = 'all' | 'included' | 'not_included';
-export type PaymentFilter = 'all' | 'paid' | 'partial' | 'unpaid' | 'proof_pending';
+export type SortOrder = "newest" | "oldest";
+export type AccountFilter = "all" | "account" | "offline";
+export type VerificationFilter = "all" | "verified" | "pending";
+export type StatusFilter = "all" | "active" | "disabled";
+export type CycleFilter = "all" | "included" | "not_included";
+export type PaymentFilter =
+  | "all"
+  | "paid"
+  | "partial"
+  | "unpaid"
+  | "proof_pending";
 const MUQTADI_PAGE_LIMIT = 20;
 
 type UseMuqtadisOptions = {
@@ -25,15 +34,16 @@ export function useMuqtadis(options: UseMuqtadisOptions) {
   const { enabled, selectedDetailId, refreshDetails } = options;
   const queryClient = useQueryClient();
 
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState("");
   const debouncedSearch = useDebounce(search);
-  const [sortOrder, setSortOrder] = useState<SortOrder>('newest');
-  const [pendingSortOrder, setPendingSortOrder] = useState<SortOrder>('newest');
-  const [accountFilter, setAccountFilter] = useState<AccountFilter>('all');
-  const [verificationFilter, setVerificationFilter] = useState<VerificationFilter>('all');
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
-  const [cycleFilter, setCycleFilter] = useState<CycleFilter>('all');
-  const [paymentFilter, setPaymentFilter] = useState<PaymentFilter>('all');
+  const [sortOrder, setSortOrder] = useState<SortOrder>("newest");
+  const [pendingSortOrder, setPendingSortOrder] = useState<SortOrder>("newest");
+  const [accountFilter, setAccountFilter] = useState<AccountFilter>("all");
+  const [verificationFilter, setVerificationFilter] =
+    useState<VerificationFilter>("all");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [cycleFilter, setCycleFilter] = useState<CycleFilter>("all");
+  const [paymentFilter, setPaymentFilter] = useState<PaymentFilter>("all");
   const [targetMuqtadies, setTargetMuqtadies] = useState(0);
   const [page, setPage] = useState(1);
   const [limit] = useState(MUQTADI_PAGE_LIMIT);
@@ -51,7 +61,9 @@ export function useMuqtadis(options: UseMuqtadisOptions) {
     balance: 0,
     isCyclePaused: false,
   });
-  const [pendingVerificationId, setPendingVerificationId] = useState<string | null>(null);
+  const [pendingVerificationId, setPendingVerificationId] = useState<
+    string | null
+  >(null);
 
   const settingsLoadedRef = useRef(false);
 
@@ -69,15 +81,16 @@ export function useMuqtadis(options: UseMuqtadisOptions) {
       verificationStatus: verificationFilter,
       cycleStatus: cycleFilter,
     }),
-    queryFn: () => muqtadisService.getAll({
-      page,
-      limit,
-      search: debouncedSearch || undefined,
-      accountStatus: accountFilter,
-      paymentStatus: paymentFilter,
-      verificationStatus: verificationFilter,
-      cycleStatus: cycleFilter,
-    }),
+    queryFn: () =>
+      muqtadisService.getAll({
+        page,
+        limit,
+        search: debouncedSearch || undefined,
+        accountStatus: accountFilter,
+        paymentStatus: paymentFilter,
+        verificationStatus: verificationFilter,
+        cycleStatus: cycleFilter,
+      }),
     enabled,
     placeholderData: keepPreviousData,
     staleTime: 8000,
@@ -114,25 +127,38 @@ export function useMuqtadis(options: UseMuqtadisOptions) {
     refetchOnReconnect: true,
   });
 
-  const resolvePaymentStatus = useCallback((item: Muqtadi): 'PAID' | 'PARTIAL' | 'UNPAID' => {
-    const rawStatus = String((item as Muqtadi & { currentCyclePaymentStatus?: string }).currentCyclePaymentStatus || item.paymentStatus || '').trim().toUpperCase();
-    if (rawStatus === 'PAID') return 'PAID';
-    if (rawStatus === 'PARTIAL') return 'PARTIAL';
-    return 'UNPAID';
-  }, []);
+  const resolvePaymentStatus = useCallback(
+    (item: Muqtadi): "PAID" | "PARTIAL" | "UNPAID" => {
+      const rawStatus = String(
+        (item as Muqtadi & { currentCyclePaymentStatus?: string })
+          .currentCyclePaymentStatus ||
+          item.paymentStatus ||
+          "",
+      )
+        .trim()
+        .toUpperCase();
+      if (rawStatus === "PAID") return "PAID";
+      if (rawStatus === "PARTIAL") return "PARTIAL";
+      return "UNPAID";
+    },
+    [],
+  );
 
   const fetchItems = useCallback(async () => {
     if (!enabled) return;
     try {
       await Promise.all([refetchList(), refetchSummary(), refetchStats()]);
     } catch (error) {
-      toast.error(getErrorMessage(error, 'Failed to load muqtadis'));
+      toast.error(getErrorMessage(error, "Failed to load muqtadis"));
     }
   }, [enabled, refetchList, refetchStats, refetchSummary]);
 
   useEffect(() => {
     if (!listResult) return;
-    const boundedData = listResult.data.length > 50 ? listResult.data.slice(0, 50) : listResult.data;
+    const boundedData =
+      listResult.data.length > 50
+        ? listResult.data.slice(0, 50)
+        : listResult.data;
     setItems(boundedData);
     setTotalPages(listResult.totalPages);
   }, [listResult]);
@@ -158,15 +184,16 @@ export function useMuqtadis(options: UseMuqtadisOptions) {
 
     void queryClient.prefetchQuery({
       queryKey: nextQueryKey,
-      queryFn: () => muqtadisService.getAll({
-        page: nextPage,
-        limit,
-        search: debouncedSearch || undefined,
-        accountStatus: accountFilter,
-        paymentStatus: paymentFilter,
-        verificationStatus: verificationFilter,
-        cycleStatus: cycleFilter,
-      }),
+      queryFn: () =>
+        muqtadisService.getAll({
+          page: nextPage,
+          limit,
+          search: debouncedSearch || undefined,
+          accountStatus: accountFilter,
+          paymentStatus: paymentFilter,
+          verificationStatus: verificationFilter,
+          cycleStatus: cycleFilter,
+        }),
       staleTime: 8000,
     });
   }, [
@@ -202,15 +229,41 @@ export function useMuqtadis(options: UseMuqtadisOptions) {
     });
   }, [statsResponse]);
 
-  const sortByCreatedAt = useCallback((list: Muqtadi[]) => {
-    return [...list].sort((a, b) => {
-      const left = new Date(a.createdAt).getTime();
-      const right = new Date(b.createdAt).getTime();
-      return sortOrder === 'newest' ? right - left : left - right;
-    });
-  }, [sortOrder]);
+  const sortByCreatedAt = useCallback(
+    (list: Muqtadi[]) => {
+      return [...list].sort((a, b) => {
+        const left = new Date(a.createdAt).getTime();
+        const right = new Date(b.createdAt).getTime();
+        return sortOrder === "newest" ? right - left : left - right;
+      });
+    },
+    [sortOrder],
+  );
 
-  const filteredItems = useMemo(() => sortByCreatedAt(items), [items, sortByCreatedAt]);
+  // const filteredItems = useMemo(() => sortByCreatedAt(items), [items, sortByCreatedAt]);
+  const filteredItems = useMemo(() => {
+    const normalizedSearch = search.trim().toLowerCase();
+
+    const filtered = normalizedSearch
+      ? items.filter((item) => {
+          const searchableValues = [
+            item.name,
+            item.fatherName,
+            item.phone,
+            item.whatsappNumber,
+            item.email,
+          ];
+
+          return searchableValues.some((value) =>
+            String(value ?? "")
+              .toLowerCase()
+              .includes(normalizedSearch),
+          );
+        })
+      : items;
+
+    return sortByCreatedAt(filtered);
+  }, [items, search, sortByCreatedAt]);
 
   const stats = useMemo(() => {
     const totalHouseholds = backendStats.verifiedHouseholds;
@@ -230,43 +283,59 @@ export function useMuqtadis(options: UseMuqtadisOptions) {
     };
   }, [backendStats, targetMuqtadies]);
 
-  const verifyMuqtadi = useCallback(async (item: Muqtadi, previousDue = 0) => {
-    if (pendingVerificationId) return;
-    setPendingVerificationId(item.id);
-    try {
-      await muqtadisService.verify(item.id, { previousDue: Number(previousDue || 0) });
-      toast.success('Household verified');
-      await fetchItems();
-      if (selectedDetailId === item.id && refreshDetails) {
-        await refreshDetails(item.id);
+  const verifyMuqtadi = useCallback(
+    async (item: Muqtadi, previousDue = 0) => {
+      if (pendingVerificationId) return;
+      setPendingVerificationId(item.id);
+      try {
+        await muqtadisService.verify(item.id, {
+          previousDue: Number(previousDue || 0),
+        });
+        toast.success("Household verified");
+        await fetchItems();
+        if (selectedDetailId === item.id && refreshDetails) {
+          await refreshDetails(item.id);
+        }
+      } catch (error) {
+        toast.error(getErrorMessage(error, "Failed to verify household"));
+      } finally {
+        setPendingVerificationId(null);
       }
-    } catch (error) {
-      toast.error(getErrorMessage(error, 'Failed to verify household'));
-    } finally {
-      setPendingVerificationId(null);
-    }
-  }, [fetchItems, pendingVerificationId, refreshDetails, selectedDetailId]);
+    },
+    [fetchItems, pendingVerificationId, refreshDetails, selectedDetailId],
+  );
 
-  const rejectMuqtadi = useCallback(async (item: Muqtadi) => {
-    if (pendingVerificationId) return;
-    setPendingVerificationId(item.id);
-    try {
-      await muqtadisService.reject(item.id);
-      toast.success('Household marked as pending');
-      await fetchItems();
-      if (selectedDetailId === item.id && refreshDetails) {
-        await refreshDetails(item.id);
+  const rejectMuqtadi = useCallback(
+    async (item: Muqtadi) => {
+      if (pendingVerificationId) return;
+      setPendingVerificationId(item.id);
+      try {
+        await muqtadisService.reject(item.id);
+        toast.success("Household marked as pending");
+        await fetchItems();
+        if (selectedDetailId === item.id && refreshDetails) {
+          await refreshDetails(item.id);
+        }
+      } catch (error) {
+        toast.error(
+          getErrorMessage(error, "Failed to update household verification"),
+        );
+      } finally {
+        setPendingVerificationId(null);
       }
-    } catch (error) {
-      toast.error(getErrorMessage(error, 'Failed to update household verification'));
-    } finally {
-      setPendingVerificationId(null);
-    }
-  }, [fetchItems, pendingVerificationId, refreshDetails, selectedDetailId]);
+    },
+    [fetchItems, pendingVerificationId, refreshDetails, selectedDetailId],
+  );
 
   useEffect(() => {
     setPage(1);
-  }, [accountFilter, cycleFilter, paymentFilter, statusFilter, verificationFilter]);
+  }, [
+    accountFilter,
+    cycleFilter,
+    paymentFilter,
+    statusFilter,
+    verificationFilter,
+  ]);
 
   useEffect(() => {
     if (!enabled) return;
