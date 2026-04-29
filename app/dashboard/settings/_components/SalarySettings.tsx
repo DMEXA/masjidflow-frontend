@@ -258,10 +258,6 @@ export function SalarySettings() {
     ? "Current cycle is active. You can start a new cycle once it ends."
     : null;
 
-  if (isInitialLoading) {
-    return <PageSkeleton rows={2} cardCount={4} />;
-  }
-
   const currentCycleLocked = Boolean(
     nextCycleInfoQuery.data?.settingsLocked ?? salarySettingsLockedFallback,
   );
@@ -335,6 +331,10 @@ export function SalarySettings() {
     const timerId = window.setInterval(update, 60_000);
     return () => window.clearInterval(timerId);
   }, [hasActiveCycle, nextCycleInfoQuery.data?.nextCycle?.startsAt]);
+
+  if (isInitialLoading) {
+    return <PageSkeleton rows={2} cardCount={4} />;
+  }
 
   const saveNextCycleSettings = async () => {
     if (currentCycleLocked) {

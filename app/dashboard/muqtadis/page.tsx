@@ -204,7 +204,7 @@ export default function MuqtadisPage() {
   const cycles = useMemo(() => cyclesQuery.data ?? [], [cyclesQuery.data]);
 
   const activeCycle = useMemo(
-    () => cycles.find((c) => c.status === "ACTIVE"),
+    () => cycles.find((c) => c.status  !== "EXPIRED"),
     [cycles],
   );
 
