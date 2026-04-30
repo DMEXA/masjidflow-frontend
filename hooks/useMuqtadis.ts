@@ -242,7 +242,8 @@ export function useMuqtadis(options: UseMuqtadisOptions) {
 
   // const filteredItems = useMemo(() => sortByCreatedAt(items), [items, sortByCreatedAt]);
   const filteredItems = useMemo(() => {
-    const normalizedSearch = search.trim().toLowerCase();
+    // const normalizedSearch = search.trim().toLowerCase();
+    const normalizedSearch = debouncedSearch.trim().toLowerCase();
 
     const filtered = normalizedSearch
       ? items.filter((item) => {
@@ -263,7 +264,7 @@ export function useMuqtadis(options: UseMuqtadisOptions) {
       : items;
 
     return sortByCreatedAt(filtered);
-  }, [items, search, sortByCreatedAt]);
+  }, [items, debouncedSearch, sortByCreatedAt]);
 
   const stats = useMemo(() => {
     const totalHouseholds = backendStats.verifiedHouseholds;

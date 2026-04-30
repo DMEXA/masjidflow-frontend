@@ -208,8 +208,15 @@ export function SalarySettings() {
 
   const hasCycleFromSummary = summaryQuery.data?.hasCycle ?? false;
   const hasActiveCycle = nextCycleInfoQuery.data?.hasActiveCycle === true;
-  const hasAnyCycle = hasCycleFromSummary || hasActiveCycle || cycles.length > 0;
-  const isFirstTimeSetupMode = !hasCycleFromSummary;
+  const hasAnyCycle =
+    hasCycleFromSummary || hasActiveCycle || cycles.length > 0;
+  // const isFirstTimeSetupMode = !hasCycleFromSummary;
+  const hasSavedSettings = nextCycleForm.contributionAmount.trim().length > 0;
+
+  const controlsDisabled =
+    pauseLoading || monthSaving || nextCycleSaving || currentCycleSaving;
+
+  const isFirstTimeSetupMode = !hasAnyCycle && !hasSavedSettings;
   const activeCyclePeriod = nextCycleInfoQuery.data?.currentCycle;
   const activeCycleMonth = activeCyclePeriod?.month ?? null;
   const activeCycleYear = activeCyclePeriod?.year ?? null;
@@ -253,7 +260,23 @@ export function SalarySettings() {
   );
   const currentCycleBaseMode = currentCycleContributionMode;
 
-  const cycleControlDisabled = hasActiveCycle || monthSaving;
+  const hasValidContributionAmount =
+    parseStrictAmountInput(nextCycleForm.contributionAmount) !== null &&
+    Number(nextCycleForm.contributionAmount) > 0;
+
+  // const cycleControlDisabled = hasActiveCycle || monthSaving;
+  const cycleControlDisabled =
+    hasActiveCycle || monthSaving || !hasValidContributionAmount;
+  // const nextCycleChanged =
+  //   nextCycleSnapshot?.contributionMode !== nextCycleForm.contributionMode ||
+  //   nextCycleSnapshot?.contributionAmount !== nextCycleForm.contributionAmount;
+
+  const nextCycleChanged = Boolean(
+    nextCycleSnapshot &&
+    (nextCycleSnapshot.contributionMode !== nextCycleForm.contributionMode ||
+      nextCycleSnapshot.contributionAmount !==
+        nextCycleForm.contributionAmount),
+  );
   const cycleControlReason = hasActiveCycle
     ? "Current cycle is active. You can start a new cycle once it ends."
     : null;
@@ -278,35 +301,46 @@ export function SalarySettings() {
     }
   }, [nextCycleInfoQuery.error]);
 
-  useEffect(() => {
-    const nextCycleInfo = nextCycleInfoQuery.data;
-    if (!nextCycleInfo || isEditingNextCycle) {
-      return;
-    }
+  // useEffect(() => {
+  //   const nextCycleInfo = nextCycleInfoQuery.data;
+  //   if (!nextCycleInfo || isEditingNextCycle) {
+  //     return;
+  //   }
 
-    const hasPendingNextCycleSettings = nextCycleInfo.hasPendingSettings;
-    const defaultMode = hasPendingNextCycleSettings
-      ? nextCycleInfo.settings.contributionMode
-      : currentCycleBaseMode;
-    const defaultAmount = hasPendingNextCycleSettings
-      ? nextCycleInfo.settings.contributionAmount
-      : currentCycleBaseAmount;
+  //   const hasPendingNextCycleSettings = nextCycleInfo.hasPendingSettings;
+  //   const defaultMode = hasPendingNextCycleSettings
+  //     ? nextCycleInfo.settings.contributionMode
+  //     : currentCycleBaseMode;
+  //   const defaultAmount = hasPendingNextCycleSettings
+  //     ? nextCycleInfo.settings.contributionAmount
+  //     : currentCycleBaseAmount;
 
-    setNextCycleForm({
-      contributionMode: defaultMode,
-      contributionAmount: defaultAmount > 0 ? String(defaultAmount) : "",
-    });
-  }, [
-    nextCycleInfoQuery.data,
-    isEditingNextCycle,
-    currentCycleBaseMode,
-    currentCycleBaseAmount,
-  ]);
-
+  //   setNextCycleForm({
+  //     contributionMode: defaultMode,
+  //     contributionAmount: defaultAmount > 0 ? String(defaultAmount) : "",
+  //   });
+  // }, [
+  //   nextCycleInfoQuery.data,
+  //   isEditingNextCycle,
+  //   currentCycleBaseMode,
+  //   currentCycleBaseAmount,
+  // ]);
+  const currentCycleInitializedRef = useRef(false);
   useEffect(() => {
     if (isEditingCurrentCycle) {
       return;
     }
+
+    if (
+      currentCycleInitializedRef.current &&
+      currentCycleForm.contributionAmount ===
+        (currentCycleBaseAmount > 0 ? String(currentCycleBaseAmount) : "") &&
+      currentCycleForm.contributionMode === currentCycleBaseMode
+    ) {
+      return;
+    }
+
+    currentCycleInitializedRef.current = true;
 
     setCurrentCycleForm({
       contributionMode: currentCycleBaseMode,
@@ -364,7 +398,11 @@ export function SalarySettings() {
         isNextMonth: hasActiveCycle,
         useCurrentSettingsForNextCycle: false,
       });
-      await loadSalaryMonths();
+      // await loadSalaryMonths();
+      setNextCycleForm({
+        contributionMode: nextCycleForm.contributionMode,
+        contributionAmount: String(contributionAmountValue),
+      });
       await Promise.all([
         debugInvalidate(queryClient, queryKeys.muqtadiNextCycleInfo, {
           exact: true,
@@ -380,7 +418,7 @@ export function SalarySettings() {
       );
       setNextCycleSnapshot({
         contributionMode: nextCycleForm.contributionMode,
-        contributionAmount: nextCycleForm.contributionAmount,
+        contributionAmount: String(contributionAmountValue),
       });
       setIsEditingNextCycle(false);
     } catch (error) {
@@ -454,11 +492,16 @@ export function SalarySettings() {
         }),
       ]);
       toast.success("Current cycle updated");
+      setIsEditingCurrentCycle(false);
+      setCurrentCycleForm({
+        contributionMode: currentCycleForm.contributionMode,
+        contributionAmount: String(contributionAmountValue),
+      });
+
       setCurrentCycleSnapshot({
         contributionMode: currentCycleForm.contributionMode,
-        contributionAmount: currentCycleForm.contributionAmount,
+        contributionAmount: String(contributionAmountValue),
       });
-      setIsEditingCurrentCycle(false);
     } catch (error) {
       toast.error(getErrorMessage(error, "Failed to update current cycle"));
     } finally {
@@ -523,6 +566,15 @@ export function SalarySettings() {
 
   const handleStartMonth = async () => {
     if (hasActiveCycle) {
+      return;
+    }
+
+    const contributionAmountValue = parseStrictAmountInput(
+      nextCycleForm.contributionAmount,
+    );
+
+    if (contributionAmountValue === null || contributionAmountValue <= 0) {
+      toast.error("Contribution amount must be greater than 0");
       return;
     }
 
@@ -642,7 +694,8 @@ export function SalarySettings() {
                 type="button"
                 variant="outline"
                 onClick={() => void handleSaveFirstTimeSettings()}
-                disabled={nextCycleSaving || monthSaving}
+                // disabled={nextCycleSaving || monthSaving}
+                disabled={controlsDisabled || !hasValidContributionAmount}
               >
                 {nextCycleSaving ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -652,7 +705,8 @@ export function SalarySettings() {
               <Button
                 type="button"
                 onClick={() => void handleStartMonth()}
-                disabled={monthSaving}
+                // disabled={monthSaving}
+                disabled={controlsDisabled || !hasValidContributionAmount}
               >
                 {monthSaving ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -664,176 +718,190 @@ export function SalarySettings() {
         </Card>
       ) : (
         <>
-          <Card className="border-border">
-            <CardHeader className="space-y-2 pb-3">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-center gap-2">
-                  <Settings className="h-5 w-5" />
-                  <CardTitle className="text-lg">Current Cycle</CardTitle>
+          {hasActiveCycle ? (
+            <Card className="border-border">
+              <CardHeader className="space-y-2 pb-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <Settings className="h-5 w-5" />
+                    <CardTitle className="text-lg">Current Cycle</CardTitle>
+                  </div>
+                  <Badge className="bg-emerald-100 text-emerald-800 border border-emerald-200">
+                    Active
+                  </Badge>
                 </div>
-                <Badge className="bg-emerald-100 text-emerald-800 border border-emerald-200">
-                  Active
-                </Badge>
-              </div>
-              <p className="text-sm text-muted-foreground">
-                Status and editable contribution for the active cycle.
-              </p>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                <div className="rounded-xl border p-3">
-                  <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                    Mode
-                  </p>
-                  <p className="mt-1 font-medium">
-                    {currentCycleForm.contributionMode === "HOUSEHOLD"
-                      ? "Per Household"
-                      : "Per Person"}
-                  </p>
+                <p className="text-sm text-muted-foreground">
+                  Status and editable contribution for the active cycle.
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  <div className="rounded-xl border p-3">
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                      Mode
+                    </p>
+                    <p className="mt-1 font-medium">
+                      {currentCycleForm.contributionMode === "HOUSEHOLD"
+                        ? "Per Household"
+                        : "Per Person"}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border p-3">
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                      Amount
+                    </p>
+                    <p className="mt-1 font-medium">
+                      {formatCurrency(currentCycleContributionAmountNumber)}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border p-3">
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                      Status
+                    </p>
+                    <p className="mt-1 font-medium">
+                      {/* {hasActiveCycle ? "Active" : "No Active Cycle"} */}
+                      Active
+                    </p>
+                  </div>
+                  <div className="rounded-xl border p-3">
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                      Payment Status
+                    </p>
+                    <p className="mt-1 font-medium">
+                      {currentCycleLocked
+                        ? "Payments Recorded"
+                        : "No Payments Recorded"}
+                    </p>
+                  </div>
                 </div>
-                <div className="rounded-xl border p-3">
-                  <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                    Amount
-                  </p>
-                  <p className="mt-1 font-medium">
-                    {formatCurrency(currentCycleContributionAmountNumber)}
-                  </p>
-                </div>
-                <div className="rounded-xl border p-3">
-                  <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                    Status
-                  </p>
-                  <p className="mt-1 font-medium">
-                    {hasActiveCycle ? "Active" : "No Active Cycle"}
-                  </p>
-                </div>
-                <div className="rounded-xl border p-3">
-                  <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                    Payment Status
-                  </p>
-                  <p className="mt-1 font-medium">
-                    {currentCycleLocked
-                      ? "Payments Recorded"
-                      : "No Payments Recorded"}
-                  </p>
-                </div>
-              </div>
 
-              {currentCycleLocked ? (
-                <Alert className="border-amber-200 bg-amber-50/60">
-                  <AlertTitle>Current Cycle Locked</AlertTitle>
-                  <AlertDescription>
-                    Cannot modify current cycle. Payments have been recorded.
-                  </AlertDescription>
-                </Alert>
-              ) : null}
+                {currentCycleLocked ? (
+                  <Alert className="border-amber-200 bg-amber-50/60">
+                    <AlertTitle>Current Cycle Locked</AlertTitle>
+                    <AlertDescription>
+                      Cannot modify current cycle. Payments have been recorded.
+                    </AlertDescription>
+                  </Alert>
+                ) : null}
 
-              {isEditingCurrentCycle ? (
-                <div className="space-y-4 rounded-xl border p-4">
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label htmlFor="current-cycle-mode">
-                        Contribution Mode
-                      </Label>
-                      <Select
-                        value={currentCycleForm.contributionMode}
-                        onValueChange={(value: ContributionMode) =>
-                          setCurrentCycleForm((prev) => ({
-                            ...prev,
-                            contributionMode: value,
-                          }))
-                        }
-                      >
-                        <SelectTrigger
-                          id="current-cycle-mode"
-                          className={fieldClass}
+                {isEditingCurrentCycle ? (
+                  <div className="space-y-4 rounded-xl border p-4">
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label htmlFor="current-cycle-mode">
+                          Contribution Mode
+                        </Label>
+                        <Select
+                          value={currentCycleForm.contributionMode}
+                          onValueChange={(value: ContributionMode) =>
+                            setCurrentCycleForm((prev) => ({
+                              ...prev,
+                              contributionMode: value,
+                            }))
+                          }
                         >
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="HOUSEHOLD">
-                            Per Household
-                          </SelectItem>
-                          <SelectItem value="PERSON">Per Person</SelectItem>
-                        </SelectContent>
-                      </Select>
+                          <SelectTrigger
+                            id="current-cycle-mode"
+                            className={fieldClass}
+                          >
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="HOUSEHOLD">
+                              Per Household
+                            </SelectItem>
+                            <SelectItem value="PERSON">Per Person</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="current-cycle-amount">
+                          Contribution Amount
+                        </Label>
+                        <Input
+                          id="current-cycle-amount"
+                          type="text"
+                          inputMode="decimal"
+                          pattern="^\d+(?:\.\d{1,2})?$"
+                          min={0}
+                          step="0.01"
+                          className={fieldClass}
+                          value={currentCycleForm.contributionAmount}
+                          onChange={(e) =>
+                            setCurrentCycleForm((prev) => ({
+                              ...prev,
+                              contributionAmount: e.target.value,
+                            }))
+                          }
+                        />
+                      </div>
                     </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="current-cycle-amount">
-                        Contribution Amount
-                      </Label>
-                      <Input
-                        id="current-cycle-amount"
-                        type="text"
-                        inputMode="decimal"
-                        pattern="^\d+(?:\.\d{1,2})?$"
-                        min={0}
-                        step="0.01"
-                        className={fieldClass}
-                        value={currentCycleForm.contributionAmount}
-                        onChange={(e) =>
-                          setCurrentCycleForm((prev) => ({
-                            ...prev,
-                            contributionAmount: e.target.value,
-                          }))
-                        }
-                      />
+
+                    <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={handleCancelEditingCurrentCycle}
+                        disabled={controlsDisabled}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        type="button"
+                        onClick={() => void saveCurrentCycleSettings()}
+                        disabled={controlsDisabled || currentCycleLocked}
+                      >
+                        {currentCycleSaving ? (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : null}
+                        Save
+                      </Button>
                     </div>
                   </div>
+                ) : null}
 
-                  <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                {!isEditingCurrentCycle && hasActiveCycle ? (
+                  <div className="flex justify-end">
                     <Button
                       type="button"
                       variant="outline"
-                      onClick={handleCancelEditingCurrentCycle}
-                      disabled={currentCycleSaving}
+                      onClick={handleRequestEditCurrentCycle}
+                      // disabled={currentCycleLocked}
+                      disabled={controlsDisabled || currentCycleLocked}
+                      title={currentCycleLocked ? currentCycleLockReason : ""}
+                      className="disabled:opacity-60"
                     >
-                      Cancel
-                    </Button>
-                    <Button
-                      type="button"
-                      onClick={() => void saveCurrentCycleSettings()}
-                      disabled={currentCycleSaving || currentCycleLocked}
-                    >
-                      {currentCycleSaving ? (
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      ) : null}
-                      Save
+                      Edit Current Cycle
                     </Button>
                   </div>
-                </div>
-              ) : null}
-
-              {!isEditingCurrentCycle && hasActiveCycle ? (
-                <div className="flex justify-end">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={handleRequestEditCurrentCycle}
-                    disabled={currentCycleLocked}
-                    title={currentCycleLocked ? currentCycleLockReason : ""}
-                    className="disabled:opacity-60"
-                  >
-                    Edit Current Cycle
-                  </Button>
-                </div>
-              ) : null}
-            </CardContent>
-          </Card>
+                ) : null}
+              </CardContent>
+            </Card>
+          ) : null}
 
           <Card className="border-border">
             <CardHeader className="space-y-2 pb-3">
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-center gap-2">
                   <Settings className="h-5 w-5" />
-                  <CardTitle className="text-lg">Next Cycle Settings</CardTitle>
+                  {/* <CardTitle className="text-lg">Next Cycle Settings</CardTitle> */}
+                  <CardTitle className="text-lg">
+                    {hasActiveCycle
+                      ? "Next Cycle Settings"
+                      : "Default Cycle Settings"}
+                  </CardTitle>
                 </div>
                 <Badge className="bg-blue-100 text-blue-800 border border-blue-200">
                   Upcoming
                 </Badge>
               </div>
-              <p className="text-sm text-muted-foreground">
+              {/* <p className="text-sm text-muted-foreground">
                 Default matches current cycle. Save only affects next cycle.
+              </p> */}
+              <p className="text-sm text-muted-foreground">
+                {hasActiveCycle
+                  ? "Changes here apply to the next cycle only."
+                  : "These settings will be used when the first cycle starts."}
               </p>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -864,6 +932,7 @@ export function SalarySettings() {
                       type="button"
                       variant="outline"
                       onClick={handleStartEditingNextCycle}
+                      disabled={controlsDisabled}
                       className="disabled:opacity-60"
                     >
                       Edit
@@ -927,14 +996,15 @@ export function SalarySettings() {
                       type="button"
                       variant="outline"
                       onClick={handleCancelEditingNextCycle}
-                      disabled={nextCycleSaving}
+                      disabled={controlsDisabled}
                     >
                       Cancel
                     </Button>
                     <Button
                       type="button"
                       onClick={() => void handleSaveNextCycle()}
-                      disabled={nextCycleSaving}
+                      // disabled={nextCycleSaving}
+                      disabled={controlsDisabled || !nextCycleChanged}
                     >
                       {nextCycleSaving ? (
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -1010,7 +1080,7 @@ export function SalarySettings() {
                     type="button"
                     variant="outline"
                     onClick={() => void handleTogglePause()}
-                    disabled={pauseLoading}
+                    disabled={controlsDisabled}
                   >
                     {pauseLoading && (
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -1021,7 +1091,10 @@ export function SalarySettings() {
                   <Button
                     type="button"
                     onClick={() => void handleStartMonth()}
-                    disabled={cycleControlDisabled || isCyclePaused}
+                    // disabled={cycleControlDisabled || isCyclePaused}
+                    disabled={
+                      controlsDisabled || cycleControlDisabled || isCyclePaused
+                    }
                     className="disabled:opacity-60 disabled:bg-muted disabled:text-muted-foreground"
                   >
                     {monthSaving ? (
@@ -1067,7 +1140,18 @@ export function SalarySettings() {
                   title="No salary history yet"
                   description="Create a cycle to view history."
                   actionLabel="Start New Month"
-                  onAction={() => void handleStartMonth()}
+                  // onAction={() => void handleStartMonth()}
+                  onAction={() => {
+                    if (!hasValidContributionAmount) {
+                      toast.error(
+                        "Save valid settings before starting a cycle",
+                      );
+                      return;
+                    }
+
+                    void handleStartMonth();
+                  }}
+                  // disabled={!hasValidContributionAmount} getting error in this change
                   className="min-h-40"
                 />
               ) : (

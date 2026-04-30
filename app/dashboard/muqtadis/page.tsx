@@ -173,6 +173,30 @@ export default function MuqtadisPage() {
     );
   };
 
+  const [warningDialog, setWarningDialog] = useState<{
+    open: boolean;
+    title: string;
+    description: string;
+    action: (() => Promise<void>) | null;
+  }>({
+    open: false,
+    title: "",
+    description: "",
+    action: null,
+  });
+
+  const [confirmDialog, setConfirmDialog] = useState<{
+    open: boolean;
+    title: string;
+    description: string;
+    action: (() => Promise<void>) | null;
+  }>({
+    open: false,
+    title: "",
+    description: "",
+    action: null,
+  });
+
   useEffect(() => {
     if (!canManageMembers) {
       router.replace("/dashboard");
@@ -204,7 +228,7 @@ export default function MuqtadisPage() {
   const cycles = useMemo(() => cyclesQuery.data ?? [], [cyclesQuery.data]);
 
   const activeCycle = useMemo(
-    () => cycles.find((c) => c.status  !== "EXPIRED"),
+    () => cycles.find((c) => c.status !== "EXPIRED"),
     [cycles],
   );
 
@@ -1117,21 +1141,43 @@ export default function MuqtadisPage() {
       return;
     }
 
-    const confirmed = window.confirm(
-      "Are you sure? This will update current dues for this household.",
-    );
-    if (!confirmed) return;
+    // const confirmed = window.confirm(
+    //   "Are you sure? This will update current dues for this household.",
+    // );
+    // if (!confirmed) return;
 
-    try {
-      await dependentMutation.mutateAsync({
-        muqtadiId: selectedDetails.id,
-        householdMembers: nextMembers.length,
-        memberNames: nextMembers,
-      });
-      toast.success("Dependent removed");
-    } catch {
-      // Error toast handled in mutation onError.
-    }
+    // try {
+    //   await dependentMutation.mutateAsync({
+    //     muqtadiId: selectedDetails.id,
+    //     householdMembers: nextMembers.length,
+    //     memberNames: nextMembers,
+    //   });
+    //   toast.success("Dependent removed");
+    // } catch {
+    //   // Error toast handled in mutation onError.
+    // }
+
+    setWarningDialog({
+      open: true,
+      title: "Update household dues?",
+      description:
+        "This will recalculate current cycle dues for this household.",
+      action: async () => {
+        try {
+          await dependentMutation.mutateAsync({
+            muqtadiId: selectedDetails.id,
+            householdMembers: nextMembers.length,
+            memberNames: nextMembers,
+          });
+
+          toast.success("Dependent removed");
+        } catch {
+          // handled already
+        }
+      },
+    });
+
+    return;
   };
 
   const handleIncludeInCycle = async () => {
@@ -1204,34 +1250,72 @@ export default function MuqtadisPage() {
       return;
     }
 
-    const confirmed = window.confirm(
-      `Generate secure login link for ${normalizedPhone}?`,
-    );
-    if (!confirmed) return;
+    setConfirmDialog({
+      open: true,
+      title: "Generate login link?",
+      description: `Generate secure login link for ${normalizedPhone}?`,
+      action: async () => {
+        setIsGeneratingLoginLink(true);
 
-    setIsGeneratingLoginLink(true);
-    try {
-      const result = await muqtadisService.enableLogin(selectedDetails.id, {
-        phone: normalizedPhone,
-      });
+        try {
+          const result = await muqtadisService.enableLogin(selectedDetails.id, {
+            phone: normalizedPhone,
+          });
 
-      setAuthLinksByMuqtadiId((prev) => ({
-        ...prev,
-        [selectedDetails.id]: {
-          link: result.resetLink,
-          expiresInMinutes: result.expiresInMinutes,
-          createdAt: new Date().toISOString(),
-          mode: "login",
-        },
-      }));
-      toast.success("Login link generated");
-      await actions.fetchItems();
-      await invalidateDetailQueries(selectedDetails.id);
-    } catch (error) {
-      toast.error(getErrorMessage(error, "Failed to generate login link"));
-    } finally {
-      setIsGeneratingLoginLink(false);
-    }
+          setAuthLinksByMuqtadiId((prev) => ({
+            ...prev,
+            [selectedDetails.id]: {
+              link: result.resetLink,
+              expiresInMinutes: result.expiresInMinutes,
+              createdAt: new Date().toISOString(),
+              mode: "login",
+            },
+          }));
+
+          patchDetailCache(selectedDetails.id, (old) => {
+            if (!old) return old;
+
+            return {
+              ...old,
+              accountState: "ACTIVE",
+            };
+          });
+
+          toast.success("Login link generated");
+
+          await actions.fetchItems();
+          await invalidateDetailQueries(selectedDetails.id);
+        } catch (error) {
+          toast.error(getErrorMessage(error, "Failed to generate login link"));
+        } finally {
+          setIsGeneratingLoginLink(false);
+        }
+      },
+    });
+
+    return;
+    // try {
+    //   const result = await muqtadisService.enableLogin(selectedDetails.id, {
+    //     phone: normalizedPhone,
+    //   });
+
+    //   setAuthLinksByMuqtadiId((prev) => ({
+    //     ...prev,
+    //     [selectedDetails.id]: {
+    //       link: result.resetLink,
+    //       expiresInMinutes: result.expiresInMinutes,
+    //       createdAt: new Date().toISOString(),
+    //       mode: "login",
+    //     },
+    //   }));
+    //   toast.success("Login link generated");
+    //   await actions.fetchItems();
+    //   await invalidateDetailQueries(selectedDetails.id);
+    // } catch (error) {
+    //   toast.error(getErrorMessage(error, "Failed to generate login link"));
+    // } finally {
+    //   setIsGeneratingLoginLink(false);
+    // }
   };
 
   const handleSendResetLink = async () => {
@@ -1985,11 +2069,13 @@ export default function MuqtadisPage() {
           </DialogHeader>
 
           <div className="text-sm space-y-1">
-              <p>Total Due: {formatCurrency(totalDue)}</p>
-              <p>Total Paid: {formatCurrency(totalPaid)}</p>
-              <p>Credit: {formatCurrency(totalCredit)}</p>
-              <p className="font-semibold">Outstanding: {formatCurrency(remaining)}</p>
-            </div>
+            <p>Total Due: {formatCurrency(totalDue)}</p>
+            <p>Total Paid: {formatCurrency(totalPaid)}</p>
+            <p>Credit: {formatCurrency(totalCredit)}</p>
+            <p className="font-semibold">
+              Outstanding: {formatCurrency(remaining)}
+            </p>
+          </div>
 
           <div className="space-y-3">
             {isCyclePaused && (
@@ -2030,7 +2116,7 @@ export default function MuqtadisPage() {
                 className="w-full rounded-xl border bg-background px-3 py-2 text-sm"
                 value={paymentMethod}
                 onChange={(e) =>
-                  setPaymentMethod(e.target.value as "CASH" | "UPI" | "BANK") 
+                  setPaymentMethod(e.target.value as "CASH" | "UPI" | "BANK")
                 }
                 disabled={isCyclePaused}
               >
@@ -2040,15 +2126,15 @@ export default function MuqtadisPage() {
               </select>
             </div>
             {paymentMethod !== "CASH" && (
-  <div className="space-y-2">
-    <Label>UTR</Label>
-    <Input
-      value={paymentUtr}
-      onChange={(e) => setPaymentUtr(e.target.value)}
-      placeholder="Enter UTR"
-    />
-  </div>
-)}
+              <div className="space-y-2">
+                <Label>UTR</Label>
+                <Input
+                  value={paymentUtr}
+                  onChange={(e) => setPaymentUtr(e.target.value)}
+                  placeholder="Enter UTR"
+                />
+              </div>
+            )}
             <div className="space-y-2">
               <Label>Reference</Label>
               <Input
@@ -2103,17 +2189,17 @@ export default function MuqtadisPage() {
         //   }
         // }}
         onOpenRecordPayment={() => {
-  if (!selectedMuqtadi) return;
+          if (!selectedMuqtadi) return;
 
-  // 🔥 FULL RESET (this is what you were missing)
-  setIsDrawerOpen(false);
-  setSelectedDetails(null);
-  setSelectedPaymentDetailId(null);
+          // 🔥 FULL RESET (this is what you were missing)
+          setIsDrawerOpen(false);
+          setSelectedDetails(null);
+          setSelectedPaymentDetailId(null);
 
-  setTimeout(() => {
-    openPayment(selectedMuqtadi);
-  }, 150);
-}}
+          setTimeout(() => {
+            openPayment(selectedMuqtadi);
+          }, 150);
+        }}
         onOpenEditDetails={() => {
           if (selectedMuqtadi) {
             openEdit(selectedMuqtadi);
@@ -2530,6 +2616,85 @@ export default function MuqtadisPage() {
           ) : null}
         </DialogContent>
       </Dialog>
+
+      <AlertDialog
+        open={warningDialog.open}
+        onOpenChange={(open) =>
+          setWarningDialog((prev) => ({
+            ...prev,
+            open,
+          }))
+        }
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{warningDialog.title}</AlertDialogTitle>
+
+            <AlertDialogDescription>
+              {warningDialog.description}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700 text-white"
+              onClick={async () => {
+                await warningDialog.action?.();
+
+                setWarningDialog({
+                  open: false,
+                  title: "",
+                  description: "",
+                  action: null,
+                });
+              }}
+            >
+              Continue
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={confirmDialog.open}
+        onOpenChange={(open) =>
+          setConfirmDialog((prev) => ({
+            ...prev,
+            open,
+          }))
+        }
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{confirmDialog.title}</AlertDialogTitle>
+
+            <AlertDialogDescription>
+              {confirmDialog.description}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+
+            <AlertDialogAction
+              onClick={async () => {
+                await confirmDialog.action?.();
+
+                setConfirmDialog({
+                  open: false,
+                  title: "",
+                  description: "",
+                  action: null,
+                });
+              }}
+            >
+              Confirm
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
