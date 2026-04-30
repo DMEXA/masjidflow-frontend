@@ -208,15 +208,28 @@ export function SalarySettings() {
 
   const hasCycleFromSummary = summaryQuery.data?.hasCycle ?? false;
   const hasActiveCycle = nextCycleInfoQuery.data?.hasActiveCycle === true;
-  const hasAnyCycle =
-    hasCycleFromSummary || hasActiveCycle || cycles.length > 0;
+  // const hasAnyCycle =
+  // hasCycleFromSummary || hasActiveCycle || cycles.length > 0;
   // const isFirstTimeSetupMode = !hasCycleFromSummary;
-  const hasSavedSettings = nextCycleForm.contributionAmount.trim().length > 0;
+  // const hasConfiguredSettings = nextCycleContributionAmountNumber > 0;
 
   const controlsDisabled =
     pauseLoading || monthSaving || nextCycleSaving || currentCycleSaving;
 
-  const isFirstTimeSetupMode = !hasAnyCycle && !hasSavedSettings;
+  // const hasSavedSettings =
+  //   (nextCycleInfoQuery.data?.settings?.contributionAmount ?? 0) > 0;
+
+  // const isFirstTimeSetupMode = !hasActiveCycle;
+
+  // const isReadyToStartFirstCycle = !hasActiveCycle && hasSavedSettings;
+
+  const hasAnyCycle = cycles.length > 0;
+  const latestCycle = sortedCycles[0];
+
+  const shouldShowCurrentCycle = Boolean(latestCycle);
+
+  const isFirstTimeSetupMode = !hasActiveCycle && !hasAnyCycle;
+
   const activeCyclePeriod = nextCycleInfoQuery.data?.currentCycle;
   const activeCycleMonth = activeCyclePeriod?.month ?? null;
   const activeCycleYear = activeCyclePeriod?.year ?? null;
@@ -241,7 +254,12 @@ export function SalarySettings() {
         isPaused: !isCyclePaused,
       });
 
-      await summaryQuery.refetch();
+      // await summaryQuery.refetch();
+      await Promise.all([
+        summaryQuery.refetch(),
+        nextCycleInfoQuery.refetch(),
+        loadSalaryMonths(),
+      ]);
 
       toast.success(isCyclePaused ? "Cycle resumed" : "Cycle paused");
     } catch {
@@ -264,12 +282,9 @@ export function SalarySettings() {
     parseStrictAmountInput(nextCycleForm.contributionAmount) !== null &&
     Number(nextCycleForm.contributionAmount) > 0;
 
-  // const cycleControlDisabled = hasActiveCycle || monthSaving;
-  const cycleControlDisabled =
-    hasActiveCycle || monthSaving || !hasValidContributionAmount;
-  // const nextCycleChanged =
-  //   nextCycleSnapshot?.contributionMode !== nextCycleForm.contributionMode ||
-  //   nextCycleSnapshot?.contributionAmount !== nextCycleForm.contributionAmount;
+  // const cycleControlDisabled =
+  //   hasActiveCycle || monthSaving || !hasSavedSettings;
+  const cycleControlDisabled = hasActiveCycle || monthSaving;
 
   const nextCycleChanged = Boolean(
     nextCycleSnapshot &&
@@ -326,6 +341,52 @@ export function SalarySettings() {
   //   currentCycleBaseAmount,
   // ]);
   const currentCycleInitializedRef = useRef(false);
+
+  const nextCycleInitializedRef = useRef(false);
+
+  useEffect(() => {
+    if (isEditingNextCycle) {
+      return;
+    }
+
+    const nextCycleInfo = nextCycleInfoQuery.data;
+    if (!nextCycleInfo) {
+      return;
+    }
+
+    const hasPendingSettings = nextCycleInfo.hasPendingSettings;
+
+    const nextMode = hasPendingSettings
+      ? nextCycleInfo.settings.contributionMode
+      : currentCycleBaseMode;
+
+    const nextAmount = hasPendingSettings
+      ? nextCycleInfo.settings.contributionAmount
+      : currentCycleBaseAmount;
+
+    if (
+      nextCycleInitializedRef.current &&
+      nextCycleForm.contributionMode === nextMode &&
+      nextCycleForm.contributionAmount ===
+        (nextAmount > 0 ? String(nextAmount) : "")
+    ) {
+      return;
+    }
+
+    nextCycleInitializedRef.current = true;
+
+    setNextCycleForm({
+      contributionMode: nextMode,
+      contributionAmount: nextAmount > 0 ? String(nextAmount) : "",
+    });
+  }, [
+    nextCycleInfoQuery.data,
+    isEditingNextCycle,
+    currentCycleBaseMode,
+    currentCycleBaseAmount,
+    nextCycleForm.contributionMode,
+    nextCycleForm.contributionAmount,
+  ]);
   useEffect(() => {
     if (isEditingCurrentCycle) {
       return;
@@ -371,12 +432,12 @@ export function SalarySettings() {
   }
 
   const saveNextCycleSettings = async () => {
-    if (currentCycleLocked) {
-      toast.error(
-        "Cannot change settings after payments have started. Changes will apply to next cycle.",
-      );
-      return;
-    }
+    // if (currentCycleLocked) {
+    //   toast.error(
+    //     "Cannot change settings after payments have started. Changes will apply to next cycle.",
+    //   );
+    //   return;
+    // }
 
     const contributionAmountValue = parseStrictAmountInput(
       nextCycleForm.contributionAmount,
@@ -700,9 +761,9 @@ export function SalarySettings() {
                 {nextCycleSaving ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 ) : null}
-                Save Settings
+                Save & Start Cycle
               </Button>
-              <Button
+              {/* <Button
                 type="button"
                 onClick={() => void handleStartMonth()}
                 // disabled={monthSaving}
@@ -712,13 +773,13 @@ export function SalarySettings() {
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 ) : null}
                 Start First Cycle
-              </Button>
+              </Button> */}
             </div>
           </CardContent>
         </Card>
       ) : (
         <>
-          {hasActiveCycle ? (
+          {shouldShowCurrentCycle ? (
             <Card className="border-border">
               <CardHeader className="space-y-2 pb-3">
                 <div className="flex items-start justify-between gap-3">
@@ -726,8 +787,18 @@ export function SalarySettings() {
                     <Settings className="h-5 w-5" />
                     <CardTitle className="text-lg">Current Cycle</CardTitle>
                   </div>
-                  <Badge className="bg-emerald-100 text-emerald-800 border border-emerald-200">
+                  {/* <Badge className="bg-emerald-100 text-emerald-800 border border-emerald-200">
                     Active
+                  </Badge> */}
+
+                  <Badge
+                    className={
+                      isCyclePaused
+                        ? "border border-amber-200 bg-amber-100 text-amber-800"
+                        : "border border-emerald-200 bg-emerald-100 text-emerald-800"
+                    }
+                  >
+                    {isCyclePaused ? "Paused" : "Active"}
                   </Badge>
                 </div>
                 <p className="text-sm text-muted-foreground">
@@ -758,9 +829,12 @@ export function SalarySettings() {
                     <p className="text-xs uppercase tracking-wide text-muted-foreground">
                       Status
                     </p>
-                    <p className="mt-1 font-medium">
+                    {/* <p className="mt-1 font-medium">
                       {/* {hasActiveCycle ? "Active" : "No Active Cycle"} */}
-                      Active
+                    Active
+                    {/* </p> */} */
+                    <p className="mt-1 font-medium">
+                      {isCyclePaused ? "Paused" : "Active"}
                     </p>
                   </div>
                   <div className="rounded-xl border p-3">
@@ -860,7 +934,7 @@ export function SalarySettings() {
                   </div>
                 ) : null}
 
-                {!isEditingCurrentCycle && hasActiveCycle ? (
+                {!isEditingCurrentCycle && shouldShowCurrentCycle ? (
                   <div className="flex justify-end">
                     <Button
                       type="button"
@@ -885,14 +959,21 @@ export function SalarySettings() {
                 <div className="flex items-center gap-2">
                   <Settings className="h-5 w-5" />
                   {/* <CardTitle className="text-lg">Next Cycle Settings</CardTitle> */}
+                  {/* <CardTitle className="text-lg">
+                    {/* {hasActiveCycle ? "Next Cycle Settings" : "Default Cycle Settings"} */}
+                  Next Cycle Settings
+                  {/* </CardTitle> */} */
                   <CardTitle className="text-lg">
                     {hasActiveCycle
                       ? "Next Cycle Settings"
                       : "Default Cycle Settings"}
                   </CardTitle>
                 </div>
-                <Badge className="bg-blue-100 text-blue-800 border border-blue-200">
+                {/* <Badge className="bg-blue-100 text-blue-800 border border-blue-200">
                   Upcoming
+                </Badge> */}
+                <Badge className="bg-blue-100 text-blue-800 border border-blue-200">
+                  {hasActiveCycle ? "Upcoming" : "Default"}
                 </Badge>
               </div>
               {/* <p className="text-sm text-muted-foreground">
@@ -1026,9 +1107,14 @@ export function SalarySettings() {
                 </div>
                 <Badge variant="secondary">Control</Badge>
               </div>
-              <p className="text-sm text-muted-foreground">
+              {/* <p className="text-sm text-muted-foreground">
                 Create a new month from saved settings when the active cycle
                 ends.
+              </p> */}
+              <p className="text-sm text-muted-foreground">
+                {hasActiveCycle
+                  ? "Create the next cycle after the current cycle ends."
+                  : "No active cycle currently exists."}
               </p>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -1072,8 +1158,9 @@ export function SalarySettings() {
 
               <div className="space-y-3">
                 <p className="text-sm text-muted-foreground">
-                  {cycleControlReason ??
-                    "No active cycle is blocking start. You can create a new month."}
+                  {hasActiveCycle
+                    ? "Current cycle must end before starting another cycle."
+                    : "No active cycle currently exists."}
                 </p>
                 <div className="flex justify-between">
                   <Button
@@ -1101,6 +1188,7 @@ export function SalarySettings() {
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     ) : null}
                     Start New Month
+                    {/* {hasActiveCycle ? "Start New Month" : "Start First Cycle"} */}
                   </Button>
                 </div>
               </div>
@@ -1139,17 +1227,11 @@ export function SalarySettings() {
                 <ListEmptyState
                   title="No salary history yet"
                   description="Create a cycle to view history."
-                  actionLabel="Start New Month"
+                  // actionLabel="Start New Month"
+                  actionLabel="Save & Start Cycle"
                   // onAction={() => void handleStartMonth()}
                   onAction={() => {
-                    if (!hasValidContributionAmount) {
-                      toast.error(
-                        "Save valid settings before starting a cycle",
-                      );
-                      return;
-                    }
-
-                    void handleStartMonth();
+                    void handleSaveFirstTimeSettings();
                   }}
                   // disabled={!hasValidContributionAmount} getting error in this change
                   className="min-h-40"
