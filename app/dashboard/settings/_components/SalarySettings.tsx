@@ -384,8 +384,8 @@ export function SalarySettings() {
     isEditingNextCycle,
     currentCycleBaseMode,
     currentCycleBaseAmount,
-    nextCycleForm.contributionMode,
-    nextCycleForm.contributionAmount,
+    // nextCycleForm.contributionMode,
+    // nextCycleForm.contributionAmount,
   ]);
   useEffect(() => {
     if (isEditingCurrentCycle) {
