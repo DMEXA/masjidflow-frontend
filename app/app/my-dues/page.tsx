@@ -1,69 +1,93 @@
-﻿'use client';
+﻿"use client";
 
-import { useMemo, useState } from 'react';
-import Link from 'next/link';
-import { Plus } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { MuqtadiBackButton } from '@/components/muqtadi/back-button';
-import { muqtadisService, type MuqtadiDashboardApiResponse } from '@/services/muqtadis.service';
-import { useAuthStore } from '@/src/store/auth.store';
-import { formatCurrency } from '@/src/utils/format';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { queryKeys } from '@/lib/query-keys';
-import { ListEmptyState } from '@/components/common/list-empty-state';
-import { MuqtadiDuesSkeleton } from '@/components/common/loading-skeletons';
-import { muqtadiQueryPolicy } from '@/lib/muqtadi-query-policy';
-import { useMinimumLoading } from '@/hooks/useMinimumLoading';
+import { useMemo, useState } from "react";
+import Link from "next/link";
+import { Plus } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { MuqtadiBackButton } from "@/components/muqtadi/back-button";
+import {
+  muqtadisService,
+  type MuqtadiDashboardApiResponse,
+} from "@/services/muqtadis.service";
+import { useAuthStore } from "@/src/store/auth.store";
+import { formatCurrency } from "@/src/utils/format";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "@/lib/query-keys";
+import { ListEmptyState } from "@/components/common/list-empty-state";
+import { MuqtadiDuesSkeleton } from "@/components/common/loading-skeletons";
+import { muqtadiQueryPolicy } from "@/lib/muqtadi-query-policy";
+import { useMinimumLoading } from "@/hooks/useMinimumLoading";
 
-type PaymentFilter = 'ALL' | 'INITIATED' | 'VERIFIED' | 'PENDING' | 'REJECTED';
+type PaymentFilter = "ALL" | "INITIATED" | "VERIFIED" | "PENDING" | "REJECTED";
 
-function getPaymentSortTimestamp(payment: { createdAt?: string; updatedAt?: string }) {
+function getPaymentSortTimestamp(payment: {
+  createdAt?: string;
+  updatedAt?: string;
+}) {
   const updated = payment.updatedAt ? new Date(payment.updatedAt).getTime() : 0;
   const created = payment.createdAt ? new Date(payment.createdAt).getTime() : 0;
   return Math.max(updated || 0, created || 0);
 }
 
 function getStatusBadgeClass(status: string) {
-  if (status === 'INITIATED') return 'bg-sky-100 text-sky-700 border-sky-200';
-  if (status === 'VERIFIED') return 'bg-emerald-100 text-emerald-700 border-emerald-200';
-  if (status === 'PENDING') return 'bg-amber-100 text-amber-700 border-amber-200';
-  return 'bg-red-100 text-red-700 border-red-200';
+  if (status === "INITIATED") return "bg-sky-100 text-sky-700 border-sky-200";
+  if (status === "VERIFIED")
+    return "bg-emerald-100 text-emerald-700 border-emerald-200";
+  if (status === "PENDING")
+    return "bg-amber-100 text-amber-700 border-amber-200";
+  return "bg-red-100 text-red-700 border-red-200";
 }
 
 function getDisplayStatus(status: string) {
-  if (status === 'INITIATED') return 'DRAFT';
-  if (status === 'VERIFIED') return 'VERIFIED';
-  if (status === 'PENDING') return 'PENDING';
-  if (status === 'REJECTED') return 'REJECTED';
-  return 'FAILED';
+  if (status === "INITIATED") return "DRAFT";
+  if (status === "VERIFIED") return "VERIFIED";
+  if (status === "PENDING") return "PENDING";
+  if (status === "REJECTED") return "REJECTED";
+  return "FAILED";
 }
 
 function needsRetryAction(status: string) {
-  return status === 'INITIATED' || status === 'PENDING' || status === 'REJECTED';
+  return (
+    status === "INITIATED" || status === "PENDING" || status === "REJECTED"
+  );
 }
 
 function getRetryLabel() {
-  return 'Continue Payment Draft';
+  return "Continue Payment Draft";
 }
 
-function buildRetryHref(payment: MuqtadiDashboardApiResponse['history'][number]) {
+function getAllocationLabel(allocation: {
+  allocationType?: "DUE_ALLOCATION" | "PREVIOUS_DUE" | "CREDIT";
+  cycleId?: string | null;
+}) {
+  if (allocation.allocationType === "DUE_ALLOCATION") return "Cycle Payment";
+  if (allocation.allocationType === "PREVIOUS_DUE") return "Previous Due";
+  if (allocation.allocationType === "CREDIT") return "Credit Added";
+  return allocation.cycleId ? "Cycle Payment" : "Previous Due";
+}
+
+function buildRetryHref(
+  payment: MuqtadiDashboardApiResponse["history"][number],
+) {
   const params = new URLSearchParams({
-    resumeProof: '1',
+    resumeProof: "1",
     paymentId: String(payment.id),
-    amount: String(payment.amount ?? ''),
+    amount: String(payment.totalAmount ?? ""),
   });
-  if (payment.cycleId) params.set('cycleId', String(payment.cycleId));
-  if (payment.dueId) params.set('dueId', String(payment.dueId));
-  if (payment.method) params.set('method', String(payment.method));
+
+  if (payment.method) {
+    params.set("method", String(payment.method));
+  }
+
   return `/app/pay?${params.toString()}`;
 }
 
 export default function MyDuesPage() {
   const { mosque } = useAuthStore();
   const queryClient = useQueryClient();
-  const [filter, setFilter] = useState<PaymentFilter>('ALL');
+  const [filter, setFilter] = useState<PaymentFilter>("ALL");
   const dashboardKey = queryKeys.muqtadiDashboard(mosque?.id);
 
   const dashboardQuery = useQuery<MuqtadiDashboardApiResponse>({
@@ -72,12 +96,14 @@ export default function MyDuesPage() {
     enabled: Boolean(mosque?.id),
     staleTime: muqtadiQueryPolicy.dues.staleTime,
     gcTime: muqtadiQueryPolicy.dues.gcTime,
-    placeholderData: (previous) => previous ?? queryClient.getQueryData<MuqtadiDashboardApiResponse>(dashboardKey),
+    placeholderData: (previous) =>
+      previous ??
+      queryClient.getQueryData<MuqtadiDashboardApiResponse>(dashboardKey),
     refetchOnWindowFocus: muqtadiQueryPolicy.dues.refetchOnWindowFocus,
     refetchOnReconnect: true,
     refetchOnMount: true,
     refetchInterval: muqtadiQueryPolicy.dues.refetchInterval,
-    refetchIntervalInBackground: true,
+    refetchIntervalInBackground: false,
   });
 
   const history = useMemo(
@@ -86,22 +112,31 @@ export default function MyDuesPage() {
   );
   const hasFinancialTruth = Boolean(dashboardQuery.data);
   const outstandingAmount = hasFinancialTruth
-    ? Number(dashboardQuery.data?.outstandingAmount ?? dashboardQuery.data?.remainingAmount ?? 0)
+    ? Number(
+        dashboardQuery.data?.outstandingAmount ??
+          dashboardQuery.data?.remainingAmount ??
+          0,
+      )
     : Number.NaN;
   const allDuesPaid = outstandingAmount <= 0.0001;
-  const firstRetryablePayment = history.find((item) => needsRetryAction(item.status)) ?? null;
-  const hasRetryablePayment = history.some((item) => needsRetryAction(item.status));
+  const firstRetryablePayment =
+    history.find((item) => needsRetryAction(item.status)) ?? null;
+  const hasRetryablePayment = history.some((item) =>
+    needsRetryAction(item.status),
+  );
 
   const payments = useMemo(() => {
     const sorted = [...history].sort(
       (a, b) => getPaymentSortTimestamp(b) - getPaymentSortTimestamp(a),
     );
 
-    if (filter === 'ALL') return sorted;
+    if (filter === "ALL") return sorted;
     return sorted.filter((item) => item.status === filter);
   }, [filter, history]);
 
-  const showDuesLoader = useMinimumLoading(dashboardQuery.isLoading && !hasFinancialTruth);
+  const showDuesLoader = useMinimumLoading(
+    dashboardQuery.isLoading && !hasFinancialTruth,
+  );
 
   if (showDuesLoader) {
     return <MuqtadiDuesSkeleton />;
@@ -125,16 +160,22 @@ export default function MyDuesPage() {
 
       <Card className="border-primary/20 bg-primary/5">
         <CardContent className="pt-5">
-          <p className="text-xs uppercase tracking-wide text-muted-foreground">Payment History</p>
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">
+            Payment History
+          </p>
           <p className="mt-1 text-3xl font-bold">{payments.length}</p>
           <p className="text-sm text-muted-foreground">Entries</p>
           <div className="mt-3">
             {hasRetryablePayment && firstRetryablePayment ? (
               <Button asChild variant="outline" className="w-full sm:w-auto">
-                <Link href={buildRetryHref(firstRetryablePayment)}>Continue Pending Payment</Link>
+                <Link href={buildRetryHref(firstRetryablePayment)}>
+                  Continue Pending Payment
+                </Link>
               </Button>
             ) : allDuesPaid ? (
-              <Button disabled className="w-full sm:w-auto">All dues paid</Button>
+              <Button disabled className="w-full sm:w-auto">
+                All dues paid
+              </Button>
             ) : (
               <Button asChild className="w-full sm:w-auto">
                 <Link href="/app/pay">Pay Now</Link>
@@ -182,81 +223,161 @@ export default function MyDuesPage() {
             )
           ) : (
             <>
-            <div className="hidden md:block">
-              <div className="overflow-hidden rounded-xl border bg-white">
-                <table className="w-full text-sm">
-                  <thead className="bg-muted/60 text-left">
-                    <tr>
-                      <th className="px-3 py-2 font-medium">Amount</th>
-                      <th className="px-3 py-2 font-medium">Date</th>
-                      <th className="px-3 py-2 font-medium">Status</th>
-                      <th className="px-3 py-2 font-medium text-right">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {payments.map((payment) => (
-                      <tr key={payment.id} className="border-t">
-                        <td className="px-3 py-2">{formatCurrency(payment.amount)}</td>
-                        <td className="px-3 py-2">
-                          {new Intl.DateTimeFormat('en-GB', {
-                            day: '2-digit',
-                            month: 'short',
-                            year: 'numeric',
-                            hour: 'numeric',
-                            minute: '2-digit',
+              <div className="hidden md:block">
+                <div className="overflow-hidden rounded-xl border bg-white">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted/60 text-left">
+                      <tr>
+                        <th className="px-3 py-2 font-medium">Amount</th>
+                        <th className="px-3 py-2 font-medium">Date</th>
+                        <th className="px-3 py-2 font-medium">Status</th>
+                        <th className="px-3 py-2 font-medium text-right">
+                          Action
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {payments.map((payment) => (
+                        <tr key={payment.id} className="border-t">
+                          {/* <td className="px-3 py-2">{formatCurrency(payment.amount)}</td> */}
+                          {/* <td className="px-3 py-2">
+                            {formatCurrency(
+                              Number(payment.totalAmount || 0) / 100,
+                            )}
+                          </td> */}
+                          <td className="px-3 py-2">
+                            <div>
+                              {/* <p>
+                                {formatCurrency(
+                                  Number(payment.totalAmount || 0) / 100,
+                                )}
+                              </p> */}
+                              <p>
+                                {formatCurrency(
+                                  Number(payment.totalAmount || 0),
+                                )}
+                              </p>
+
+                              <div className="mt-1 space-y-1">
+                                {payment.allocations.map(
+                                  (allocation, index) => (
+                                    <p
+                                      key={`${payment.id}-${index}`}
+                                      className="text-xs text-muted-foreground"
+                                    >
+                                      {getAllocationLabel(allocation)}
+                                      :{" "}
+                                      {formatCurrency(Number(allocation.amount || 0)/ 100)}
+                                    </p>
+                                  ),
+                                )}
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-3 py-2">
+                            {new Intl.DateTimeFormat("en-GB", {
+                              day: "2-digit",
+                              month: "short",
+                              year: "numeric",
+                              hour: "numeric",
+                              minute: "2-digit",
+                              hour12: true,
+                            }).format(new Date(payment.createdAt))}
+                          </td>
+
+                          <td className="px-3 py-2">
+                            <Badge
+                              className={getStatusBadgeClass(payment.status)}
+                            >
+                              {getDisplayStatus(payment.status)}
+                            </Badge>
+                          </td>
+                          <td className="px-3 py-2 text-right">
+                            {needsRetryAction(payment.status) ? (
+                              <Button asChild size="sm" variant="outline">
+                                <Link href={buildRetryHref(payment)}>
+                                  {getRetryLabel()}
+                                </Link>
+                              </Button>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">
+                                -
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="space-y-3 md:hidden">
+                {payments.map((payment) => (
+                  <div
+                    key={payment.id}
+                    className="rounded-xl border bg-white p-3"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        {/* <p className="font-medium">{formatCurrency(payment.amount)}</p> */}
+                        {/* <p className="font-medium">{formatCurrency(Number(payment.totalAmount || 0) / 100)}</p> */}
+                        <div>
+                          {/* <p className="font-medium">
+                            {formatCurrency(
+                              Number(payment.totalAmount || 0) / 100,
+                            )}
+                          </p> */}
+                          <p className="font-medium">
+                            {formatCurrency(Number(payment.totalAmount || 0))}
+                          </p>
+
+                          <div className="mt-2 space-y-1">
+                            {payment.allocations.map((allocation, index) => (
+                              <p
+                                key={`${payment.id}-${index}`}
+                                className="text-xs text-muted-foreground"
+                              >
+                                {/* {allocation.cycleId
+                                  ? "Cycle Payment"
+                                  : "Previous Due"} */}
+                                {getAllocationLabel(allocation)}
+                                :{" "}
+                                {formatCurrency(Number(allocation.amount || 0)/ 100)}
+                              </p>
+                            ))}
+                          </div>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          {new Intl.DateTimeFormat("en-GB", {
+                            day: "2-digit",
+                            month: "short",
+                            year: "numeric",
+                            hour: "numeric",
+                            minute: "2-digit",
                             hour12: true,
                           }).format(new Date(payment.createdAt))}
-                        </td>
-                        <td className="px-3 py-2">
-                          <Badge className={getStatusBadgeClass(payment.status)}>
-                            {getDisplayStatus(payment.status)}
-                          </Badge>
-                        </td>
-                        <td className="px-3 py-2 text-right">
-                          {needsRetryAction(payment.status) ? (
-                            <Button asChild size="sm" variant="outline">
-                              <Link href={buildRetryHref(payment)}>{getRetryLabel()}</Link>
-                            </Button>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">-</span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            <div className="space-y-3 md:hidden">
-            {payments.map((payment) => (
-              <div key={payment.id} className="rounded-xl border bg-white p-3">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium">{formatCurrency(payment.amount)}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {new Intl.DateTimeFormat('en-GB', {
-                        day: '2-digit',
-                        month: 'short',
-                        year: 'numeric',
-                        hour: 'numeric',
-                        minute: '2-digit',
-                        hour12: true,
-                      }).format(new Date(payment.createdAt))}
-                    </p>
+                        </p>
+                      </div>
+                      <Badge className={getStatusBadgeClass(payment.status)}>
+                        {getDisplayStatus(payment.status)}
+                      </Badge>
+                    </div>
+                    {needsRetryAction(payment.status) ? (
+                      <Button
+                        asChild
+                        size="sm"
+                        variant="outline"
+                        className="mt-3 w-full"
+                      >
+                        <Link href={buildRetryHref(payment)}>
+                          {getRetryLabel()}
+                        </Link>
+                      </Button>
+                    ) : null}
                   </div>
-                  <Badge className={getStatusBadgeClass(payment.status)}>
-                    {getDisplayStatus(payment.status)}
-                  </Badge>
-                </div>
-                {needsRetryAction(payment.status) ? (
-                  <Button asChild size="sm" variant="outline" className="mt-3 w-full">
-                    <Link href={buildRetryHref(payment)}>{getRetryLabel()}</Link>
-                  </Button>
-                ) : null}
+                ))}
               </div>
-            ))}
-            </div>
             </>
           )}
         </CardContent>
@@ -264,5 +385,3 @@ export default function MyDuesPage() {
     </div>
   );
 }
-
-

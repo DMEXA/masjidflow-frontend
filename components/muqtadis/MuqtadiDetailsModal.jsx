@@ -158,26 +158,24 @@ export default function MuqtadiDetailsModal({
   const removeBlockedByPayment = Number(currentCycleDue?.paidAmount ?? 0) > 0;
 
   if (detailQuery.isLoading || !detail) {
-  return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent
-        side="right"
-        className="w-full sm:max-w-2xl flex flex-col"
-      >
-        <SheetHeader>
-          <SheetTitle>Loading...</SheetTitle>
-          <SheetDescription>
-            Fetching household details
-          </SheetDescription>
-        </SheetHeader>
+    return (
+      <Sheet open={open} onOpenChange={onOpenChange}>
+        <SheetContent
+          side="right"
+          className="w-full sm:max-w-2xl flex flex-col"
+        >
+          <SheetHeader>
+            <SheetTitle>Loading...</SheetTitle>
+            <SheetDescription>Fetching household details</SheetDescription>
+          </SheetHeader>
 
-        <div className="flex flex-1 items-center justify-center">
-          <Loader2 className="h-6 w-6 animate-spin" />
-        </div>
-      </SheetContent>
-    </Sheet>
-  );
-}
+          <div className="flex flex-1 items-center justify-center">
+            <Loader2 className="h-6 w-6 animate-spin" />
+          </div>
+        </SheetContent>
+      </Sheet>
+    );
+  }
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -289,9 +287,17 @@ export default function MuqtadiDetailsModal({
                   <span className="text-muted-foreground">Credit Balance:</span>{" "}
                   {formatCurrency(detail?.creditBalance ?? 0)}
                 </p>
+                {/* <p>
+                  <span className="text-muted-foreground">
+                    Previous Due Added:
+                  </span>{" "}
+                  {formatCurrency(detail?.historicalPreviousDue ?? 0)}
+                </p> */}
                 <p>
-                  <span className="text-muted-foreground">Previous Due:</span>{" "}
-                  {formatCurrency(detail?.previousDue ?? 0)}
+                  <span className="text-muted-foreground">
+                    Outstanding Balance:
+                  </span>{" "}
+                  {formatCurrency(detail?.overview?.outstandingAmount ?? 0)}
                 </p>
                 <p>
                   <span className="text-muted-foreground">Join Date:</span>{" "}
@@ -558,15 +564,19 @@ export default function MuqtadiDetailsModal({
             ) : (
               dues.map((due) => {
                 const expectedAmount = Math.max(
-                  Number(due.expectedAmount ?? 0),
+                  Number(due.grossExpectedAmount ?? due.expectedAmount ?? 0),
                   0,
                 );
                 const paidAmount = Math.max(Number(due.paidAmount ?? 0), 0);
-                // const creditAmount = Math.max(Number(due.creditAmount ?? 0), 0);
                 const remainingAmount = Math.max(
                   Number(due.remainingAmount ?? 0),
                   0,
                 );
+                const creditApplied = Math.max(
+                  Number(due.creditApplied ?? 0),
+                  0,
+                );
+
                 return (
                   <Card key={due.id}>
                     <CardContent className="space-y-2 pt-4 text-sm">
@@ -575,11 +585,9 @@ export default function MuqtadiDetailsModal({
                           {formatCycleLabel(due.month, due.year)}
                         </p>
                         <Badge
-                          variant={
-                            remainingAmount > 0 ? "secondary" : "default"
-                          }
+                          variant={due.status === "PAID" ? "default" : "secondary"}
                         >
-                          {remainingAmount > 0 ? "PENDING" : "PAID"}
+                          {due.status}
                         </Badge>
                       </div>
                       <div className="grid gap-1 sm:grid-cols-2">
@@ -587,17 +595,16 @@ export default function MuqtadiDetailsModal({
                           <span className="text-muted-foreground">Total:</span>{" "}
                           {formatCurrency(expectedAmount)}
                         </p>
+                        {creditApplied > 0 ? (
+                          <p className="text-emerald-600">
+                            Credit Used: {formatCurrency(creditApplied)}
+                          </p>
+                        ) : (
+                          <p />
+                        )}
                         <p>
-                          <span className="text-muted-foreground">Paid:</span>{" "}
-                          {formatCurrency(paidAmount)}
+                          Cash Paid: {formatCurrency(paidAmount)}
                         </p>
-                        {/* {creditAmount > 0 ? (
-                                  <p className="text-emerald-700">
-                                    <span className="text-muted-foreground">Credit:</span> {formatCurrency(creditAmount)}
-                                  </p>
-                                ) : (
-                                  <p><span className="text-muted-foreground">Cycle:</span> {getCycleStatus(due.month, due.year)}</p>
-                                )} */}
 
                         <p>
                           <span className="text-muted-foreground">Cycle:</span>{" "}
@@ -613,9 +620,7 @@ export default function MuqtadiDetailsModal({
                           <span className="text-muted-foreground">
                             Remaining:
                           </span>{" "}
-                          {remainingAmount > 0
-                            ? formatCurrency(remainingAmount)
-                            : "Paid"}
+                          {formatCurrency(remainingAmount)}
                         </p>
                       </div>
                     </CardContent>
@@ -637,7 +642,10 @@ export default function MuqtadiDetailsModal({
                     {formatCurrency(detail?.overview?.totalPaid ?? 0)}
                   </p>
                   <p>
-                    Credit: {formatCurrency(detail?.overview?.credit ?? detail?.creditBalance ?? 0)}
+                    Credit:{" "}
+                    {formatCurrency(
+                      detail?.overview?.credit ?? detail?.creditBalance ?? 0,
+                    )}
                   </p>
                   <p className="font-semibold">
                     Outstanding:{" "}
@@ -686,7 +694,12 @@ export default function MuqtadiDetailsModal({
                 const paymentStatus = String(
                   entry.details?.status || "PENDING",
                 ).toLowerCase();
-                const paymentAmount = Number(entry.details?.amount || 0);
+                const paymentAmount = Number(
+                  entry.details?.totalAmount ?? entry.details?.amount ?? 0,
+                );
+                const allocations = Array.isArray(entry.details?.allocations)
+                  ? entry.details.allocations
+                  : [];
                 return (
                   <Card key={`${entry.action}-${entry.id}`}>
                     <CardContent className="space-y-2 pt-4 text-sm">
@@ -697,7 +710,6 @@ export default function MuqtadiDetailsModal({
                         <p className="text-xs text-muted-foreground">
                           By: {entry.details?.createdByName || "System"}
                         </p>
-                        {/* <Badge variant="secondary">{paymentStatus}</Badge> */}
                         <Badge
                           variant={
                             paymentStatus === "verified"
@@ -711,10 +723,9 @@ export default function MuqtadiDetailsModal({
                         </Badge>
                       </div>
                       <div className="flex items-center justify-between gap-2">
-                        {/* <p>{formatCurrency(paymentAmount)}</p> */}
                         <div>
                           <p className="font-medium">
-                            {formatCurrency(paymentAmount)}
+                            Payment Amount: {formatCurrency(paymentAmount)}
                           </p>
                           {entry.details?.cycle &&
                             entry.details?.cycle?.year && (
@@ -740,6 +751,30 @@ export default function MuqtadiDetailsModal({
                           View Payment
                         </Button>
                       </div>
+                      {allocations.length > 0 ? (
+                        <div className="space-y-1 rounded-md border p-2">
+                          {allocations.map((allocation, index) => (
+                            <div
+                              key={`${entry.id}-allocation-${index}`}
+                              className="flex items-center justify-between text-xs"
+                            >
+                              <span className="text-muted-foreground">
+                                {allocation?.allocationType === "OVERFLOW_CREDIT"
+                                  ? "Overflow Credit"
+                                  : allocation?.cycleId
+                                  ? formatCycleLabel(
+                                      allocation?.month,
+                                      allocation?.year,
+                                    )
+                                  : "Previous Due"}
+                              </span>
+                              <span className="font-medium">
+                                {formatCurrency(Number(allocation?.amount ?? 0))}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
                     </CardContent>
                   </Card>
                 );

@@ -655,7 +655,8 @@ export default function MuqtadisPage() {
         createdAt: new Date().toISOString(),
         isOptimistic: true,
         details: {
-          amount: newData.amount,
+          // amount: newData.amount,
+          totalAmount: newData.amount,
           method: newData.method,
           cycleId: newData.cycleId,
           status: "PENDING",
@@ -1027,7 +1028,8 @@ export default function MuqtadisPage() {
             action: "PAYMENT_ADJUSTED",
             createdAt: new Date().toISOString(),
             details: {
-              amount,
+              // amount,
+               totalAmount: amount,
               method: paymentMethod,
               cycleId: selectedCycleId,
               status: "PENDING",
@@ -1048,7 +1050,8 @@ export default function MuqtadisPage() {
               action: "PAYMENT_ADJUSTED",
               createdAt: new Date().toISOString(),
               details: {
-                amount,
+                // amount,
+                totalAmount: amount,
                 method: paymentMethod,
                 cycleId: selectedCycleId,
                 status: "PENDING",

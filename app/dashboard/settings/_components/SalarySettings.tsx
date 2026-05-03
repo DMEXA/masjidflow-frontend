@@ -208,38 +208,43 @@ export function SalarySettings() {
 
   const hasCycleFromSummary = summaryQuery.data?.hasCycle ?? false;
   const hasActiveCycle = nextCycleInfoQuery.data?.hasActiveCycle === true;
-  // const hasAnyCycle =
-  // hasCycleFromSummary || hasActiveCycle || cycles.length > 0;
-  // const isFirstTimeSetupMode = !hasCycleFromSummary;
-  // const hasConfiguredSettings = nextCycleContributionAmountNumber > 0;
 
   const controlsDisabled =
     pauseLoading || monthSaving || nextCycleSaving || currentCycleSaving;
 
-  // const hasSavedSettings =
-  //   (nextCycleInfoQuery.data?.settings?.contributionAmount ?? 0) > 0;
-
-  // const isFirstTimeSetupMode = !hasActiveCycle;
-
-  // const isReadyToStartFirstCycle = !hasActiveCycle && hasSavedSettings;
-
-  const hasAnyCycle = cycles.length > 0;
-  const latestCycle = sortedCycles[0];
-
-  const shouldShowCurrentCycle = Boolean(latestCycle);
-
-  const isFirstTimeSetupMode = !hasActiveCycle && !hasAnyCycle;
-
   const activeCyclePeriod = nextCycleInfoQuery.data?.currentCycle;
   const activeCycleMonth = activeCyclePeriod?.month ?? null;
   const activeCycleYear = activeCyclePeriod?.year ?? null;
+
+  const hasAnyCycle = cycles.length > 0;
+
   const activeCycleEntry =
     activeCycleMonth && activeCycleYear
       ? cycles.find(
           (entry) =>
-            entry.month === activeCycleMonth && entry.year === activeCycleYear,
+            entry.month === activeCycleMonth &&
+            entry.year === activeCycleYear &&
+            entry.status === "ACTIVE",
         )
       : undefined;
+
+  const shouldShowCurrentCycle = Boolean(activeCycleEntry);
+
+  // const isFirstTimeSetupMode = !hasActiveCycle && !hasAnyCycle;
+  // const isFirstTimeSetupMode =
+  //   !hasActiveCycle && cycles.filter((c) => c.status === "ACTIVE").length === 0;
+  const isFirstTimeSetupMode =
+  !hasActiveCycle &&
+  !hasCycleFromSummary &&
+  cycles.length === 0;
+
+  // const activeCycleEntry =
+  //   activeCycleMonth && activeCycleYear
+  //     ? cycles.find(
+  //         (entry) =>
+  //           entry.month === activeCycleMonth && entry.year === activeCycleYear,
+  //       )
+  //     : undefined;
 
   const currentCycleContributionMode = (activeCycleEntry?.contributionMode ??
     activeCycleEntry?.contributionType ??
@@ -623,6 +628,7 @@ export function SalarySettings() {
 
   const handleSaveFirstTimeSettings = async () => {
     await saveNextCycleSettings();
+    await handleStartMonth();
   };
 
   const handleStartMonth = async () => {
@@ -1241,12 +1247,19 @@ export function SalarySettings() {
                   {sortedCycles.map((cycle) => (
                     <div
                       key={cycle.id}
-                      className="rounded-xl border p-3 text-sm"
+                      className={`rounded-xl border p-3 text-sm ${
+                        cycle.status === "ACTIVE"
+                          ? "border-emerald-300 bg-emerald-50/40"
+                          : ""
+                      }`}
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <p className="font-medium">
                             {formatCycleLabel(cycle.month, cycle.year)}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {cycle.status}
                           </p>
                           <p className="text-muted-foreground">
                             Mode:{" "}

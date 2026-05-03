@@ -388,18 +388,33 @@ export interface MuqtadiDashboardApiResponse {
   paidAmount: number;
   remainingAmount: number;
   status: "PENDING" | "PARTIAL" | "PAID";
-  history: Array<{
-    id: string;
+  // history: Array<{
+  //   id: string;
+  //   cycleId?: string | null;
+  //   dueId?: string | null;
+  //   amount: number;
+  //   status: string;
+  //   method: string;
+  //   screenshotUrl?: string | null;
+  //   utr?: string | null;
+  //   createdAt: string;
+  //   updatedAt?: string;
+  // }>;
+ history: Array<{
+  id: string;
+  totalAmount: number;
+  status: string;
+  method: string;
+  screenshotUrl?: string | null;
+  reference?: string | null;
+  createdAt: string;
+  allocations: Array<{
+    allocationType?: "DUE_ALLOCATION" | "PREVIOUS_DUE" | "CREDIT";
     cycleId?: string | null;
     dueId?: string | null;
     amount: number;
-    status: string;
-    method: string;
-    screenshotUrl?: string | null;
-    utr?: string | null;
-    createdAt: string;
-    updatedAt?: string;
   }>;
+}>;
 }
 
 export interface MuqtadiDetails {
