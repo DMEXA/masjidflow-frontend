@@ -1,12 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import {
-  keepPreviousData,
-  useQuery,
-  useQueryClient,
-} from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Muqtadi } from "@/types";
 import { muqtadisService } from "@/services/muqtadis.service";
+import type { MuqtadiListResponse, MuqtadiStatsResponse, ContributionMode } from "@/services/muqtadis.service";
 import { getErrorMessage } from "@/src/utils/error";
 import { useDebounce } from "@/hooks/useDebounce";
 import { queryKeys } from "@/lib/query-keys";
@@ -71,7 +68,7 @@ export function useMuqtadis(options: UseMuqtadisOptions) {
     data: listResult,
     isLoading: isListLoading,
     refetch: refetchList,
-  } = useQuery({
+  } = useQuery<MuqtadiListResponse>({
     queryKey: queryKeys.muqtadis({
       page,
       limit,
@@ -92,39 +89,51 @@ export function useMuqtadis(options: UseMuqtadisOptions) {
         cycleStatus: cycleFilter,
       }),
     enabled,
-    placeholderData: keepPreviousData,
-    staleTime: 8000,
-    refetchOnMount: true,
+    placeholderData: (previous: MuqtadiListResponse | undefined) => previous,
+    staleTime: 30_000, // 30s: household list is relatively stable
+    gcTime: 10 * 60_000, // 10min garbage collection
+    refetchOnMount: false, // Don't refetch unless explicitly requested
     refetchOnWindowFocus: false,
-    refetchOnReconnect: true,
   });
 
   const {
     data: summary,
     isLoading: isSummaryLoading,
     refetch: refetchSummary,
-  } = useQuery({
+  } = useQuery<{
+    hasCycle: boolean;
+    contributionMode: ContributionMode;
+    contributionAmount: number;
+    totalSalary: number;
+    totalMuqtadies: number;
+    registeredMuqtadies: number;
+    perHead: number;
+    totalDue: number;
+    totalPaid: number;
+    balance: number;
+    isCyclePaused: boolean;
+  }>({
     queryKey: queryKeys.muqtadiSalarySummary,
     queryFn: () => muqtadisService.getSalarySummary(),
     enabled,
-    staleTime: 8000,
-    refetchOnMount: true,
+    staleTime: 20_000, // 20s: salary summary changes when payments recorded
+    gcTime: 5 * 60_000, // 5min garbage collection
+    refetchOnMount: false,
     refetchOnWindowFocus: false,
-    refetchOnReconnect: true,
   });
 
   const {
     data: statsResponse,
     isLoading: isStatsLoading,
     refetch: refetchStats,
-  } = useQuery({
+  } = useQuery<MuqtadiStatsResponse>({
     queryKey: queryKeys.muqtadiStats,
     queryFn: () => muqtadisService.getStats(),
     enabled,
-    staleTime: 8000,
-    refetchOnMount: true,
+    staleTime: 15_000, // 15s: stats are most volatile
+    gcTime: 5 * 60_000, // 5min garbage collection
+    refetchOnMount: false,
     refetchOnWindowFocus: false,
-    refetchOnReconnect: true,
   });
 
   const resolvePaymentStatus = useCallback(
@@ -194,7 +203,7 @@ export function useMuqtadis(options: UseMuqtadisOptions) {
           verificationStatus: verificationFilter,
           cycleStatus: cycleFilter,
         }),
-      staleTime: 8000,
+      staleTime: 30_000, // Match main list query staleTime
     });
   }, [
     enabled,

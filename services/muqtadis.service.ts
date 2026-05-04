@@ -523,6 +523,7 @@ export interface UpdateMuqtadiPayload {
   whatsappNumber?: string;
   phone?: string;
   notes?: string;
+  previousDue?: number;
   status?: MuqtadiStatus;
 }
 

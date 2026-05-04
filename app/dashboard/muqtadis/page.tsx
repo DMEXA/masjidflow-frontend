@@ -2,8 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, Plus, Copy, ExternalLink, ImageOff } from "lucide-react";
-import { toast } from "sonner";
+import { Copy, ExternalLink, ImageOff, Loader2, Plus } from "lucide-react";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -39,11 +38,8 @@ import {
   type MuqtadiStatus,
 } from "@/services/muqtadis.service";
 import { usePermission } from "@/hooks/usePermission";
+import { toast } from "sonner";
 import { getErrorMessage } from "@/src/utils/error";
-import {
-  invalidateMoneyQueries,
-  invalidateMuqtadiMutationQueries,
-} from "@/lib/money-cache";
 import { queryKeys } from "@/lib/query-keys";
 import {
   formatCurrency,
@@ -54,11 +50,11 @@ import {
 import { ListEmptyState } from "@/components/common/list-empty-state";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuthStore } from "@/src/store/auth.store";
-import { debugInvalidate, debugInvalidateByFilters } from "@/lib/query-debug";
+import { debugInvalidate } from "@/lib/query-debug";
 import MuqtadiStats from "@/components/muqtadis/MuqtadiStats";
 import MuqtadiFilters from "@/components/muqtadis/MuqtadiFilters";
 import MuqtadiList from "@/components/muqtadis/MuqtadiList";
-import MuqtadiDetailsModal from "@/components/muqtadis/MuqtadiDetailsModal";
+import MuqtadiDetailsModal from "@/components/muqtadis/MuqtadiDetailsModal.jsx";
 import { useMuqtadis } from "@/hooks/useMuqtadis";
 import {
   parseStrictAmountInput,
@@ -211,10 +207,10 @@ export default function MuqtadisPage() {
     queryKey: queryKeys.imamSalaryCycles(mosqueId),
     queryFn: () => muqtadisService.getSalaryMonths(),
     enabled: canManageMembers,
-    staleTime: 8000,
-    refetchOnMount: true,
+    staleTime: 60_000, // 60s: salary cycles are stable, rarely change
+    gcTime: 30 * 60_000, // 30min garbage collection
+    refetchOnMount: false, // Don't auto-refetch on mount
     refetchOnWindowFocus: false,
-    refetchOnReconnect: true,
   });
 
   useEffect(() => {
@@ -254,43 +250,6 @@ export default function MuqtadisPage() {
   useEffect(() => {
     fetchImamFundSummary();
   }, [fetchImamFundSummary]);
-
-  const buildPreviewDetails = useCallback(
-    (item: Muqtadi): MuqtadiDetails => ({
-      id: item.id,
-      userId: item.userId ?? null,
-      accountState: item.accountState ?? "OFFLINE",
-      setupLinkExpiresAt: item.setupLinkExpiresAt ?? null,
-      setupLinkExpiresInMinutes: item.setupLinkExpiresInMinutes ?? null,
-      name: item.name,
-      fatherName: item.fatherName ?? "",
-      email: item.email ?? null,
-      householdMembers: item.householdMembers ?? 1,
-      memberNames: Array.isArray(item.memberNames)
-        ? item.memberNames
-        : [item.name].filter(Boolean),
-      whatsappNumber: item.whatsappNumber ?? null,
-      isVerified: item.isVerified ?? false,
-      category: item.category ?? null,
-      phone: item.phone ?? null,
-      notes: item.notes ?? null,
-      previousDue: item.previousDue ?? 0,
-      creditBalance: item.creditBalance ?? 0,
-      status: item.status ?? "ACTIVE",
-      hasCycle: false,
-      isHouseholdInCycle: false,
-      overview: {
-        totalDue: 0,
-        totalPaid: 0,
-        outstandingAmount: 0,
-        credit: item.creditBalance ?? 0,
-      },
-      dues: [],
-      payments: [],
-      history: [],
-    }),
-    [],
-  );
 
   const patchDetailCache = useCallback(
     (
@@ -483,7 +442,7 @@ export default function MuqtadisPage() {
       apiPayload: Parameters<typeof muqtadisService.create>[0];
     }) => muqtadisService.create(payload.apiPayload),
     onMutate: async (newData) => {
-      const optimisticId = `temp-${Date.now()}`;
+      const optimisticId = `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
       const optimisticItem = {
         id: optimisticId,
         name: newData.apiPayload.name,
@@ -594,14 +553,9 @@ export default function MuqtadisPage() {
       });
     },
     onSettled: async () => {
-      await debugInvalidateByFilters(queryClient, {
-        predicate: ({ queryKey }) => {
-          const root = String(queryKey?.[0] ?? "");
-          return (
-            root === queryKeys.muqtadiSalarySummary[0] ||
-            root === queryKeys.dashboardOverview(mosqueId)[0]
-          );
-        },
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.muqtadiSalarySummary,
+        exact: true,
       });
     },
   });
@@ -630,7 +584,7 @@ export default function MuqtadisPage() {
       });
     },
     onMutate: async (newData) => {
-      const tempId = `temp-${Date.now()}`;
+      const tempId = `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
       await Promise.all([
         queryClient.cancelQueries({
           queryKey: queryKeys.muqtadiDetail(newData.muqtadiId),
@@ -655,13 +609,14 @@ export default function MuqtadisPage() {
         createdAt: new Date().toISOString(),
         isOptimistic: true,
         details: {
-          // amount: newData.amount,
           totalAmount: newData.amount,
           method: newData.method,
           cycleId: newData.cycleId,
           status: "PENDING",
           utr: newData.utr,
           reference: newData.reference,
+          notes: newData.notes,
+          createdByName: "You", // Optimistic: assume current user
         },
       };
 
@@ -700,36 +655,26 @@ export default function MuqtadisPage() {
         context.previousPayments ?? [],
       );
     },
-    onSuccess: (_data, _newData, context) => {
-      if (!context?.muqtadiId || !context?.tempId) return;
-      patchDetailCache(context.muqtadiId, (old) => {
-        if (!old) return old;
-        return {
-          ...old,
-          payments: (old.payments ?? []).filter(
-            (entry) => entry.id !== context.tempId,
-          ),
-        };
-      });
-      queryClient.setQueryData(
-        queryKeys.muqtadiPayments(context.muqtadiId),
-        (old: MuqtadiDetails["payments"] | undefined) =>
-          (old ?? []).filter((entry) => entry.id !== context.tempId),
-      );
+    onSuccess: (_data, variables) => {
+      // Fetch fresh payment data to replace the optimistic entry
+      // This ensures the real payment ID and details are in the cache
+      void invalidateDetailQueries(variables.muqtadiId);
     },
-    onSettled: async (_data, _error, variables) => {
+    onSettled: async () => {
+      // Only invalidate financial summaries that are truly affected by new payment
+      // Do NOT invalidate broad financial roots or unrelated dashboard pages
       await Promise.all([
-        invalidateDetailQueries(variables.muqtadiId),
-        debugInvalidateByFilters(queryClient, {
-          predicate: ({ queryKey }) => {
-            const root = String(queryKey?.[0] ?? "");
-            return (
-              root === queryKeys.fundsRoot[0] ||
-              root === queryKeys.dashboardOverview(mosqueId)[0] ||
-              root === queryKeys.muqtadiStats[0]
-            );
-          },
+        // Refresh salary summary since payment totals changed
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.muqtadiSalarySummary,
+          exact: true,
         }),
+        // Refresh admin stats since payment counts changed
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.muqtadiStats,
+          exact: true,
+        }),
+        // Fetch imam fund summary if on admin side
         fetchImamFundSummary(),
       ]);
     },
@@ -841,16 +786,21 @@ export default function MuqtadisPage() {
 
   const openPaymentDetails = useCallback(
     (item: Muqtadi) => {
-      const cached = queryClient.getQueryData<MuqtadiDetails>(
-        queryKeys.muqtadiDetail(item.id),
-      );
+      const detailKey = queryKeys.muqtadiDetail(item.id);
+      const cached = queryClient.getQueryData<MuqtadiDetails>(detailKey);
+
       setSelectedMuqtadi(item);
-      setSelectedDetails(cached ?? buildPreviewDetails(item));
+      setSelectedDetails(cached ?? null);
       setSelectedPaymentDetailId(null);
       setPaymentDetailImageFailed(false);
       setIsDrawerOpen(true);
+
+      void queryClient.invalidateQueries({
+        queryKey: detailKey,
+        exact: true,
+      });
     },
-    [buildPreviewDetails, queryClient],
+    [queryClient],
   );
 
   const openPaymentAdjustment = (
@@ -980,7 +930,6 @@ export default function MuqtadisPage() {
       setIsEditOpen(false);
       await actions.fetchItems();
       await invalidateDetailQueries(selectedMuqtadi.id);
-      await invalidateMuqtadiMutationQueries(queryClient, mosqueId);
     } catch (error) {
       toast.error(getErrorMessage(error, "Failed to update household"));
     } finally {
@@ -1017,7 +966,6 @@ export default function MuqtadisPage() {
           utr: paymentUtr.trim() || undefined,
           reference: paymentReference.trim() || undefined,
         });
-        await invalidateMoneyQueries(queryClient, mosqueId);
         toast.success("Payment adjustment recorded");
         setIsPaymentOpen(false);
         setEditingPaymentId(null);
@@ -1197,7 +1145,6 @@ export default function MuqtadisPage() {
         toast.success("Household included in current cycle");
       }
       await invalidateDetailQueries(selectedDetails.id);
-      await invalidateMuqtadiMutationQueries(queryClient, mosqueId);
     } catch (error) {
       toast.error(
         getErrorMessage(error, "Failed to include household in current cycle"),
@@ -1221,7 +1168,6 @@ export default function MuqtadisPage() {
         toast.success("Household removed from current cycle");
       }
       await invalidateDetailQueries(selectedDetails.id);
-      await invalidateMuqtadiMutationQueries(queryClient, mosqueId);
     } catch (error) {
       toast.error(
         getErrorMessage(error, "Failed to remove household from current cycle"),
@@ -1232,6 +1178,7 @@ export default function MuqtadisPage() {
   };
 
   const handleGenerateLoginLink = async () => {
+
     if (!selectedDetails) return;
     const accountState = selectedDetails.accountState || "OFFLINE";
     if (accountState === "ACTIVE") {
@@ -1382,7 +1329,6 @@ export default function MuqtadisPage() {
         ),
       );
       await invalidateDetailQueries(selectedMuqtadi.id);
-      await invalidateMuqtadiMutationQueries(queryClient, mosqueId);
     } catch (error) {
       toast.error(getErrorMessage(error, "Failed to verify household"));
     }
@@ -1394,7 +1340,6 @@ export default function MuqtadisPage() {
     try {
       await actions.rejectMuqtadi(selectedMuqtadi);
       await invalidateDetailQueries(selectedMuqtadi.id);
-      await invalidateMuqtadiMutationQueries(queryClient, mosqueId);
     } catch (error) {
       toast.error(
         getErrorMessage(error, "Failed to update household verification"),
@@ -1409,7 +1354,6 @@ export default function MuqtadisPage() {
     try {
       await muqtadisService.verifyPayment(transactionId);
       toast.success("Payment marked as verified");
-      await invalidateMoneyQueries(queryClient, mosqueId);
       await actions.fetchItems();
       await fetchImamFundSummary();
       await invalidateDetailQueries(selectedMuqtadi.id);
@@ -1429,7 +1373,6 @@ export default function MuqtadisPage() {
         status: "REJECTED",
       });
       toast.success("Payment marked as rejected");
-      await invalidateMoneyQueries(queryClient, mosqueId);
       await actions.fetchItems();
       await fetchImamFundSummary();
       await invalidateDetailQueries(selectedMuqtadi.id);
@@ -1448,7 +1391,6 @@ export default function MuqtadisPage() {
     try {
       await muqtadisService.deletePayment(transactionId);
       toast.success("Payment deleted");
-      await invalidateMoneyQueries(queryClient, mosqueId);
       await actions.fetchItems();
       await fetchImamFundSummary();
       await invalidateDetailQueries(selectedMuqtadi.id);
@@ -1546,7 +1488,6 @@ export default function MuqtadisPage() {
           }
           setTrashItems((prev) => prev.filter((entry) => entry.id !== item.id));
           await actions.fetchItems();
-          await invalidateMuqtadiMutationQueries(queryClient, mosqueId);
         }
       } catch (error) {
         toast.error(getErrorMessage(error, "Failed to update status"));
@@ -1559,8 +1500,6 @@ export default function MuqtadisPage() {
       actions,
       activeTab,
       fetchTrashItems,
-      mosqueId,
-      queryClient,
       setItems,
       trashPage,
     ],
@@ -2203,11 +2142,64 @@ export default function MuqtadisPage() {
             openPayment(selectedMuqtadi);
           }, 150);
         }}
+        // onOpenEditDetails={() => {
+        //   if (selectedMuqtadi) {
+        //     openEdit(selectedMuqtadi);
+        //   }
+        // }}
+
         onOpenEditDetails={() => {
-          if (selectedMuqtadi) {
-            openEdit(selectedMuqtadi);
-          }
-        }}
+  if (selectedMuqtadi) {
+    openEdit(selectedMuqtadi);
+  }
+}}
+
+onUpdatePreviousDue={async (value:number) => {
+  if (!selectedMuqtadi) return;
+
+  try {
+    await muqtadisService.update(selectedMuqtadi.id, {
+      previousDue: value,
+    });
+
+    patchDetailCache(selectedMuqtadi.id, (old) => {
+      if (!old) return old;
+
+      return {
+        ...old,
+        previousDue: value,
+      };
+    });
+
+    setSelectedDetails((old) => {
+      if (!old) return old;
+
+      return {
+        ...old,
+        previousDue: value,
+      };
+    });
+
+    setItems((prev) =>
+      prev.map((item) =>
+        item.id === selectedMuqtadi.id
+          ? {
+              ...item,
+              previousDue: value,
+            }
+          : item,
+      ),
+    );
+
+    await invalidateDetailQueries(selectedMuqtadi.id);
+
+    toast.success("Previous due updated");
+  } catch (error) {
+    toast.error(
+      getErrorMessage(error, "Failed to update previous due"),
+    );
+  }
+}}
         onVerifyPending={handleVerifyPendingHousehold}
         onRejectPending={handleRejectPendingHousehold}
         onOpenCreateCycle={() => router.push("/dashboard/imam-salary/cycles")}
