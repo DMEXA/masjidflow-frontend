@@ -175,7 +175,7 @@ export default function MuqtadiDetailsModal({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
-        className="w-full bg-amber-950 overflow-y-auto sm:max-w-2xl"
+        className="w-full overflow-y-auto sm:max-w-2xl"
       >
         <SheetHeader>
           <SheetTitle>
